@@ -138,7 +138,8 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
     }
     void HandleBuildKey(KeyDownEvent e)
     {
-        if(modal!=null||e.target is TextField||e.target is FloatField||e.target is TextElement)return;
+        if(modal!=null){if(e.keyCode==KeyCode.Escape){CloseDialog();e.StopPropagation();}return;}
+        if(e.target is TextField||e.target is FloatField||e.target is TextElement)return;
         bool handled=true;
         if(e.ctrlKey) {
             if(e.keyCode==KeyCode.S){EndObjectGesture(false);Save(false);}
@@ -257,7 +258,7 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
             }
             workAngles.x = Mathf.Clamp(workAngles.x, -89, 89); referenceAngles.x = Mathf.Clamp(referenceAngles.x, -89, 89);
         });
-        image.RegisterCallback<PointerUpEvent>(e => { if (editable) {EndObjectGesture(false);ConstructionPointerUp();} drag = -1; image.ReleasePointer(e.pointerId); });
+        image.RegisterCallback<PointerUpEvent>(e => { if (editable) {EndObjectGesture(false);ConstructionPointerUp(!image.contentRect.Contains(e.localPosition));} drag = -1; image.ReleasePointer(e.pointerId); });
         image.RegisterCallback<PointerCaptureOutEvent>(e => { drag = -1; if(editable) {EndObjectGesture(false);ConstructionPointerUp(true);} });
         image.RegisterCallback<WheelEvent>(e => {
             if (modal != null) return;
@@ -301,7 +302,8 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
         if(data.HasConstruction) {
             var derived=ConstructionData(data.construction);
             data.vertices=derived.vertices;data.uv=derived.uv;data.triangles=derived.triangles;data.submeshes=derived.submeshes;data.normals=null;
-            if(data.materialColors==null||(data.construction.kind=="road"||data.construction.kind=="junction"))data.materialColors=derived.materialColors;
+            if(data.materialColors==null)data.materialColors=derived.materialColors;
+            else if(data.materialColors.Length!=derived.materialColors.Length){var colors=(Color[])derived.materialColors.Clone();Array.Copy(data.materialColors,colors,Mathf.Min(data.materialColors.Length,colors.Length));data.materialColors=colors;}
         }
         SyncSimsLibraryAppearance(data);
         Mesh mesh = data.CreateMesh();
@@ -318,7 +320,7 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
             if(data.smoothness!=null&&i<data.smoothness.Length&&material.HasProperty("_Smoothness"))material.SetFloat("_Smoothness",Mathf.Clamp01(data.smoothness[i]));
         }
         identity.ownedMaterial=identity.ownedMaterials[0];
-        identity.construction=data.construction; identity.libraryId=data.libraryId; identity.albedo=data.albedo;identity.sourceAppearance=data.sourceAppearance;identity.appearanceFingerprint=data.appearanceFingerprint;
+        identity.construction=data.construction; identity.libraryId=data.libraryId; identity.albedo=data.albedo;identity.sourceAppearance=data.sourceAppearance;identity.appearanceFingerprint=data.appearanceFingerprint;identity.baselineGeometryHash=data.baselineGeometryHash;identity.baselineAppearanceHash=data.baselineAppearanceHash;
         if(data.albedo!=null) {
             identity.ownedTextures=new Texture2D[data.albedo.Length];
             for(int i=0;i<data.albedo.Length&&i<identity.ownedMaterials.Length;i++)if(data.albedo[i]!=null) {
@@ -411,12 +413,34 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
         workCenter = found ? bounds.center : Vector3.zero; workDistance = found ? Mathf.Max(2, bounds.extents.magnitude * 3) : 12;
         workCamera.orthographicSize = workDistance * 0.4f;
     }
-    string State() => JsonUtility.ToJson(WorkspaceDocument.Capture(world, title));
-    void Changed() { UpdateRoadConnections();history.Record(State()); Refresh(); }
-    void Undo() { CancelConstruction(); string state = history.Undo(); if (state != null) Restore(JsonUtility.FromJson<WorkspaceDocument>(state)); }
-    void Redo() { CancelConstruction(); string state = history.Redo(); if (state != null) Restore(JsonUtility.FromJson<WorkspaceDocument>(state)); }
+    WorkspaceBlobStore historyAssets;
+    sealed class MeshReferences:IEqualityComparer<Mesh>{public bool Equals(Mesh a,Mesh b)=>ReferenceEquals(a,b);public int GetHashCode(Mesh mesh)=>System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(mesh);}
+    readonly Dictionary<Mesh,string> historyGeometry=new Dictionary<Mesh,string>(new MeshReferences());
+    string State()
+    {
+        if(historyAssets==null)historyAssets=new WorkspaceBlobStore(Path.Combine(Path.GetTempPath(),"WorldBuilderHistory",Guid.NewGuid().ToString("N")));
+        var document=new WorkspaceDocument{title=title};
+        foreach(var identity in world.GetComponentsInChildren<WorkspaceIdentity>())if(identity.gameObject.activeInHierarchy&&identity.ownedMesh!=null) {
+            var item=WorkspaceProject.Capture(identity.gameObject,identity.source??"",true);
+            if(!item.HasConstruction){if(!historyGeometry.TryGetValue(identity.ownedMesh,out string hash))historyGeometry[identity.ownedMesh]=hash=WorkspaceProjectStorage.StoreGeometry(identity.ownedMesh,historyAssets);item.meshRef=hash;}
+            document.objects.Add(item);
+        }
+        return WorkspaceProjectStorage.Serialize(document,historyAssets,"history");
+    }
+    WorkspaceDocument HistoryDocument(string state)=>WorkspaceProjectStorage.Read(state,historyAssets);
+    int historyWrites;
+    void RecordHistory()
+    {
+        history.Record(State());if(++historyWrites%20!=0)return;
+        var references=WorkspaceProjectStorage.References(history.Snapshots);if(!string.IsNullOrEmpty(savedState))references.UnionWith(WorkspaceProjectStorage.References(new[]{savedState}));
+        historyAssets.PruneSession(references);foreach(var mesh in new List<Mesh>(historyGeometry.Keys))if(!references.Contains(historyGeometry[mesh]))historyGeometry.Remove(mesh);
+    }
+    void Changed() { UpdateRoadConnections();RecordHistory();Refresh(); }
+    void Undo() { CancelConstruction(); string state = history.Undo(); if (state != null) Restore(HistoryDocument(state)); }
+    void Redo() { CancelConstruction(); string state = history.Redo(); if (state != null) Restore(HistoryDocument(state)); }
     void Restore(WorkspaceDocument document)
     {
+        historyGeometry.Clear();
         // Construct everything in a staging root first: invalid files leave the scene intact.
         var stage = new GameObject("Project staging").transform;
         try {
@@ -460,7 +484,7 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
             string path = saveAs || string.IsNullOrEmpty(projectPath) ? WorkspaceFiles.Pick(true, "Save world project", "wbworld") : projectPath;
             if (string.IsNullOrEmpty(path)) return;
             var document = WorkspaceDocument.Capture(world, Path.GetFileNameWithoutExtension(path)); document.Save(path);
-            projectPath = path; title = document.title; PlayerPrefs.SetString("worldbuilder.lastProject",path);PlayerPrefs.Save(); history.Record(State()); savedState = State(); Refresh(); Status("Saved " + Path.GetFileName(path));
+            projectPath = path; title = document.title; PlayerPrefs.SetString("worldbuilder.lastProject",path);PlayerPrefs.Save(); RecordHistory(); savedState = State(); Refresh(); Status("Saved " + Path.GetFileName(path));
         });
     }
     void Export()
@@ -548,9 +572,9 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
     }
     void Dialog(string titleText, string text, Action<VisualElement> actions)
     {
-        EndObjectGesture(true); CloseDialog(); modal = new VisualElement(); modal.AddToClassList("modal"); root.Add(modal);
+        CancelConstruction(); CloseDialog(); modal = new VisualElement(); modal.AddToClassList("modal"); root.Add(modal);
         var box = new VisualElement(); box.AddToClassList("dialog"); modal.Add(box);
-        Label(box, titleText, "section"); var content = new ScrollView(); content.AddToClassList("dialog-scroll"); box.Add(content); Label(content, text, "hint"); actions(content);
+        var heading=Row(box,"dialog-heading");Label(heading,titleText,"dialog-title");Button(heading,"×",CloseDialog).AddToClassList("dialog-close");var content = new ScrollView(); content.AddToClassList("dialog-scroll"); box.Add(content); Label(content, text, "hint"); actions(content);
     }
     void CloseDialog() { DisposeLibraryPreview(); previewGeneration++; if (modal != null) modal.RemoveFromHierarchy(); modal = null; }
     void GameBrowser()
@@ -770,6 +794,9 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
     void OnDestroy()
     {
         cancelLibraryImport=true;
+        try {if(historyAssets!=null&&Directory.Exists(historyAssets.Folder))Directory.Delete(historyAssets.Folder,true);}
+        catch(IOException e){Debug.LogWarning("Could not remove temporary undo cache: "+e.Message);}
+        catch(UnauthorizedAccessException e){Debug.LogWarning("Could not remove temporary undo cache: "+e.Message);}
         Application.wantsToQuit -= WantsToQuit;
         DisposeWorldTools();DisposeLibraryPreview();DisposeCatalogThumbnails();
         if (world != null) Destroy(world.gameObject); if (reference != null) Destroy(reference.gameObject);

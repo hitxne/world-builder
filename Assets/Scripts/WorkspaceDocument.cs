@@ -7,6 +7,7 @@ using UnityEngine;
 public sealed class WorkspaceDocument
 {
     public int version = 1;
+    public string assetFolder;
     public string title = "Untitled world";
     public List<WorkspaceProject> objects = new List<WorkspaceProject>();
     public static WorkspaceDocument Capture(Transform root, string title)
@@ -17,15 +18,25 @@ public sealed class WorkspaceDocument
                 document.objects.Add(WorkspaceProject.Capture(identity.gameObject, identity.source ?? ""));
         return document;
     }
-    public void Save(string path) => WorkspaceAtomicFile.Write(path, JsonUtility.ToJson(this, true));
+    public void Save(string path,string sharedFolder=null)
+    {
+        path=Path.GetFullPath(path);string folder=sharedFolder??Path.GetFileName(path)+".assets";
+        if(folder.Contains("/")||folder.Contains("\\")||Path.GetFileName(folder)!=folder||folder=="."||folder=="..")throw new ArgumentException("Asset folder must be a local folder name");
+        var store=new WorkspaceBlobStore(Path.Combine(Path.GetDirectoryName(path),folder));
+        WorkspaceAtomicFile.Write(path,WorkspaceProjectStorage.Serialize(this,store,folder));
+    }
     public static WorkspaceDocument Open(string path)
     {
         if (new FileInfo(path).Length > 128 * 1024 * 1024) throw new IOException("Project exceeds 128 MB safety limit.");
         var document = JsonUtility.FromJson<WorkspaceDocument>(File.ReadAllText(path));
-        if (document == null || document.version != 1 || document.objects == null)
+        if (document == null || (document.version != 1 && document.version != 2) || document.objects == null)
             throw new FormatException("Unsupported or invalid world project.");
         if (document.objects.Count > 2000) throw new FormatException("Project exceeds 2000-object safety limit.");
-        foreach(var item in document.objects)item.NormalizeConstruction();
+        if(document.version==2) {
+            if(string.IsNullOrEmpty(document.assetFolder)||document.assetFolder.Contains("/")||document.assetFolder.Contains("\\")||Path.GetFileName(document.assetFolder)!=document.assetFolder||document.assetFolder=="."||document.assetFolder=="..")throw new FormatException("Invalid project asset folder");
+            WorkspaceProjectStorage.Expand(document,new WorkspaceBlobStore(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(path)),document.assetFolder)));
+        }
+        foreach(var item in document.objects){if(item==null)throw new FormatException("Null project object");item.NormalizeConstruction();}
         return document;
     }
 }
@@ -51,6 +62,7 @@ public sealed class WorkspaceHistory
 {
     readonly List<string> states = new List<string>();
     int index = -1;
+    public IReadOnlyList<string> Snapshots=>states;
     public bool CanUndo => index > 0;
     public bool CanRedo => index + 1 < states.Count;
     public void Reset(string state) { states.Clear(); index = -1; Record(state); }

@@ -77,7 +77,10 @@ public sealed partial class WorldBuilderRuntime
             var source=selected.GetComponent<WorkspaceIdentity>().construction;var terrains=world.GetComponentsInChildren<WorkspaceIdentity>();float radius=Mathf.Max(0.15f,workDistance*0.005f);
             foreach(var point in source.points){var position=RoadNodeDisplay(selected,point,terrains);feedbackPaths.Add(new[]{position-Vector3.right*radius,position+Vector3.right*radius});feedbackPaths.Add(new[]{position-Vector3.forward*radius,position+Vector3.forward*radius});}
         }
-        if(roadDrag&&modal==null){feedbackPaths.Add(new[]{roadDragStart,roadDragEnd});previewBadge.text="ROAD PREVIEW — release to build • Escape cancels";previewBadge.style.display=DisplayStyle.Flex;}else previewBadge.text="PLACEMENT PREVIEW — click to place • Escape cancels";
+        if(constructionDrag&&firstCorner.HasValue&&modal==null) {
+            var delta=constructionDragEnd-firstCorner.Value;previewBadge.text=constructionTool=="wall"?"Wall "+delta.magnitude.ToString("F1")+" m — release to build":"Size "+Mathf.Abs(delta.x).ToString("F1")+" × "+Mathf.Abs(delta.z).ToString("F1")+" m — release to build";previewBadge.style.display=DisplayStyle.Flex;
+        }
+        if(roadDrag&&modal==null){feedbackPaths.Add(new[]{roadDragStart,roadDragEnd});previewBadge.text="ROAD PREVIEW — release to build • Escape cancels";previewBadge.style.display=DisplayStyle.Flex;}else if(!constructionDrag)previewBadge.text="PLACEMENT PREVIEW — click to place • Escape cancels";
         if(!HasPlacement&&placementPreview!=null)ClearPlacementPreview();
         if(modal==null&&feedbackHover&&(HasPlacement||IsBrush()||firstCorner.HasValue||constructionTool=="roadcurve")) {
             try {

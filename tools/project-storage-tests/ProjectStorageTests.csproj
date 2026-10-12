@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><EnableDefaultCompileItems>false</EnableDefaultCompileItems></PropertyGroup>
+  <ItemGroup>
+    <Compile Include="*.cs" />
+    <Compile Include="../../Assets/Scripts/WorkspaceBlobStore.cs" />
+    <Compile Include="../../Assets/Scripts/WorkspaceProjectStorage.cs" />
+    <Compile Include="../../Assets/Scripts/WorkspaceAssetUpdate.cs" />
+    <Compile Include="../../Assets/Scripts/WorkspaceProject.cs" />
+    <Compile Include="../../Assets/Scripts/WorkspaceDocument.cs" />
+    <Compile Include="../../Assets/Scripts/World/WorldConstruction.cs" />
+    <Compile Include="../../Assets/Scripts/World/WorldGeometry.cs" />
+    <Compile Include="../../Assets/Scripts/World/WorldGeometryUnity.cs" />
+    <Compile Include="../../Assets/Scripts/World/WorldMaterials.cs" />
+  </ItemGroup>
+</Project>

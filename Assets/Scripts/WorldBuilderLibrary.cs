@@ -46,7 +46,7 @@ public sealed partial class WorldBuilderRuntime
             if(string.IsNullOrEmpty(id))id=Guid.NewGuid().ToString("N");
             string rootId=selected.GetComponent<WorkspaceIdentity>().id;
             foreach(var item in document.objects)if(item.id==rootId){item.parentId=null;item.position=Vector3.zero;}
-            string path=Path.Combine(LibraryFolder,id+".wbworld");document.Save(path);
+            string path=Path.Combine(LibraryFolder,id+".wbworld");document.Save(path,"LibraryResources");
             WriteLibraryMetadata(path,document.title,selected.GetComponent<WorkspaceIdentity>().source,"");
             selected.GetComponent<WorkspaceIdentity>().libraryId=id;Changed();Status("Saved reusable asset/building to the local library.");
         });
@@ -130,7 +130,7 @@ public sealed partial class WorldBuilderRuntime
                     AttachSimsAppearance(item,file);warning=AppearanceWarning(item,warning);
                     item.id=Guid.NewGuid().ToString("N");item.libraryId=id;item.parentId=null;item.position=Vector3.zero;
                     string name="The Sims 4 / "+Path.GetRelativePath(folder,file);item.name=Path.GetFileNameWithoutExtension(file);
-                    new WorkspaceDocument{title=name,objects=new List<WorkspaceProject>{item}}.Save(target);
+                    new WorkspaceDocument{title=name,objects=new List<WorkspaceProject>{item}}.Save(target,"LibraryResources");
                     WriteLibraryMetadata(target,name,file,warning);RefreshSimsCatalog(target,file);imported++;
                     if(!string.IsNullOrEmpty(warning))report.AppendLine("WARNING: "+file+" — "+warning);
                 } catch(Exception error){failed++;report.AppendLine("FAILED: "+file+" — "+error.Message);}

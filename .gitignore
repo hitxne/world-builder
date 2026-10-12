@@ -16,3 +16,7 @@ Assets/WorldBuilderGenerated.meta
 !tools/world-geometry-tests/WorldGeometryTests.csproj
 tools/world-geometry-tests/bin/
 tools/world-geometry-tests/obj/
+
+!tools/project-storage-tests/ProjectStorageTests.csproj
+tools/project-storage-tests/bin/
+tools/project-storage-tests/obj/

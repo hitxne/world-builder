@@ -19,7 +19,7 @@ public sealed class WorkspaceProject
     public WorkspaceTexture[] albedo;
     public string[] materialNames;
     public WorkspaceSourceAppearance sourceAppearance;
-    public string appearanceFingerprint;
+    public string appearanceFingerprint,meshRef,baselineGeometryHash,baselineAppearanceHash;
     public string libraryId;
     public Color color = new Color(0.65f, 0.72f, 0.78f, 1);
     public Vector3 position, rotation, scale = Vector3.one;
@@ -27,7 +27,7 @@ public sealed class WorkspaceProject
     public Vector2[] uv;
     public int[] triangles;
 
-    public static WorkspaceProject Capture(GameObject model, string source)
+    public static WorkspaceProject Capture(GameObject model, string source,bool omitGeometry=false)
     {
         var mesh = model.GetComponent<MeshFilter>().sharedMesh;
         return new WorkspaceProject {
@@ -35,15 +35,16 @@ public sealed class WorkspaceProject
             libraryId = model.GetComponent<WorkspaceIdentity>()?.libraryId,
             albedo = model.GetComponent<WorkspaceIdentity>()?.albedo,
             sourceAppearance=model.GetComponent<WorkspaceIdentity>()?.sourceAppearance,appearanceFingerprint=model.GetComponent<WorkspaceIdentity>()?.appearanceFingerprint,
+            baselineGeometryHash=model.GetComponent<WorkspaceIdentity>()?.baselineGeometryHash,baselineAppearanceHash=model.GetComponent<WorkspaceIdentity>()?.baselineAppearanceHash,
             materialNames=Array.ConvertAll(model.GetComponent<Renderer>().sharedMaterials,m=>m!=null?m.name:"Material"),
             parentId = model.transform.parent?.GetComponent<WorkspaceIdentity>()?.id,
-            submeshes = CaptureSubmeshes(mesh), materialColors = CaptureColors(model.GetComponent<Renderer>()),
+            submeshes = omitGeometry?null:CaptureSubmeshes(mesh), materialColors = CaptureColors(model.GetComponent<Renderer>()),
             metallic=CaptureProperty(model.GetComponent<Renderer>(),"_Metallic"),smoothness=CaptureProperty(model.GetComponent<Renderer>(),"_Smoothness"),
             id = model.GetComponent<WorkspaceIdentity>()?.id ?? Guid.NewGuid().ToString("N"),
             color = ReadColor(model.GetComponent<Renderer>().sharedMaterial),
             name = model.name, source = source, position = model.transform.localPosition,
             rotation = model.transform.localEulerAngles, scale = model.transform.localScale,
-            vertices = mesh.vertices, normals = mesh.normals, uv = mesh.uv, triangles = mesh.triangles
+            vertices = omitGeometry?null:mesh.vertices, normals = omitGeometry?null:mesh.normals, uv = omitGeometry?null:mesh.uv, triangles = omitGeometry?null:mesh.triangles
         };
     }
     static WorkspaceTriangles[] CaptureSubmeshes(Mesh mesh)
@@ -118,7 +119,7 @@ public sealed class WorkspaceProject
 public sealed class WorkspaceTriangles { public int[] indices; }
 
 [Serializable]
-public sealed class WorkspaceTexture { public string name, base64, sourcePath; }
+public sealed class WorkspaceTexture { public string name, base64, sourcePath,blob; }
 
 [Serializable]
 public sealed class WorkspaceSourceAppearance { public string manifestJson; public WorkspaceTexture[] resources; }

@@ -20,7 +20,8 @@ public sealed partial class WorldBuilderRuntime
     int floorLevel;
     float islandWidth=160,islandDepth=160;
     int islandSeed=1337;
-    bool stroke, objectGesture;
+    bool stroke, objectGesture,constructionDrag,constructionDragValid;
+    Vector3 constructionDragEnd;
     Transform gestureObject;
     Vector3 gesturePosition, gestureScale, gestureWorldStart, gestureHitStart;
     Quaternion gestureRotation;
@@ -126,7 +127,7 @@ public sealed partial class WorldBuilderRuntime
     }
     void ToolChoice(VisualElement parent,string label,string tool){toolButtons[tool]=Button(parent,label,()=>SetTool(tool));}
     void SetTool(string tool){CancelConstruction();constructionTool=tool;RefreshWorldTools();Status(ToolInstruction());}
-    void CancelConstruction(){EndRoadNode(true);EndRoadDrag(true);ClearRoadDragPreview();ClearPlacementPreview();EndObjectGesture(true);pendingLibraryPath=null;pendingCopySource=null;placementYaw=0;ConstructionPointerUp();firstCorner=null;roadPoints.Clear();constructionTool="select";RefreshWorldTools();}
+    void CancelConstruction(){constructionDrag=false;EndRoadNode(true);EndRoadDrag(true);ClearRoadDragPreview();ClearPlacementPreview();EndObjectGesture(true);pendingLibraryPath=null;pendingCopySource=null;placementYaw=0;ConstructionPointerUp();firstCorner=null;roadPoints.Clear();constructionTool="select";RefreshWorldTools();}
     string ToolInstruction()
     {
         if(HasPlacement)return "Click to place. Comma/period or right-click rotate 45°. Shift repeats placement. Escape cancels.";
@@ -139,7 +140,7 @@ public sealed partial class WorldBuilderRuntime
         if(constructionTool=="roadnode")return "Drag road control points. Connected ends slide along the junction side; Escape restores the edit.";
         if(constructionTool=="junction")return "Click to place a junction. Set its size/radius, then attach roads through Road settings > Connections.";
         if(constructionTool=="roadcurve")return "Click route points, then Finish route or Enter. Escape cancels.";
-        if(constructionTool=="room"||constructionTool=="lot"||constructionTool=="floor"||constructionTool=="roof"||constructionTool=="wall")return "Click two grid-snapped corners/endpoints. Escape cancels.";
+        if(constructionTool=="room"||constructionTool=="lot"||constructionTool=="floor"||constructionTool=="roof"||constructionTool=="wall")return "Drag to size, then release to build. Escape cancels; grid snapping applies.";
         if(constructionTool=="door"||constructionTool=="window")return "Click an existing wall to create an opening and frame.";
         if(IsBrush())return "Hold left mouse over terrain to sculpt or paint. Release records one undo step.";
         if(constructionTool=="tree"||constructionTool=="stairs")return "Click to place. Objects can be moved in Properties.";
@@ -254,23 +255,28 @@ public sealed partial class WorldBuilderRuntime
             if(constructionTool=="roadcurve"){if(roadPoints.Count==0)CacheRoadEnds();roadPoints.Add(P(RoadEndSnap(hit)));Status("Road points: "+roadPoints.Count+". Finish Road to create it.");return;}
             if(constructionTool=="tree"){CreateConstruction("Palm",new WorldConstruction{kind="tree",size=new WorldPoint(1,6,1)},hit,world);Changed();return;}
             if(constructionTool=="stairs"){CreateConstruction("Stairs",new WorldConstruction{kind="stairs",size=new WorldPoint(1.5f,3.2f,4)},hit,PlacementParent());Changed();return;}
-            if(firstCorner==null){firstCorner=hit;Status("First point set. Click the second point.");return;}
-            Vector3 start=firstCorner.Value;firstCorner=null;
-            if(constructionTool=="wall")CreateWall(start,hit);
-            else if(constructionTool=="lot")CreateLot(start,hit);
-            else if(constructionTool=="room")CreateRoom(start,hit);
-            else CreateRectangle(constructionTool,start,hit);
-            Changed();
+            firstCorner=hit;constructionDragEnd=hit;constructionDragValid=true;constructionDrag=true;
+            Status("Drag to size; release to build. Escape cancels.");
         });return true;
     }
     void ConstructionPointerMove(Vector2 point)
     {
+        if(constructionDrag){constructionDragValid=false;Try(()=>{if(workImage.contentRect.Contains(point)&&Ground(point,out var hit,out var terrain)){constructionDragEnd=Snap(hit);constructionDragValid=true;}});return;}
         if(roadNodeDrag){Try(()=>{if(Ground(point,out var hit,out var terrain))MoveRoadNode(hit);});return;}
         if(roadDrag){Try(()=>{if(Ground(point,out var hit,out var terrain))UpdateRoadDrag(hit);});return;}
         if(!stroke||!IsBrush())return;
         Try(()=>{if(Ground(point,out var hit,out var terrain)&&terrain!=null)ApplyBrush(terrain,hit);});
     }
-    void ConstructionPointerUp(bool cancelRoad=false){Try(()=>{EndRoadNode(cancelRoad);EndRoadDrag(cancelRoad);});if(!stroke)return;stroke=false;Changed();}
+    void ConstructionPointerUp(bool cancelRoad=false){Try(()=>{EndConstructionDrag(cancelRoad);EndRoadNode(cancelRoad);EndRoadDrag(cancelRoad);});if(!stroke)return;stroke=false;Changed();}
+    void EndConstructionDrag(bool cancel)
+    {
+        if(!constructionDrag)return;constructionDrag=false;var start=firstCorner;firstCorner=null;
+        if(cancel||!constructionDragValid||!start.HasValue)return;var end=constructionDragEnd;
+        if(Vector3.Distance(start.Value,end)<0.25f)return;
+        if(constructionTool!="wall"&&(Mathf.Abs(start.Value.x-end.x)<0.25f||Mathf.Abs(start.Value.z-end.z)<0.25f))return;
+        if(constructionTool=="wall")CreateWall(start.Value,end);else if(constructionTool=="lot")CreateLot(start.Value,end);else if(constructionTool=="room")CreateRoom(start.Value,end);else CreateRectangle(constructionTool,start.Value,end);
+        Changed();Status("Built "+constructionTool+". Drag again to continue; Ctrl+Z undoes it.");
+    }
     void ApplyBrush(GameObject terrain,Vector3 point)
     {
         var identity=terrain.GetComponent<WorkspaceIdentity>();
@@ -471,7 +477,7 @@ public sealed partial class WorldBuilderRuntime
     }
     void WorldUpdate()
     {
-        if(Time.unscaledTime-lastAutosave<60||modal!=null||stroke)return;lastAutosave=Time.unscaledTime;
+        if(Time.unscaledTime-lastAutosave<60||modal!=null||stroke||objectGesture||roadDrag||roadNodeDrag||constructionDrag)return;lastAutosave=Time.unscaledTime;
         if(State()==savedState)return;
         Try(()=>{Directory.CreateDirectory(Application.persistentDataPath);WorkspaceDocument.Capture(world,title).Save(RecoveryPath);Status("Recovery autosave written. Save your project normally to keep a named copy.");});
     }

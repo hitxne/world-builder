@@ -17,7 +17,7 @@ public class WorldWorkflowTests
             var loaded=WorkspaceDocument.Open(path).objects[0];
             CollectionAssert.AreEqual(p.heights,loaded.construction.heights);CollectionAssert.AreEqual(p.paint,loaded.construction.paint);
             mesh=loaded.CreateMesh();Assert.AreEqual(3,mesh.subMeshCount);Assert.Greater(mesh.GetTriangles(1).Length,0);
-        } finally {if(mesh!=null)UnityEngine.Object.DestroyImmediate(mesh);if(File.Exists(path))File.Delete(path);}
+        } finally {if(mesh!=null)UnityEngine.Object.DestroyImmediate(mesh);if(File.Exists(path))File.Delete(path);if(Directory.Exists(path+".assets"))Directory.Delete(path+".assets",true);}
     }
     [Test] public void LotChildRelationshipIsSerialized()
     {
@@ -121,7 +121,7 @@ public class WorldWorkflowTests
             var loaded=WorkspaceDocument.Open(path).objects[0];
             Assert.IsFalse(loaded.HasConstruction);Assert.IsNull(loaded.construction);
             mesh=loaded.CreateMesh();CollectionAssert.AreEqual(imported.vertices,mesh.vertices);Assert.AreEqual(3,mesh.vertexCount);
-        } finally {if(mesh!=null)UnityEngine.Object.DestroyImmediate(mesh);if(File.Exists(path))File.Delete(path);}
+        } finally {if(mesh!=null)UnityEngine.Object.DestroyImmediate(mesh);if(File.Exists(path))File.Delete(path);if(Directory.Exists(path+".assets"))Directory.Delete(path+".assets",true);}
     }
     [Test] public void UnknownNonemptyConstructionStillReportsAnError()
     {

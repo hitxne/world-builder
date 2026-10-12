@@ -25,10 +25,10 @@ The current small-scene prototype is not yet suitable for a huge production map.
 3. Sculpt terrain with Raise/Lower/Smooth/Flatten, and paint Sand/Grass.
 4. Draw Road: click control points on terrain, then Finish Road or Enter. Width,
    sidewalks and control points remain editable in Properties.
-5. Draw Lot: click two corners. Select the lot and enter Lot Mode.
-6. Draw Room/Wall/Floor/Roof with two clicks. Door/Window tools cut real openings
+5. Draw Lot: drag from one corner and release at the opposite corner. Select the lot and enter Lot Mode.
+6. Drag to build Room/Wall/Floor/Roof; release inside the viewport to commit. Door/Window tools cut real openings
    in existing walls. Place Stairs, choose floor level and edit dimensions/transforms.
-7. Save `.wbworld` inside the app **before stopping Play**. Reopen it to continue;
+7. Save `.wbworld` inside the app **before stopping Play**. Keep its adjacent `.wbworld.assets` folder with it when copying or backing up. Reopen it to continue;
    Unity's saved editor scene does not contain runtime edits.
 8. Save a selected object or whole lot to Local Asset Library for reuse in another
    project. Import/Reimport OBJ with supported MTL/PNG/JPEG textures; export the
@@ -153,3 +153,5 @@ connections and surface metadata. Junctions have a corner radius and separate
 side offsets for each connected road; connected endpoint drags slide along the
 junction side. Detailed limitations and current grade are in the
 [progress audit](docs/PROGRESS-AUDIT-2026-10-12.md).
+
+Shared project payloads and conservative asset updates: [storage and update behavior](docs/PROJECT-STORAGE-AND-SAFE-UPDATES.md).

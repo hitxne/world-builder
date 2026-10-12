@@ -15,7 +15,7 @@ public sealed partial class WorldBuilderRuntime
             Button(box,"Reimport",()=>{
                 if(original==null)throw new InvalidOperationException("Selected object no longer exists");
                 var data=WorkspaceObjMaterials.Import(source,out string warning);
-                data.id=identity.id;data.libraryId=identity.libraryId;data.position=original.transform.localPosition;
+                data.id=identity.id;data.libraryId=identity.libraryId;data.appearanceFingerprint=identity.appearanceFingerprint;data.sourceAppearance=identity.sourceAppearance;data.baselineGeometryHash=identity.baselineGeometryHash;data.baselineAppearanceHash=identity.baselineAppearanceHash;data.position=original.transform.localPosition;
                 data.rotation=original.transform.localEulerAngles;data.scale=original.transform.localScale;data.name=original.name;
                 var replacement=Model(data,original.transform.parent,31);
                 while(original.transform.childCount>0)original.transform.GetChild(0).SetParent(replacement.transform,false);
