@@ -84,7 +84,7 @@ public sealed partial class WorldBuilderRuntime
     {
         constructionPanel.Clear();
         var categories=Row(constructionPanel,"catalog-tabs");
-        string[] names=workspaceMode=="World"?new[]{"Terrain","Roads","Lots","Scenery","Create World"}:workspaceMode=="Lot"?new[]{"Structure","Openings","Floors","Furnish"}:new[]{"Models"};
+        string[] names=workspaceMode=="World"?new[]{"Terrain","Roads","Lots","Scenery","Sims Assets","Create World"}:workspaceMode=="Lot"?new[]{"Structure","Openings","Floors","Furnish"}:new[]{"Models"};
         foreach(var category in names){var c=category;var button=Button(categories,c,()=>{CancelConstruction();toolCategory=c;BuildConstructionPanel();});if(c==toolCategory)button.AddToClassList("selected");}
         var content=Row(constructionPanel,"catalog-content");
         var choices=new VisualElement();choices.AddToClassList("catalog-choices");content.Add(choices);
@@ -98,6 +98,7 @@ public sealed partial class WorldBuilderRuntime
                 ToolChoice(choices,"Draw Road","road");Button(choices,"Finish Road",FinishRoad);Number(settings,"Road width",roadWidth,2,20,v=>roadWidth=v);
             } else if(toolCategory=="Lots") {ToolChoice(choices,"Draw Lot","lot");Button(choices,"Build Selected Lot",EnterLot);}
             else if(toolCategory=="Scenery") {ToolChoice(choices,"Place Palm","tree");Button(choices,"Local Library",OpenLibrary);Button(choices,"Game Assets",GameBrowser);}
+            else if(toolCategory=="Sims Assets"){BuildAssetCatalog(choices,true);}
             else {
                 Button(choices,"Generate Island",()=>ConfirmDiscard(GenerateIsland));Button(choices,"Florida Island Test",()=>ConfirmDiscard(BuildFloridaTest));
                 Number(settings,"Island width",islandWidth,32,512,v=>islandWidth=v);Number(settings,"Island depth",islandDepth,32,512,v=>islandDepth=v);Number(settings,"Seed",islandSeed,0,100000,v=>islandSeed=(int)v);
@@ -107,7 +108,7 @@ public sealed partial class WorldBuilderRuntime
             if(toolCategory=="Structure"){ToolChoice(choices,"Room","room");ToolChoice(choices,"Wall","wall");ToolChoice(choices,"Floor","floor");ToolChoice(choices,"Roof","roof");Number(settings,"Wall height",wallHeight,2,6,v=>wallHeight=v);}
             else if(toolCategory=="Openings"){ToolChoice(choices,"Door","door");ToolChoice(choices,"Window","window");}
             else if(toolCategory=="Floors"){ToolChoice(choices,"Stairs","stairs");Button(choices,"Floor Down",()=>{floorLevel=Math.Max(0,floorLevel-1);RefreshWorldTools();});Button(choices,"Floor Up",()=>{floorLevel=Math.Min(5,floorLevel+1);RefreshWorldTools();});}
-            else {Button(choices,"Local Library",OpenLibrary);Button(choices,"Game Assets",GameBrowser);Button(choices,"Save Selection",SaveLibrary);}
+            else {BuildAssetCatalog(choices);Button(settings,"Save Selection",SaveLibrary);}
         } else {
             Button(choices,"Import OBJ",Import);Button(choices,"Reimport Selected",ReimportSelected);Button(choices,"Local Library",OpenLibrary);Button(choices,"Save Selection",SaveLibrary);
             Button(choices,"Cube",()=>AddPrimitive(PrimitiveType.Cube,"Cube"));Button(choices,"Plane",()=>AddPrimitive(PrimitiveType.Plane,"Plane"));Button(choices,"Sphere",()=>AddPrimitive(PrimitiveType.Sphere,"Sphere"));Button(choices,"Cylinder",()=>AddPrimitive(PrimitiveType.Cylinder,"Cylinder"));

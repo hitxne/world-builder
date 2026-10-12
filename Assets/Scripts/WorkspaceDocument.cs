@@ -25,6 +25,7 @@ public sealed class WorkspaceDocument
         if (document == null || document.version != 1 || document.objects == null)
             throw new FormatException("Unsupported or invalid world project.");
         if (document.objects.Count > 2000) throw new FormatException("Project exceeds 2000-object safety limit.");
+        foreach(var item in document.objects)item.NormalizeConstruction();
         return document;
     }
 }

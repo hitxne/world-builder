@@ -70,7 +70,7 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
     {
         PositionCamera(workCamera, workAngles, workCenter, workDistance);
         PositionCamera(referenceCamera, referenceAngles, referenceCenter, referenceDistance);
-        WorldUpdate();UpdateFeedback();
+        WorldUpdate();UpdateFeedback();UpdateLibraryPreviewCamera();
     }
     static void PositionCamera(Camera camera, Vector2 angles, Vector3 center, float distance)
     {
@@ -308,7 +308,8 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
     }
     GameObject Model(WorkspaceProject data, Transform parent, int layer)
     {
-        if(data.construction!=null) {
+        data.NormalizeConstruction();
+        if(data.HasConstruction) {
             var derived=ConstructionData(data.construction);
             data.vertices=derived.vertices;data.uv=derived.uv;data.triangles=derived.triangles;data.submeshes=derived.submeshes;data.normals=null;
             if(data.materialColors==null)data.materialColors=derived.materialColors;
@@ -553,7 +554,7 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
         var box = new VisualElement(); box.AddToClassList("dialog"); modal.Add(box);
         Label(box, titleText, "section"); var content = new ScrollView(); content.AddToClassList("dialog-scroll"); box.Add(content); Label(content, text, "hint"); actions(content);
     }
-    void CloseDialog() { previewGeneration++; if (modal != null) modal.RemoveFromHierarchy(); modal = null; }
+    void CloseDialog() { DisposeLibraryPreview(); previewGeneration++; if (modal != null) modal.RemoveFromHierarchy(); modal = null; }
     void GameBrowser()
     {
         Dialog("Game Asset Browser", "Read-only game preview adapters: Sims MLOD subsets and plain Forza float/SNORM mesh parts. Missing textures, unsupported versions, compression and encrypted archives report their limits.", box => {
@@ -772,7 +773,7 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
     {
         cancelLibraryImport=true;
         Application.wantsToQuit -= WantsToQuit;
-        DisposeWorldTools();
+        DisposeWorldTools();DisposeLibraryPreview();DisposeCatalogThumbnails();
         if (world != null) Destroy(world.gameObject); if (reference != null) Destroy(reference.gameObject);
         if (sun != null) Destroy(sun);
         if (workCamera != null) Destroy(workCamera.gameObject); if (referenceCamera != null) Destroy(referenceCamera.gameObject);

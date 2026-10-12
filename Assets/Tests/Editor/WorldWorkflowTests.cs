@@ -111,4 +111,22 @@ public class WorldWorkflowTests
         WorldGeometry.ConformRoad(mesh,(v,clearance)=>null);
         CollectionAssert.AreEqual(original,mesh.vertices);Assert.AreEqual(4,road.points[0].y);
     }
+
+    [Test] public void LegacyImportedMeshWithEmptyConstructionSurvivesLibraryRoundtrip()
+    {
+        string path=Path.Combine(Path.GetTempPath(),Guid.NewGuid()+".wbworld");Mesh mesh=null;
+        try {
+            var imported=new WorkspaceProject{id="legacy-import",name="Imported mesh",construction=new WorldConstruction{kind=""},vertices=new[]{Vector3.zero,Vector3.right,Vector3.up},triangles=new[]{0,1,2}};
+            new WorkspaceDocument{objects=new List<WorkspaceProject>{imported}}.Save(path);
+            var loaded=WorkspaceDocument.Open(path).objects[0];
+            Assert.IsFalse(loaded.HasConstruction);Assert.IsNull(loaded.construction);
+            mesh=loaded.CreateMesh();CollectionAssert.AreEqual(imported.vertices,mesh.vertices);Assert.AreEqual(3,mesh.vertexCount);
+        } finally {if(mesh!=null)UnityEngine.Object.DestroyImmediate(mesh);if(File.Exists(path))File.Delete(path);}
+    }
+    [Test] public void UnknownNonemptyConstructionStillReportsAnError()
+    {
+        var project=new WorkspaceProject{construction=new WorldConstruction{kind="unsupported-kind"}};
+        project.NormalizeConstruction();Assert.IsTrue(project.HasConstruction);
+        Assert.Throws<ArgumentException>(()=>WorldGeometry.Build(project.construction));
+    }
 }

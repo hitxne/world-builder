@@ -47,3 +47,11 @@ Label, Button, .unity-base-field { flex-shrink: 0; }
 .editing-tools { flex-wrap: wrap; }
 
 .preview-badge { position: absolute; left: 12px; top: 12px; background-color: var(--raised); color: var(--text); padding: 8px; border-top-left-radius: 5px; border-top-right-radius: 5px; border-bottom-left-radius: 5px; border-bottom-right-radius: 5px; }
+
+.library-preview-image { height: 280px; min-height: 180px; flex-shrink: 0; background-color: var(--raised); margin: 4px; }
+
+.asset-catalog { flex-grow: 1; min-width: 240px; }
+.asset-grid { flex-direction: row; flex-wrap: wrap; align-content: flex-start; }
+Button.asset-tile, .catalog-choices Button.asset-tile { width: 132px; min-height: 120px; padding: 5px; flex-direction: column; align-items: stretch; }
+.asset-thumbnail { height: 82px; min-height: 82px; background-color: var(--surface); }
+.asset-caption { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; -unity-text-align: middle-center; padding-top: 5px; }

@@ -121,3 +121,9 @@ The [major feedback update](docs/MAJOR-USABILITY-UPDATE.md) adds selection
 outlines, brush footprints, construction guides, actual-model placement previews
 and an active-lot grid. Tools are separated from construction choices, and terrain
 brushes rebuild only intersecting roads. Native Unity/Windows validation is pending.
+
+Imported objects now appear as visual cards in **World Build > Sims Assets**
+and **Lot Build > Furnish**, as well as Local Library. Thumbnails are rendered
+from actual meshes on demand and cached locally. Select a card to orbit/pan/zoom
+its read-only 3D preview, then choose **Place in world / active lot**. Existing
+imports with empty construction records are handled as ordinary meshes.

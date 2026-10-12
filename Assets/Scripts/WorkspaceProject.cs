@@ -10,6 +10,9 @@ public sealed class WorkspaceProject
     public string name = "Untitled", source = "";
     public string id, parentId;
     public WorldConstruction construction;
+    // JsonUtility can recreate a serialized null class as an empty object.
+    public bool HasConstruction => construction!=null&&!string.IsNullOrWhiteSpace(construction.kind);
+    public void NormalizeConstruction(){if(!HasConstruction)construction=null;}
     public Color[] materialColors;
     public float[] metallic, smoothness;
     public WorkspaceTriangles[] submeshes;

@@ -14,7 +14,10 @@ public sealed partial class WorldBuilderRuntime
     volatile bool libraryImportRunning, cancelLibraryImport;
     [Serializable] sealed class LibraryMetadata { public string name,source,warning; }
     void WriteLibraryMetadata(string path,string name,string source,string warning)
-        =>WorkspaceAtomicFile.Write(path+".metadata.json",JsonUtility.ToJson(new LibraryMetadata{name=name,source=source,warning=warning},true));
+    {
+        WorkspaceAtomicFile.Write(path+".metadata.json",JsonUtility.ToJson(new LibraryMetadata{name=name,source=source,warning=warning},true));
+        if(File.Exists(path+".preview.png"))File.Delete(path+".preview.png");
+    }
     string LibraryFolder=>Path.Combine(Application.persistentDataPath,"Assets");
     void SaveLibrary()
     {
@@ -33,28 +36,10 @@ public sealed partial class WorldBuilderRuntime
     }
     void OpenLibrary()
     {
-        Dialog("Local Asset Library","Reusable objects and buildings persist between sessions. Select one, then click the terrain or active lot to place an independent editable copy.",box=>{
+        Dialog("Local Asset Library","Browse visual asset cards. Select one to inspect its 3D preview, then choose Place to use it in the world or active lot.",box=>{
             Button(box,"Add Sims assets — select game EXE",SelectSimsExecutable);
             Button(box,"Import existing OBJ export folder",OpenSimsExportImport);
-            int page=0;var search=new TextField("Search");box.Add(search);var list=new ScrollView();list.style.height=300;box.Add(list);
-            void Populate(string query) {
-                list.Clear();if(!Directory.Exists(LibraryFolder)){Label(list,"Save a selected object or lot to add your first asset.","hint");return;}
-                int count=0,matched=0;
-                foreach(string path in Directory.EnumerateFiles(LibraryFolder,"*.wbworld")) {
-
-                    try {
-                        string metadataPath=path+".metadata.json";
-                        var metadata=File.Exists(metadataPath)?JsonUtility.FromJson<LibraryMetadata>(File.ReadAllText(metadataPath)):null;
-                        string name=metadata?.name??WorkspaceDocument.Open(path).title;
-                        if(name.IndexOf(query??"",StringComparison.OrdinalIgnoreCase)<0)continue;
-                        if(matched++<page*50)continue;if(count++>=50){Label(list,"More results — use Next page.","hint");break;}
-                        string assetPath=path;var entry=Button(list,name,()=>BeginLibraryPlacement(assetPath));
-                        entry.tooltip=string.IsNullOrEmpty(metadata?.warning)?name:name+"\nImport warning: "+metadata.warning;
-                    } catch {Label(list,"Unreadable asset: "+Path.GetFileName(path),"hint");}
-                }
-            }
-            var pages=Row(box);Button(pages,"Previous page",()=>{page=Math.Max(0,page-1);Populate(search.value);});Button(pages,"Next page",()=>{page++;Populate(search.value);});
-            search.RegisterValueChangedCallback(e=>{page=0;Populate(e.newValue);});Populate("");Button(box,"Close",CloseDialog);
+            BuildAssetCatalog(box);Button(box,"Close",CloseDialog);
         });
     }
     void SelectSimsExecutable()

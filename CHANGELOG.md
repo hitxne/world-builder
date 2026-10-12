@@ -138,3 +138,10 @@ Validation: source configuration/GUID/input checks, C# syntax parsing and whites
 - Separate editing toolbar from catalog; favor the viewport in default layouts.
 - Restrict sculpt-induced road rebuilds to affected footprints and carry geometry-only warnings into extracted Sims library entries.
 - Geometry/container harness passed 41,544 assertions; synthetic exporter integration passed. Unity visual/input/type checks and Windows acceptance remain pending.
+
+## 2026-10-12 — visual building catalog and imported-mesh correction
+
+- Normalize empty construction records on project/library load and before model creation; preserve the stored imported mesh instead of attempting procedural regeneration.
+- Add actual-mesh thumbnail cards, search/pages, World Sims Assets and Lot Furnish catalogs, plus read-only 3D inspection with orbit/pan/zoom before placement.
+- Cache thumbnails on demand, release detached-card textures and keep preview cameras/objects outside saved/exported scene data.
+- Add legacy imported-mesh roundtrip and unknown-kind regression tests. Source checks passed; Unity tests/rendering remain pending.
