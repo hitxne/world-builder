@@ -5,6 +5,13 @@ Target editor: **6000.6.5f1**. Work is on `development/world-builder-operational
 [PR #1](https://github.com/hitxne/world-builder/pull/1) remains draft while native
 Unity/Windows validation is incomplete.
 
+## Current blocking priority: UI design and usability
+
+Make the existing world/lot workflow understandable and usable before expanding
+features. A feature is not accepted merely because its code exists: users must be
+able to find it, understand its state, perform the action and recover from mistakes.
+See [usability priority and acceptance gate](docs/UI-USABILITY-PRIORITY.md).
+
 ## Use the world/lot workflow
 
 1. Open this project in Unity 6000.6.5f1 and press Play.

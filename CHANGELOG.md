@@ -66,3 +66,10 @@ Validation: source configuration/GUID/input checks, C# syntax parsing and whites
 - Reject duplicate/rootless/multiple-root/cyclic library documents before scene insertion.
 - Add Unity EditMode regression cases for cancelled parent/child transforms and single-step undo/redo of a committed gesture. Tests are added, not executed here.
 - Source configuration, syntax and whitespace checks pass; actual Unity/Windows input and rendering remain unverified.
+
+## 2026-10-12 — usability becomes the blocking priority
+
+- Make UI design and usability the next acceptance gate before new feature expansion.
+- Define task-based navigation, placement previews, selection/tool feedback and recovery requirements.
+- Replace the feature-first continuation order in the directive audit.
+- This is a priority/acceptance update; it does not claim the current interface passed usability testing.

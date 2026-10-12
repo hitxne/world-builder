@@ -45,7 +45,7 @@ Executed: tools/validate-source.py, C# tree-sitter syntax parsing of all Assets 
 
 In Unity 6000.6.5f1: EditMode > Run All. Play at 1280x720 and 1920x1080, then narrow the window: check catalog scrolling, hierarchy search, Scene/Properties drawers, saved sizes and restore. Switch every category while a construction tool is active: the active tool must return to Select. Sculpt, Escape, Undo, Redo. Verify Top/Front/Side. Run the full section 25 Florida Island Test scenario, including textured import and save/reopen/export.
 
-Build via World Builder > Build Windows Development; launch the packaged executable outside Unity and repeat the core scenario. Resolve actual compilation/render/input defects before accepting any operational milestone. Next independent engineering priorities are gizmo-based object manipulation and an asynchronous searchable asset catalog with real preview capability metadata; realistic lane/intersection construction and Assetto Corsa preparation follow the stable core.
+Build via World Builder > Build Windows Development; launch the packaged executable outside Unity and repeat the core scenario. Resolve actual compilation/render/input defects before accepting any operational milestone. The next blocking priority is UI design and usability, as defined in UI-USABILITY-PRIORITY.md. Validate and repair navigation, tool discoverability, feedback and the existing end-to-end workflow before expanding features. Gizmos, richer asset decoding, realistic lane/intersection construction and Assetto Corsa preparation follow this usability gate.
 
 ## Follow-up audit: direct editing and library placement
 
