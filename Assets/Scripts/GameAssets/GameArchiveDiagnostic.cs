@@ -12,7 +12,15 @@ public static class GameArchiveDiagnostic
         public int Entries, MeshEntries, EncryptedEntries;
         public string Status;
         public readonly Dictionary<string, int> Methods = new Dictionary<string, int>();
+        public readonly List<Member> Members = new List<Member>();
         public readonly List<string> MeshNames = new List<string>();
+    }
+    public sealed class Member
+    {
+        public string Name;
+        public ushort Flags, Method;
+        public uint Crc, CompressedSize, Size, LocalOffset;
+        public bool Encrypted => (Flags & 65) != 0;
     }
     public static Result Inspect(string path)
     {
@@ -37,10 +45,14 @@ public static class GameArchiveDiagnostic
                 long start = stream.Position;
                 if (start + 46 > (long)offset + size || reader.ReadUInt32() != 0x02014b50) throw new FormatException("Invalid ZIP directory entry.");
                 reader.ReadUInt16(); reader.ReadUInt16(); ushort flags = reader.ReadUInt16(), method = reader.ReadUInt16();
+                stream.Position = start + 16;
+                uint crc = reader.ReadUInt32(), compressedSize = reader.ReadUInt32(), logicalSize = reader.ReadUInt32();
+                stream.Position = start + 42; uint localOffset = reader.ReadUInt32();
                 stream.Position = start + 28; int nameLength = reader.ReadUInt16(), extra = reader.ReadUInt16(), comment = reader.ReadUInt16();
                 long next = start + 46 + nameLength + extra + comment;
                 if (next > (long)offset + size) throw new FormatException("ZIP name exceeds directory bounds.");
                 stream.Position = start + 46; string name = Encoding.UTF8.GetString(reader.ReadBytes(nameLength));
+                result.Members.Add(new Member { Name = name, Flags = flags, Method = method, Crc = crc, CompressedSize = compressedSize, Size = logicalSize, LocalOffset = localOffset });
                 result.Entries++; if ((flags & 1) != 0 || (flags & 64) != 0) result.EncryptedEntries++;
                 string format = Path.GetExtension(name).ToLowerInvariant();
                 if (format == ".modelbin") { result.MeshEntries++; if (result.MeshNames.Count < 12) result.MeshNames.Add(name); }

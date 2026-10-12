@@ -29,3 +29,11 @@
 - Inspect standard ZIP directories for mesh names, compression and encryption metadata.
 - Report MiniZip signatures and unsupported archive formats explicitly.
 - Actual metadata guided changes; game-resource payloads and Unity tests remain unverified.
+
+## Selected archive model preview — unreleased
+- Browse model names in ordinary ZIP archives and open one bounded entry in memory.
+- Enforce stored/deflate method, encryption flags, declared-size limit and CRC.
+- Reuse Forza bundle/part-preview UI with in-memory model resources.
+- Preserve valid Sims resource indexes while reporting/refusing invalid payloads.
+- Diagnostic v3 records exact invalid payload metadata and zero-size placeholders.
+- Cloud source checks passed; Unity tests and actual game previews still pending.

@@ -16,6 +16,8 @@ public sealed class SimsPackage
         public uint Type, Group, Offset, StoredSize, Size;
         public ulong Instance;
         public ushort Compression;
+        public string PayloadError = "";
+        public bool IsEmpty => StoredSize == 0 && Size == 0;
         public bool IsDeleted => Compression == 0xffe0 || Offset == uint.MaxValue || (StoredSize == 1 && Size == uint.MaxValue);
         public string Key => Type.ToString("X8") + ":" + Group.ToString("X8") + ":" + Instance.ToString("X16");
     }
@@ -42,7 +44,8 @@ public sealed class SimsPackage
                 entry.Size = reader.ReadUInt32();
                 if ((stored & 0x80000000u) != 0) { entry.Compression = reader.ReadUInt16(); reader.ReadUInt16(); }
                 if (stream.Position > offset + indexSize) throw new FormatException("Package entry exceeds index.");
-                if (!entry.IsDeleted && (entry.Offset < 96 || entry.Offset > stream.Length - entry.StoredSize)) throw new FormatException("Resource lies outside package.");
+                if (!entry.IsDeleted && !entry.IsEmpty && (entry.Offset < 96 || entry.Offset > stream.Length - entry.StoredSize))
+                    entry.PayloadError = "Resource " + entry.Key + " payload outside package: offset=" + entry.Offset + ", stored=" + entry.StoredSize + ", logical=" + entry.Size + ", compression=0x" + entry.Compression.ToString("X4") + ", file=" + stream.Length;
                 Entries.Add(entry);
             }
         }
@@ -50,6 +53,8 @@ public sealed class SimsPackage
     public byte[] Read(Entry entry)
     {
         if (!Entries.Contains(entry)) throw new ArgumentException("Resource does not belong to this package.");
+        if (!string.IsNullOrEmpty(entry.PayloadError)) throw new FormatException(entry.PayloadError);
+        if (entry.IsEmpty) return new byte[0];
         if (entry.IsDeleted) throw new NotSupportedException("Deleted/tombstone resource has no payload.");
         if (entry.Size > 64 * 1024 * 1024 || entry.StoredSize > 64 * 1024 * 1024) throw new IOException("Resource exceeds 64 MB preview limit.");
         if (entry.Compression != 0 && entry.Compression != 0x5a42) throw new NotSupportedException("Resource compression 0x" + entry.Compression.ToString("X4") + " is not implemented.");

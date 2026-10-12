@@ -10,7 +10,7 @@ public static class GameAssetDiagnostic
     [Serializable] public sealed class Report
     {
         public string generatedUtc = DateTime.UtcNow.ToString("O");
-        public string reportVersion = "2";
+        public string reportVersion = "3";
         public string note = "Metadata only. Bounded scan, not a full installation inventory. No game resource bytes included.";
         public List<Game> games = new List<Game>();
     }
@@ -29,7 +29,8 @@ public static class GameAssetDiagnostic
         public long sizeBytes;
         public int resourceCount, meshResourceCount;
         public string inspectionStatus;
-        public int deletedResources, encryptedEntries;
+        public int deletedResources, encryptedEntries, invalidPayloads, emptyResources;
+        public List<string> payloadWarnings = new List<string>();
         public List<string> meshNames = new List<string>();
         public List<Count> resourceTypes = new List<Count>();
     }
@@ -85,6 +86,11 @@ public static class GameAssetDiagnostic
             if (extension == ".package") {
                 var package = new SimsPackage(path); sample.resourceCount = package.Entries.Count;
                 foreach (var entry in package.Entries) {
+                    if (entry.IsEmpty) sample.emptyResources++;
+                    if (!string.IsNullOrEmpty(entry.PayloadError)) {
+                        sample.invalidPayloads++;
+                        if (sample.payloadWarnings.Count < 8) sample.payloadWarnings.Add(entry.PayloadError);
+                    }
                     if (entry.IsDeleted) { sample.deletedResources++; continue; }
                     if (entry.Type == SimsPackage.Mlod) sample.meshResourceCount++;
                     string type = entry.Type.ToString("X8"); types[type] = types.TryGetValue(type, out int count) ? count + 1 : 1;

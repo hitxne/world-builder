@@ -10,6 +10,7 @@ public sealed class ForzaBundle
 {
     public const uint MeshTag = 0x4d657368, VertexTag = 0x56657242, IndexTag = 0x496e6442, LayoutTag = 0x564c6179;
     public readonly string Path;
+    readonly byte[] memory;
     public readonly List<Blob> Blobs = new List<Blob>();
     public sealed class Blob
     {
@@ -21,7 +22,15 @@ public sealed class ForzaBundle
     public ForzaBundle(string path)
     {
         Path = path;
-        using (var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+        Parse(File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite));
+    }
+    public ForzaBundle(byte[] bytes, string source)
+    {
+        if (bytes == null || bytes.Length > 64 * 1024 * 1024) throw new IOException("Model entry exceeds 64 MB limit.");
+        Path = source; memory = bytes; Parse(new MemoryStream(memory, false));
+    }
+    void Parse(Stream stream)
+    {
         using (var reader = new BinaryReader(stream)) {
             if (stream.Length < 16 || reader.ReadUInt32() != 0x47727562) throw new NotSupportedException("Not a plain Grub bundle. Archives or encrypted files require a separate supported workflow.");
             byte major = reader.ReadByte(), minor = reader.ReadByte(); uint count;
@@ -55,7 +64,7 @@ public sealed class ForzaBundle
     {
         if (!Blobs.Contains(blob)) throw new ArgumentException("Blob does not belong to bundle.");
         if (blob.Size > 64 * 1024 * 1024) throw new IOException("Blob exceeds 64 MB preview limit.");
-        using (var stream = File.Open(Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+        using (var stream = memory == null ? (Stream)File.Open(Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite) : new MemoryStream(memory, false))
         using (var reader = new BinaryReader(stream)) {
             stream.Position = blob.Offset; byte[] bytes = reader.ReadBytes(checked((int)blob.Size));
             if (bytes.Length != blob.Size) throw new EndOfStreamException("Truncated bundle blob."); return bytes;

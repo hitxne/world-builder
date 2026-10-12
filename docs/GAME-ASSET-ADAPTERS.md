@@ -118,3 +118,36 @@ extraction. Nonstandard containers, ZIP64 and custom formats report explicit lim
 MiniZip diagnostics report only a container-signature value; no MiniZip decoder is
 claimed. Synthetic tombstone and ZIP-directory NUnit fixtures were added. Cloud
 source/grammar checks passed; Unity execution and real-file retry remain pending.
+
+## Actual diagnostic v2 and archive opening increment
+
+The v2 report confirms that car ZIP directories contain model names: Integra has
+96 modelbin entries and NSX 97. Reported methods are stored/deflate, with no central
+ZIP encryption flags. This does not prove that each payload is readable; plain Grub
+magic/version and geometry layout checks still apply after reading selected entries.
+
+World Builder now opens selected ordinary ZIP model entries in memory, with a 64 MB
+compressed/expanded bound, explicit compression/encryption rejection and CRC checking.
+No installation files are extracted or written. The existing Forza model/mesh
+resource browser works against in-memory bundles. ZIP64, MiniZip and custom methods
+(including method 22 in other sampled archives) remain unsupported.
+
+Sims tombstone handling alone did not resolve the user's ClientDeltaBuild0 failure.
+Some FullBuild packages also fail payload-bounds checks. Instead of aborting the
+entire valid resource index, the reader now records exact per-resource metadata
+warnings and refuses access to invalid payloads. It accepts zero-size placeholders.
+Diagnostic v3 includes offsets, sizes, compression and resource keys for those
+warnings, plus empty/invalid-entry counts. The file index remains inspectable so
+valid MLOD resources can be located; this is not a relaxed payload-read check.
+
+Local acceptance: Game Asset Browser > Forza folder > Scan >
+ACU_IntegraR_01.zip > scene/Exterior/BumperF/bumperF_a.modelbin > mesh preview.
+Do not choose the skeleton-only entry. A successful preview is still a neutral
+part, not an assembled textured car. Run EditMode tests for ZIP selected-member
+read/CRC/encryption rejection and invalid Sims payload isolation. Cloud source and
+C# grammar checks passed; these Unity/NUnit/real-file operations have not run here.
+
+For next environment-format research, the user's report lists a small sample:
+media/Tracks/homespace02/GeoChunk1.minizip, 258,048 bytes, magic 0x505A4750.
+No claim of compatibility or successful decode is made. The sample can be supplied
+privately for analysis rather than uploading the much larger Hendrix chunks.

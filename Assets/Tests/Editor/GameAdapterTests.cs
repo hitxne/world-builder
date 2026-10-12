@@ -127,4 +127,27 @@ public sealed class GameAdapterTests
         Assert.AreEqual(0, result.EncryptedEntries);
         Assert.AreEqual("scene/original-test.modelbin", result.MeshNames[0]);
     }
+
+    [Test] public void ZipSelectedMemberReadChecksPayloadAndCrc()
+    {
+        string path = Path.Combine(folder, "selected.zip"); byte[] expected = { 1,2,3,4,5 };
+        using (var stream = File.Create(path)) using (var zip = new ZipArchive(stream, ZipArchiveMode.Create)) {
+            var entry = zip.CreateEntry("scene/original.modelbin");
+            using (var output = entry.Open()) output.Write(expected, 0, expected.Length);
+        }
+        var member = GameArchiveDiagnostic.Inspect(path).Members[0];
+        CollectionAssert.AreEqual(expected, GameArchiveRead.Read(path, member));
+        member.Crc ^= 1; Assert.Throws<FormatException>(() => GameArchiveRead.Read(path, member));
+        member.Flags |= 1; Assert.Throws<NotSupportedException>(() => GameArchiveRead.Read(path, member));
+    }
+    [Test] public void BadResourcePayloadDoesNotHideOtherIndexEntries()
+    {
+        string path = Package(new byte[] { 1,2 }, SimsPackage.Mlod);
+        byte[] bytes = File.ReadAllBytes(path);
+        Array.Copy(BitConverter.GetBytes(1u), 0, bytes, bytes.Length - 16, 4); File.WriteAllBytes(path, bytes);
+        var package = new SimsPackage(path);
+        Assert.AreEqual(1, package.Entries.Count);
+        StringAssert.Contains("offset=1", package.Entries[0].PayloadError);
+        Assert.Throws<FormatException>(() => package.Read(package.Entries[0]));
+    }
 }

@@ -426,7 +426,9 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
                     Button(list, "Inspect Sims package: " + Path.GetFileName(file), () => InspectSims(selectedFile));
                 else if (Path.GetExtension(file).Equals(".modelbin", StringComparison.OrdinalIgnoreCase))
                     Button(list, "Inspect Forza model: " + Path.GetFileName(file), () => InspectForza(selectedFile));
-                else Label(list, Path.GetFileName(file) + " — texture/archive adapter pending", "hint");
+                else if (Path.GetExtension(file).Equals(".zip", StringComparison.OrdinalIgnoreCase))
+                    Button(list, "Browse model archive: " + Path.GetFileName(file), () => InspectForzaZip(selectedFile));
+                else Label(list, Path.GetFileName(file) + " — texture/MiniZip adapter pending", "hint");
             }
             Status("Scan found " + files.Count + " files (limit 250). Inspect a package/model to browse its geometry resources.");
         } catch (Exception e) { if (this != null) Status("Scan failed: " + e.Message); }
@@ -478,22 +480,56 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
             PreviewModels(data); CloseDialog(); Status("Sims neutral-geometry reference preview. Textures/materials not decoded. Game file remains read-only.");
         } catch (Exception e) { if (this != null) Status("Sims preview unavailable: " + e.Message); }
     }
+    async void InspectForzaZip(string path)
+    {
+        Status("Reading archive model directory…");
+        try {
+            var archive = await Task.Run(() => GameArchiveDiagnostic.Inspect(path));
+            if (this == null) return;
+            Dialog("Archive model resources", Path.GetFileName(path) + " • " + archive.MeshEntries + " model files. Only stored/deflated, unencrypted entries are opened. Select a model part; skeleton files may have no mesh.", box => {
+                var list = new ScrollView(); list.style.height = 320; box.Add(list); int shown = 0;
+                foreach (var member in archive.Members) if (Path.GetExtension(member.Name).Equals(".modelbin", StringComparison.OrdinalIgnoreCase) && shown++ < 500) {
+                    var resource = member;
+                    var button = Button(list, member.Name, () => OpenArchivedModel(path, resource));
+                    if (member.Encrypted || (member.Method != 0 && member.Method != 8)) {
+                        button.SetEnabled(false); button.tooltip = "Unsupported encrypted/compressed entry.";
+                    }
+                }
+                if (shown == 0) Label(list, "No modelbin names in this archive. MiniZip geometry uses a separate format.", "hint");
+                Button(box, "Back to game folders", GameBrowser); Button(box, "Close", CloseDialog);
+            });
+        } catch (Exception e) { if (this != null) Status("Archive browser: " + e.Message); }
+    }
+    async void OpenArchivedModel(string path, GameArchiveDiagnostic.Member member)
+    {
+        Status("Opening selected model in memory…");
+        try {
+            var bundle = await Task.Run(() => new ForzaBundle(GameArchiveRead.Read(path, member), path + "::" + member.Name));
+            if (this == null) return;
+            ShowForzaMeshes(bundle, member.Name);
+        } catch (Exception e) { if (this != null) Status("Archived model: " + e.Message); }
+    }
+    void ShowForzaMeshes(ForzaBundle bundle, string name)
+    {
+        Dialog("Forza model mesh parts", name + " • " + bundle.Blobs.Count + " blobs. Preview shows supported mesh parts with neutral shading. Assembly, materials, textures and other packed layouts remain pending.", box => {
+            var list = new ScrollView(); list.style.height = 320; box.Add(list); int shown = 0;
+            foreach (var blob in bundle.Blobs) if (blob.Tag == ForzaBundle.MeshTag && shown++ < 250) {
+                var resource = blob;
+                Button(list, "Preview " + (string.IsNullOrEmpty(blob.Name) ? "mesh at " + blob.Offset : blob.Name) + " v" + blob.Major + "." + blob.Minor,
+                    () => PreviewForza(bundle, resource));
+            }
+            if (shown == 0) Label(list, "No mesh blobs in this bundle (it may be a skeleton-only file).", "hint");
+            Button(box, "Back to game folders", GameBrowser); Button(box, "Close", CloseDialog);
+        });
+    }
+
     async void InspectForza(string path)
     {
         Status("Reading Forza model directory…");
         try {
             var bundle = await Task.Run(() => new ForzaBundle(path));
             if (this == null) return;
-            Dialog("Forza model mesh parts", Path.GetFileName(path) + " • " + bundle.Blobs.Count + " blobs. Preview shows supported mesh buffers in local part space, with neutral shading. Bone assembly, other packed layouts, materials and textures are pending.", box => {
-                var list = new ScrollView(); list.style.height = 320; box.Add(list); int shown = 0;
-                foreach (var blob in bundle.Blobs) if (blob.Tag == ForzaBundle.MeshTag && shown++ < 250) {
-                    var resource = blob;
-                    Button(list, "Preview " + (string.IsNullOrEmpty(blob.Name) ? "mesh at " + blob.Offset : blob.Name) + " v" + blob.Major + "." + blob.Minor,
-                        () => PreviewForza(bundle, resource));
-                }
-                if (shown == 0) Label(list, "No mesh blobs in this bundle.", "hint");
-                Button(box, "Back to game folders", GameBrowser); Button(box, "Close", CloseDialog);
-            });
+            ShowForzaMeshes(bundle, Path.GetFileName(path));
         } catch (Exception e) { if (this != null) Status("Forza inspection: " + e.Message); }
     }
     async void PreviewForza(ForzaBundle bundle, ForzaBundle.Blob resource)
