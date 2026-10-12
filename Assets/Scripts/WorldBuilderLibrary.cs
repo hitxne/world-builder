@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
@@ -10,7 +11,7 @@ using UnityEngine.UIElements;
 
 public sealed partial class WorldBuilderRuntime
 {
-    bool libraryImportRunning, cancelLibraryImport;
+    volatile bool libraryImportRunning, cancelLibraryImport;
     [Serializable] sealed class LibraryMetadata { public string name,source,warning; }
     void WriteLibraryMetadata(string path,string name,string source,string warning)
         =>WorkspaceAtomicFile.Write(path+".metadata.json",JsonUtility.ToJson(new LibraryMetadata{name=name,source=source,warning=warning},true));
@@ -33,7 +34,8 @@ public sealed partial class WorldBuilderRuntime
     void OpenLibrary()
     {
         Dialog("Local Asset Library","Reusable objects and buildings persist between sessions. Select one, then click the terrain or active lot to place an independent editable copy.",box=>{
-            Button(box,"Import Sims export folder",OpenSimsExportImport);
+            Button(box,"Add Sims assets — select game EXE",SelectSimsExecutable);
+            Button(box,"Import existing OBJ export folder",OpenSimsExportImport);
             int page=0;var search=new TextField("Search");box.Add(search);var list=new ScrollView();list.style.height=300;box.Add(list);
             void Populate(string query) {
                 list.Clear();if(!Directory.Exists(LibraryFolder)){Label(list,"Save a selected object or lot to add your first asset.","hint");return;}
@@ -55,6 +57,37 @@ public sealed partial class WorldBuilderRuntime
             search.RegisterValueChangedCallback(e=>{page=0;Populate(e.newValue);});Populate("");Button(box,"Close",CloseDialog);
         });
     }
+    void SelectSimsExecutable()
+    {
+        if(libraryImportRunning){Status("A Sims asset job is already running.");return;}
+        Try(()=>{
+            string executable=WorkspaceFiles.Pick(false,"Select The Sims 4 executable","exe");if(string.IsNullOrEmpty(executable))return;
+            string installation=SimsBatchExporter.InstallationFromExe(executable);
+            PlayerPrefs.SetString("worldbuilder.gamePath.1",installation);PlayerPrefs.Save();
+            Label progress=null;
+            Dialog("Adding Sims assets","World Builder is reading local packages, exporting supported object geometry, then adding it to your library. Unsupported resources are reported; source files are untouched.",box=>{
+                progress=Label(box,"Indexing game packages…","hint");
+                Button(box,"Cancel",()=>{cancelLibraryImport=true;progress.text="Stopping after the current resource…";});
+                Button(box,"Close",()=>{cancelLibraryImport=true;CloseDialog();});
+            });
+            _ = ExtractAndImportSims(installation,progress);
+        });
+    }
+    async Task ExtractAndImportSims(string installation,Label progress)
+    {
+        libraryImportRunning=true;cancelLibraryImport=false;
+        string output=Path.Combine(Application.persistentDataPath,"SimsExports");
+        var messages=new ConcurrentQueue<string>();bool ready=false;
+        try {
+            var extraction=Task.Run(()=>SimsBatchExporter.Run(installation,output,message=>messages.Enqueue(message),()=>cancelLibraryImport));
+            while(!extraction.IsCompleted){if(this==null){cancelLibraryImport=true;break;}while(messages.TryDequeue(out string message))progress.text=message;await Task.Delay(100);}
+            int code=await extraction;
+            if(this!=null&&!cancelLibraryImport&&code!=130){progress.text="Adding exported objects to the library…";ready=true;}
+            else if(this!=null)progress.text="Cancelled. Completed exports remain for the next run.";
+        } catch(Exception error){if(this!=null){progress.text="Sims import stopped: "+error.Message;Status(progress.text);}}
+        finally {libraryImportRunning=false;}
+        if(ready){await ImportSimsExports(output,progress);if(this!=null)Status("Sims asset job finished. Open Local Library; unsupported formats and missing materials remain reported.");}
+    }
     void OpenSimsExportImport()
     {
         if(libraryImportRunning){Status("A library import is already running.");return;}
@@ -66,12 +99,12 @@ public sealed partial class WorldBuilderRuntime
             Button(box,"Choose OBJ inside export folder",()=>{string chosen=WorkspaceFiles.Pick(false,"Choose an OBJ in the export folder","obj");if(!string.IsNullOrEmpty(chosen))folder.value=Path.GetDirectoryName(chosen);});
 #endif
             var progress=Label(box,"Ready. Existing library entries are skipped.","hint");
-            var start=Button(box,"Import folder",()=>ImportSimsExports(folder.value,progress));
+            var start=Button(box,"Import folder",()=>{_ = ImportSimsExports(folder.value,progress);});
             Button(box,"Cancel import",()=>{cancelLibraryImport=true;progress.text="Cancellation requested; completed imports are kept.";});
             Button(box,"Close",()=>{cancelLibraryImport=true;CloseDialog();});
         });
     }
-    async void ImportSimsExports(string folder,Label progress)
+    async Task ImportSimsExports(string folder,Label progress)
     {
         if(libraryImportRunning)return;
         libraryImportRunning=true;cancelLibraryImport=false;

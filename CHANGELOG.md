@@ -117,3 +117,17 @@ Validation: source configuration/GUID/input checks, C# syntax parsing and whites
 - Add small metadata sidecars for imported/saved library entries and paged search beyond the former 200-entry cutoff.
 - Retain original game/export files as read-only inputs; no commercial assets are committed.
 - Source checks pass; Windows/Unity import testing and full Build/Buy extraction remain unverified.
+
+## 2026-10-12 — standalone Sims geometry batch exporter
+
+- Factor the existing decoder into an engine-independent shared reader; retain the Unity preview adapter.
+- Add a standalone .NET package-to-OBJ batch tool with cross-package resolution for unique dependencies, explicit geometry-only reports, cancellation, resume and protected source directories.
+- Compile and run actual C# synthetic-package integration tests successfully.
+- Complete Build/Buy catalog links, textures/materials, modern mesh layouts and real-installation coverage remain incomplete/unverified.
+
+## 2026-10-12 — one-step Sims executable selection
+
+- Integrate the shared exporter into World Builder: Add Sims Assets selects the EXE, locates/records the installation and automatically exports/imports supported geometry.
+- Keep package extraction off the Unity thread, expose progress/cancel, stop jobs on runtime teardown and store exports outside installed game files.
+- The optional .NET CLI remains available; the normal in-app route needs no external SDK.
+- Synthetic executable exporter/cross-package tests pass; full Build/Buy/texture support and Unity/Windows execution remain unverified.

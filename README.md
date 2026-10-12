@@ -107,3 +107,12 @@ recursively, with supported MTL/PNG/JPEG references, cancellation, duplicate
 skipping and an import report. The library now pages through matching entries
 instead of stopping after the first 200. This is an external-export import path,
 not complete direct extraction of the installed Sims Build/Buy catalog.
+
+A [local package-to-OBJ batch exporter](tools/sims-export/README.md) is now
+available without Unity. It exports supported MLOD geometry and reports missing
+coverage. It does not yet export every Build/Buy item or reproduce game materials.
+
+**Add Sims Assets** is the normal one-step game import: select the Sims 4 EXE.
+World Builder finds the installation and runs supported extraction/library import
+automatically. This flow and real game coverage still need Unity/Windows testing;
+textures and complete catalog support remain incomplete.
