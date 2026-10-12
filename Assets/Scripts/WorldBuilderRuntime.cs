@@ -136,8 +136,11 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
         root.RegisterCallback<KeyDownEvent>(e => {
             if (modal != null || e.target is TextField || e.target is FloatField || e.target is TextElement) return;
             if (e.ctrlKey && e.keyCode == KeyCode.S) { Save(false); e.StopPropagation(); }
-            if (e.ctrlKey && e.keyCode == KeyCode.Z) { Undo(); e.StopPropagation(); }
-            if (e.ctrlKey && e.keyCode == KeyCode.Y) { Redo(); e.StopPropagation(); }
+            if (e.ctrlKey && e.keyCode == KeyCode.Z) { EndObjectGesture(true); Undo(); e.StopPropagation(); }
+            if (e.ctrlKey && e.keyCode == KeyCode.Y) { EndObjectGesture(true); Redo(); e.StopPropagation(); }
+            if(!e.ctrlKey&&!e.altKey&&e.target==workImage) {
+                if(e.keyCode==KeyCode.G)SetTool("move");if(e.keyCode==KeyCode.R)SetTool("rotate");if(e.keyCode==KeyCode.S)SetTool("scale");
+            }
             if (e.keyCode == KeyCode.F) FrameSelected();
             if(e.keyCode==KeyCode.Return) FinishRoad();
             if(e.keyCode==KeyCode.Escape) CancelConstruction();
@@ -199,14 +202,14 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
             if (modal != null) return;
             image.Focus();
             if (e.button == 0 && editable) {
-                if (ConstructionPointerDown(e.localPosition)) { image.CapturePointer(e.pointerId); }
+                if (BeginObjectGesture(e.localPosition) || ConstructionPointerDown(e.localPosition)) { image.CapturePointer(e.pointerId); }
                 else Pick(e.localPosition);
             }
             if (e.button == 1 || e.button == 2) { drag = e.button; previous = e.position; image.CapturePointer(e.pointerId); }
             e.StopPropagation();
         });
         image.RegisterCallback<PointerMoveEvent>(e => {
-            if (editable && modal == null) ConstructionPointerMove(e.localPosition);
+            if (editable && modal == null) { UpdateObjectGesture(e.localPosition); if(!objectGesture)ConstructionPointerMove(e.localPosition); }
             if (drag < 0 || modal != null) return;
             Vector2 point = e.position, delta = point - previous; previous = point;
             if (drag == 1) {
@@ -219,8 +222,8 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
             }
             workAngles.x = Mathf.Clamp(workAngles.x, -89, 89); referenceAngles.x = Mathf.Clamp(referenceAngles.x, -89, 89);
         });
-        image.RegisterCallback<PointerUpEvent>(e => { if (editable) ConstructionPointerUp(); drag = -1; image.ReleasePointer(e.pointerId); });
-        image.RegisterCallback<PointerCaptureOutEvent>(e => { drag = -1; if(editable) ConstructionPointerUp(); });
+        image.RegisterCallback<PointerUpEvent>(e => { if (editable) {EndObjectGesture(false);ConstructionPointerUp();} drag = -1; image.ReleasePointer(e.pointerId); });
+        image.RegisterCallback<PointerCaptureOutEvent>(e => { drag = -1; if(editable) {EndObjectGesture(false);ConstructionPointerUp();} });
         image.RegisterCallback<WheelEvent>(e => {
             if (modal != null) return;
             if (editable) { workDistance = Mathf.Clamp(workDistance * Mathf.Exp(e.delta.y * 0.08f), 0.25f, 10000); workCamera.orthographicSize = workDistance * 0.4f; }
@@ -366,8 +369,8 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
     }
     string State() => JsonUtility.ToJson(WorkspaceDocument.Capture(world, title));
     void Changed() { history.Record(State()); Refresh(); }
-    void Undo() { string state = history.Undo(); if (state != null) Restore(JsonUtility.FromJson<WorkspaceDocument>(state)); }
-    void Redo() { string state = history.Redo(); if (state != null) Restore(JsonUtility.FromJson<WorkspaceDocument>(state)); }
+    void Undo() { CancelConstruction(); string state = history.Undo(); if (state != null) Restore(JsonUtility.FromJson<WorkspaceDocument>(state)); }
+    void Redo() { CancelConstruction(); string state = history.Redo(); if (state != null) Restore(JsonUtility.FromJson<WorkspaceDocument>(state)); }
     void Restore(WorkspaceDocument document)
     {
         // Construct everything in a staging root first: invalid files leave the scene intact.
@@ -500,7 +503,7 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
     }
     void Dialog(string titleText, string text, Action<VisualElement> actions)
     {
-        CloseDialog(); modal = new VisualElement(); modal.AddToClassList("modal"); root.Add(modal);
+        EndObjectGesture(true); CloseDialog(); modal = new VisualElement(); modal.AddToClassList("modal"); root.Add(modal);
         var box = new VisualElement(); box.AddToClassList("dialog"); modal.Add(box);
         Label(box, titleText, "section"); var content = new ScrollView(); content.AddToClassList("dialog-scroll"); box.Add(content); Label(content, text, "hint"); actions(content);
     }

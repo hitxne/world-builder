@@ -19,7 +19,13 @@ public sealed partial class WorldBuilderRuntime
     int floorLevel;
     float islandWidth=160,islandDepth=160;
     int islandSeed=1337;
-    bool stroke;
+    bool stroke, objectGesture;
+    Transform gestureObject;
+    Vector3 gesturePosition, gestureScale, gestureWorldStart, gestureHitStart;
+    Quaternion gestureRotation;
+    Vector2 gestureScreenStart;
+    Plane gesturePlane;
+    string pendingLibraryPath;
     Vector3? firstCorner;
     readonly List<WorldPoint> roadPoints=new List<WorldPoint>();
     float flattenHeight, lastAutosave;
@@ -76,6 +82,7 @@ public sealed partial class WorldBuilderRuntime
         var choices=new VisualElement();choices.AddToClassList("catalog-choices");content.Add(choices);
         var settings=new VisualElement();settings.AddToClassList("catalog-settings");content.Add(settings);
         ToolChoice(choices,"Select","select");
+        ToolChoice(choices,"Move","move");ToolChoice(choices,"Rotate","rotate");ToolChoice(choices,"Scale","scale");
         if(workspaceMode=="World") {
             if(toolCategory=="Terrain") {
                 ToolChoice(choices,"Raise","raise");ToolChoice(choices,"Lower","lower");ToolChoice(choices,"Smooth","smooth");ToolChoice(choices,"Flatten","flatten");ToolChoice(choices,"Paint Sand","sand");ToolChoice(choices,"Paint Grass","grass");
@@ -104,15 +111,69 @@ public sealed partial class WorldBuilderRuntime
     }
     void ToolChoice(VisualElement parent,string label,string tool){toolButtons[tool]=Button(parent,label,()=>SetTool(tool));}
     void SetTool(string tool){CancelConstruction();constructionTool=tool;RefreshWorldTools();Status(ToolInstruction());}
-    void CancelConstruction(){ConstructionPointerUp();firstCorner=null;roadPoints.Clear();constructionTool="select";RefreshWorldTools();}
+    void CancelConstruction(){EndObjectGesture(true);pendingLibraryPath=null;ConstructionPointerUp();firstCorner=null;roadPoints.Clear();constructionTool="select";RefreshWorldTools();}
     string ToolInstruction()
     {
+        if(!string.IsNullOrEmpty(pendingLibraryPath))return "Click terrain or the active lot to place the library object. Escape cancels.";
+        if(constructionTool=="move")return "Drag an object on its horizontal plane. Grid snapping applies. Escape restores its position.";
+        if(constructionTool=="rotate")return "Drag an object horizontally to rotate around its local vertical axis. Escape cancels.";
+        if(constructionTool=="scale")return "Drag an object horizontally to scale uniformly. Escape cancels.";
         if(constructionTool=="road")return "Click terrain to add road points, then Finish Road or Enter. Escape cancels.";
         if(constructionTool=="room"||constructionTool=="lot"||constructionTool=="floor"||constructionTool=="roof"||constructionTool=="wall")return "Click two grid-snapped corners/endpoints. Escape cancels.";
         if(constructionTool=="door"||constructionTool=="window")return "Click an existing wall to create an opening and frame.";
         if(IsBrush())return "Hold left mouse over terrain to sculpt or paint. Release records one undo step.";
         if(constructionTool=="tree"||constructionTool=="stairs")return "Click to place. Objects can be moved in Properties.";
         return "Left click selects; right drag orbits; middle drag pans; wheel zooms.";
+    }
+    bool BeginObjectGesture(Vector2 point)
+    {
+        if(constructionTool!="move"&&constructionTool!="rotate"&&constructionTool!="scale")return false;
+        Try(()=>{
+            Physics.SyncTransforms();
+            if(!Physics.Raycast(WorkRay(point),out var hit,10000,1<<31)){Status("Click an object to transform it.");return;}
+            var target=hit.collider.gameObject;
+            // A selected building/lot moves as a unit when its child is clicked.
+            if(selected==null||!target.transform.IsChildOf(selected.transform))selected=target;
+            gestureObject=selected.transform;gesturePosition=gestureObject.localPosition;
+            gestureRotation=gestureObject.localRotation;gestureScale=gestureObject.localScale;
+            gestureWorldStart=gestureObject.position;gestureScreenStart=point;
+            gesturePlane=new Plane(Vector3.up,gestureWorldStart);
+            if(constructionTool=="move") {
+                if(!gesturePlane.Raycast(WorkRay(point),out float distance)){Status("Use an angled or top view to move this object.");return;}
+                gestureHitStart=WorkRay(point).GetPoint(distance);
+            }
+            objectGesture=true;Refresh();
+        });
+        return true;
+    }
+    void UpdateObjectGesture(Vector2 point)
+    {
+        if(!objectGesture||gestureObject==null)return;
+        Try(()=>{
+            if(constructionTool=="move") {
+                if(!gesturePlane.Raycast(WorkRay(point),out float distance))return;
+                var next=gestureWorldStart+WorkRay(point).GetPoint(distance)-gestureHitStart;
+                var parent=gestureObject.parent;var local=parent==null?next:parent.InverseTransformPoint(next);
+                local.x=Mathf.Round(local.x/gridSize)*gridSize;local.z=Mathf.Round(local.z/gridSize)*gridSize;
+                // Move within a lot without silently moving furniture outside its bounds.
+                if(workspaceMode=="Lot"&&activeLot!=null&&parent==activeLot.transform) {
+                    var size=activeLot.GetComponent<WorkspaceIdentity>().construction.size;
+                    if(Mathf.Abs(local.x)>size.x/2||Mathf.Abs(local.z)>size.z/2){Status("Keep the object origin inside the active lot.");return;}
+                }
+                gestureObject.localPosition=local;
+            } else if(constructionTool=="rotate")gestureObject.localRotation=gestureRotation*Quaternion.Euler(0,(point.x-gestureScreenStart.x)*0.5f,0);
+            else if(constructionTool=="scale")gestureObject.localScale=gestureScale*Mathf.Clamp(Mathf.Exp((point.x-gestureScreenStart.x)*0.01f),0.05f,20);
+            Physics.SyncTransforms();Status(constructionTool+": "+gestureObject.name+" — release to apply, Escape to cancel.");
+        });
+    }
+    void EndObjectGesture(bool cancel)
+    {
+        if(!objectGesture)return;objectGesture=false;
+        if(gestureObject!=null) {
+            if(cancel){gestureObject.localPosition=gesturePosition;gestureObject.localRotation=gestureRotation;gestureObject.localScale=gestureScale;Physics.SyncTransforms();Refresh();Status("Transform cancelled.");}
+            else {Changed();Status("Transform applied. Undo is available.");}
+        }
+        gestureObject=null;
     }
     bool IsBrush()=>constructionTool=="raise"||constructionTool=="lower"||constructionTool=="smooth"||constructionTool=="flatten"||constructionTool=="sand"||constructionTool=="grass";
     Ray WorkRay(Vector2 point)
@@ -145,6 +206,10 @@ public sealed partial class WorldBuilderRuntime
     }
     bool ConstructionPointerDown(Vector2 point)
     {
+        if(!string.IsNullOrEmpty(pendingLibraryPath)) {
+            Try(()=>{if(!Ground(point,out var hit,out var terrain))return;var placement=Snap(hit);string path=pendingLibraryPath;PlaceLibrary(path,placement);pendingLibraryPath=null;RefreshWorldTools();});
+            return true;
+        }
         if(constructionTool=="select"||workspaceMode=="Asset")return false;
         Try(()=>{
             if(constructionTool=="door"||constructionTool=="window"){PlaceOpening(point);return;}
@@ -288,8 +353,8 @@ public sealed partial class WorldBuilderRuntime
     void RefreshWorldTools()
     {
         foreach(var pair in modeButtons)pair.Value.EnableInClassList("selected",pair.Key==workspaceMode);
-        foreach(var pair in toolButtons)pair.Value.EnableInClassList("selected",pair.Key==constructionTool);
-        if(toolStatus!=null)toolStatus.text="Active: "+constructionTool+" • Floor "+floorLevel+" — "+ToolInstruction();
+        foreach(var pair in toolButtons)pair.Value.EnableInClassList("selected",string.IsNullOrEmpty(pendingLibraryPath)&&pair.Key==constructionTool);
+        if(toolStatus!=null)toolStatus.text="Active: "+(string.IsNullOrEmpty(pendingLibraryPath)?constructionTool:"Place Library Asset")+" • Floor "+floorLevel+" — "+ToolInstruction();
     }
     void ResetWorldTools(){activeLot=null;activeLotId=null;floorLevel=0;CancelConstruction();if(constructionPanel!=null)SetMode("World");}
     void ReconnectWorldTools()

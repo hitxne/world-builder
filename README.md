@@ -74,3 +74,10 @@ Workspace controls: **Layout** resizes panels and restores defaults. **Scene** a
 Hierarchy **Search** filters names. Catalog category changes cancel the previous
 tool; **Cancel Tool** and Escape are available. Camera offers Top/Front/Side views.
 See [directive audit](docs/DIRECTIVE-AUDIT.md) for current acceptance status.
+
+Direct editing: choose **Move**, **Rotate** or **Scale** in the catalog and drag
+an object in the viewport. Move snaps to the grid on a horizontal plane; Rotate
+changes local yaw; Scale is uniform. Release commits one undo step; Escape
+restores the starting transform. With the viewport focused, G/R/S select these tools.
+Select a library asset, then click terrain or the active lot to place it; Escape
+cancels before creating anything. These controls still need Unity runtime validation.

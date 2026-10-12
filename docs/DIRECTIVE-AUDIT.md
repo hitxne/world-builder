@@ -46,3 +46,13 @@ Executed: tools/validate-source.py, C# tree-sitter syntax parsing of all Assets 
 In Unity 6000.6.5f1: EditMode > Run All. Play at 1280x720 and 1920x1080, then narrow the window: check catalog scrolling, hierarchy search, Scene/Properties drawers, saved sizes and restore. Switch every category while a construction tool is active: the active tool must return to Select. Sculpt, Escape, Undo, Redo. Verify Top/Front/Side. Run the full section 25 Florida Island Test scenario, including textured import and save/reopen/export.
 
 Build via World Builder > Build Windows Development; launch the packaged executable outside Unity and repeat the core scenario. Resolve actual compilation/render/input defects before accepting any operational milestone. Next independent engineering priorities are gizmo-based object manipulation and an asynchronous searchable asset catalog with real preview capability metadata; realistic lane/intersection construction and Assetto Corsa preparation follow the stable core.
+
+## Follow-up audit: direct editing and library placement
+
+Sections 8.2, 10 and 14 still lacked direct manipulation despite numeric transforms. Library selection also placed every asset at the origin, contrary to the intended choose-and-place workflow. This increment adds actual viewport drag transforms and click placement, integrated with the existing document/history/lot parent boundary.
+
+Transform controls are planar Move, local-yaw Rotate and uniform Scale, not full three-axis gizmos. Clicking a child of an already selected building moves that building as a unit. Lot movement checks object origins, not full mesh bounds. Library placement uses each asset's existing pivot; it does not automatically lower bounding boxes onto the ground or display a ghost preview. Asset Studio placement returns to World Build; lot placement retains the active lot.
+
+Category/tool changes cancel uncommitted transforms. Invalid library IDs, root counts and cycles are rejected in staging before scene insertion. Two EditMode tests exercise cancel with child transforms and commit with document-history undo/redo; no Unity runtime is available to execute them here.
+
+Additional manual checks: choose a saved building, cancel placement (no new object), select it again and click terrain (one copy at the chosen point). Place furniture inside a lot. Drag Move/Rotate/Scale, release, Undo/Redo, then drag and Escape (original transform restored). Try Rotate/Scale in Front view and Move in Top view. Change category during a gesture and verify cancellation. These checks remain pending; production gizmos and thumbnails remain unfinished.

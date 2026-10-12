@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Collections.Generic;
+using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -41,5 +42,43 @@ public class WorldWorkflowTests
             var project=WorkspaceObjMaterials.Import(path,out string warning);
             Assert.IsEmpty(warning);Assert.AreEqual(2,project.submeshes.Length);Assert.AreEqual(Color.red,project.materialColors[0]);Assert.AreEqual(Color.green,project.materialColors[1]);
         } finally {Directory.Delete(folder,true);}
+    }
+
+    static void SetRuntime(WorldBuilderRuntime runtime,string name,object value)
+        => typeof(WorldBuilderRuntime).GetField(name,BindingFlags.Instance|BindingFlags.NonPublic).SetValue(runtime,value);
+    static void EndGesture(WorldBuilderRuntime runtime,bool cancel)
+        => typeof(WorldBuilderRuntime).GetMethod("EndObjectGesture",BindingFlags.Instance|BindingFlags.NonPublic).Invoke(runtime,new object[]{cancel});
+
+    [Test] public void GestureCancellationRestoresBuildingAndPreservesChildLocalTransform()
+    {
+        var host=new GameObject("Runtime test");host.SetActive(false);
+        var building=new GameObject("Building");var child=new GameObject("Furniture");
+        try {
+            var runtime=host.AddComponent<WorldBuilderRuntime>();child.transform.SetParent(building.transform,false);
+            child.transform.localPosition=new Vector3(2,1,3);
+            SetRuntime(runtime,"gestureObject",building.transform);SetRuntime(runtime,"objectGesture",true);
+            SetRuntime(runtime,"gesturePosition",new Vector3(1,0,1));SetRuntime(runtime,"gestureRotation",Quaternion.identity);SetRuntime(runtime,"gestureScale",Vector3.one);
+            building.transform.localPosition=new Vector3(8,0,7);building.transform.localRotation=Quaternion.Euler(0,45,0);building.transform.localScale=Vector3.one*2;
+            EndGesture(runtime,true);
+            Assert.AreEqual(new Vector3(1,0,1),building.transform.localPosition);
+            Assert.AreEqual(Quaternion.identity,building.transform.localRotation);Assert.AreEqual(Vector3.one,building.transform.localScale);
+            Assert.AreEqual(new Vector3(2,1,3),child.transform.localPosition);
+        } finally {UnityEngine.Object.DestroyImmediate(host);UnityEngine.Object.DestroyImmediate(building);}
+    }
+    [Test] public void GestureCommitCreatesOneReversibleDocumentSnapshot()
+    {
+        var host=new GameObject("Runtime test");host.SetActive(false);var world=new GameObject("World");
+        var model=GameObject.CreatePrimitive(PrimitiveType.Cube);model.transform.SetParent(world.transform,false);model.AddComponent<WorkspaceIdentity>().id="object";
+        WorldBuilderRuntime runtime=null;
+        try {
+            runtime=host.AddComponent<WorldBuilderRuntime>();SetRuntime(runtime,"world",world.transform);
+            var history=(WorkspaceHistory)typeof(WorldBuilderRuntime).GetField("history",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(runtime);
+            history.Reset(JsonUtility.ToJson(WorkspaceDocument.Capture(world.transform,"Untitled world")));
+            SetRuntime(runtime,"gestureObject",model.transform);SetRuntime(runtime,"objectGesture",true);
+            model.transform.localPosition=new Vector3(3,0,4);EndGesture(runtime,false);EndGesture(runtime,false);
+            Assert.IsTrue(history.CanUndo);var original=JsonUtility.FromJson<WorkspaceDocument>(history.Undo());
+            Assert.AreEqual(Vector3.zero,original.objects[0].position);Assert.IsFalse(history.CanUndo);
+            var moved=JsonUtility.FromJson<WorkspaceDocument>(history.Redo());Assert.AreEqual(new Vector3(3,0,4),moved.objects[0].position);
+        } finally {if(runtime!=null)SetRuntime(runtime,"world",null);UnityEngine.Object.DestroyImmediate(host);UnityEngine.Object.DestroyImmediate(world);}
     }
 }

@@ -57,3 +57,12 @@
 - Consolidate canonical stylesheet declarations.
 
 Validation: source configuration/GUID/input checks, C# syntax parsing and whitespace checks. Unity type checking, graphics/input and Windows acceptance remain unverified.
+
+## 2026-10-12 — direct object editing and library placement
+
+- Add viewport drag Move/Rotate/Scale with grid-snapped planar movement, local yaw and uniform scaling; release records one shared-history step, Escape restores the original transform.
+- Add G/R/S shortcuts when the editable viewport has focus.
+- Change library selection to click-to-place instead of automatic placement at the origin; preserve lot parenting and independent copies.
+- Reject duplicate/rootless/multiple-root/cyclic library documents before scene insertion.
+- Add Unity EditMode regression cases for cancelled parent/child transforms and single-step undo/redo of a committed gesture. Tests are added, not executed here.
+- Source configuration, syntax and whitespace checks pass; actual Unity/Windows input and rendering remain unverified.
