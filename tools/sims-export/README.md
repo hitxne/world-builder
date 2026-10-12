@@ -24,9 +24,9 @@ OBJ files are grouped by a hash of each source package's relative path. A JSONL 
 
 ## Verified coverage and limitations
 
-The exporter processes object MLOD resources, not catalog-linked named Build/Buy objects. It can export multiple mesh parts into one OBJ and resolve unique cross-package buffer dependencies. Patch precedence and ambiguous duplicate dependencies are not guessed; they are reported as unsupported. Package copies/LODs may therefore appear separately.
+The exporter processes object MLOD resources, with catalog associations when COBJ → OBJD → MODL → MLOD links can be validated. A .obj.catalog.json sidecar contains raw tags, catalog keys, supported room/type labels and the English STBL game display name (OBJD internal name fallback). Resume refreshes sidecars for existing geometry. It can export multiple mesh parts into one OBJ and resolve unique cross-package buffer dependencies. Patch precedence and ambiguous duplicate dependencies are not guessed; they are reported as unsupported. Package copies/LODs may therefore appear separately.
 
-Current support is DBPF 2.1, the previously implemented bounded compression reader, RCOL 3, MLOD 0x201–0x204, supported static position layouts and triangle-list indices. Differenced/collapsed buffers and unsupported record layouts are rejected. UVs, normals, materials, textures, swatch mapping, object catalog names/categories, MODL/catalog assembly and procedural walls/floors/roof systems are not decoded. The OBJ header/report explicitly identify geometry-only output; no invented texture maps or materials are written.
+Current support is DBPF 2.1, the previously implemented bounded compression reader, RCOL 3, MLOD 0x201–0x204, supported static position layouts and triangle-list indices. Differenced/collapsed buffers and unsupported record layouts are rejected. UVs, normals, materials, textures, swatch mapping, other-language STBL names, full MODL visual assembly and procedural walls/floors/roof systems are not decoded. The OBJ header/report explicitly identify geometry-only output; no invented texture maps or materials are written.
 
 **This is not yet an exporter for every Sims Build/Buy asset.** Real installation coverage has not been measured. No installed game files are available in this cloud environment. The continuation is to use the report to identify actual layouts, implement/verify missing decoders, link catalog/MODL/LOD/material resources, resolve verified patch ordering and test representative textured objects before claiming complete coverage.
 
@@ -50,3 +50,5 @@ Original decoder format references are documented in docs/GAME-ASSET-ADAPTERS.md
 - https://github.com/s4ptacle/Sims4Tools
 
 No third-party library code or proprietary resources were copied into this exporter. The shared engine-independent reader is factored from this repository's existing implementation. This tool does not establish redistribution permission for exported game content.
+
+Catalog reader support and limitations: see [SIMS-CATALOG-DECODING.md](../../docs/SIMS-CATALOG-DECODING.md).

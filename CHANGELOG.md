@@ -153,3 +153,11 @@ Validation: source configuration/GUID/input checks, C# syntax parsing and whites
 - Organize project/import/advanced actions behind the menu; use categorized Settings with actual appearance/UI-scale/layout/editing/quality controls and persisted preferences.
 - Add Buy-object room/type filters and user-assigned names/categories while retaining real thumbnails and provenance; do not guess missing Sims catalog metadata.
 - Preserve read-only asset inspection and return to the appropriate catalog before placement. Source checks pass; Unity compilation/usability tests remain pending.
+
+## Automatic Sims catalog categories — unreleased
+- Resolve English STBL catalog display names for cards and newly placed objects; retain reported internal-name fallbacks.
+- Decode bounded COBJ tags and OBJD/MODL/MLOD links into exporter sidecars and library metadata.
+- Preserve multiple room/type classifications, raw tags and catalog provenance; report ambiguous/unsupported records.
+- Refresh existing imports on the same EXE workflow without replacing geometry or asset identity; preserve manual overrides and offer automatic-label reset.
+- Expand visual filters for dining rooms, appliances, plumbing, electronics and activities.
+- Shared exporter compilation and synthetic integration checks pass; current-game coverage and Unity rendering remain unverified.

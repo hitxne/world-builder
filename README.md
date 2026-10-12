@@ -133,5 +133,9 @@ Terrain, Roads, Lots and Objects; Lot catalogs contain Build, Doors & Windows,
 Floors & Stairs and Buy objects; Assets contains Import, Primitives and Library.
 The active mode/category is shown as a breadcrumb. **Menu > Settings** groups
 Appearance, Workspace, Editing, Graphics and Controls. Buy objects can be browsed
-by room/type using user-assigned library metadata; imported Sims categories are
-initially unclassified. Select a card > Organize asset to assign a name/category.
+by room/type using decoded Sims catalog tags when supported links exist, with
+English game display names resolved from STBL string tables.
+After updating, choose **Add Sims assets** and select the EXE again to refresh
+existing imports without recreating their geometry. Multiple room/type tags are
+preserved; manual labels take precedence. Unsupported or ambiguous links remain
+unclassified and are reported. See [catalog decoding](docs/SIMS-CATALOG-DECODING.md).

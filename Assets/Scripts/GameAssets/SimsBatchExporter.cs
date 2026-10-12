@@ -20,11 +20,17 @@ public static class SimsBatchExporter
         }
         return text.Append('"').ToString();
     }
+    static string Encode(object value)
+    {
+        if(value==null)return "null";if(value is string)return Quote((string)value);if(value is bool)return (bool)value?"true":"false";
+        if(value is System.Collections.IEnumerable sequence){var items=new List<string>();foreach(var item in sequence)items.Add(Encode(item));return "["+string.Join(",",items)+"]";}
+        return Convert.ToString(value,CultureInfo.InvariantCulture);
+    }
     static string Json(object row)
     {
         var properties=new List<string>();
         foreach(var property in row.GetType().GetProperties()) {
-            var value=property.GetValue(row);string encoded=value==null?"null":value is string?Quote((string)value):value is bool?((bool)value?"true":"false"):Convert.ToString(value,CultureInfo.InvariantCulture);
+            var value=property.GetValue(row);string encoded=Encode(value);
             properties.Add(Quote(property.Name)+":"+encoded);
         }
         return "{"+string.Join(",",properties)+"}";
@@ -86,6 +92,59 @@ public static class SimsBatchExporter
                 if(matches.Count!=1)throw new NotSupportedException("Ambiguous cross-package dependency "+key+"; patch precedence not yet validated");
                 return matches[0].package.Read(matches[0].entry);
             }
+            byte[] Unique(string key) {
+                if(!resources.TryGetValue(key,out var matches)||matches.Count!=1)throw new NotSupportedException("Missing or ambiguous catalog dependency "+key);
+                return matches[0].package.Read(matches[0].entry);
+            }
+            var wantedNames=new HashSet<uint>();
+            foreach(var catalog in resources.Values.Where(v=>v[0].entry.Type==SimsCatalogReader.Catalog)) {
+                if(Cancelled())break;
+                if(catalog.Count==1)try {wantedNames.Add(SimsCatalogReader.NameHash(catalog[0].package.Read(catalog[0].entry)));}catch(Exception){/* Catalog pass reports invalid records. */}
+            }
+            var displayNames=new Dictionary<uint,string>();var conflictingNames=new HashSet<uint>();
+            progress?.Invoke("Reading Sims object display names…");
+            foreach(var tables in resources.Values.Where(v=>v[0].entry.Type==0x220557DA&&(v[0].entry.Instance>>56)==0)) {
+                if(Cancelled())break;
+                foreach(var table in tables)try {
+                    foreach(var pair in SimsCatalogReader.Strings(table.package.Read(table.entry),wantedNames)) {
+                        if(displayNames.TryGetValue(pair.Key,out string previous)&&previous!=pair.Value)conflictingNames.Add(pair.Key);else displayNames[pair.Key]=pair.Value;
+                    }
+                }catch(Exception error){Log(new{status="names-unresolved",key=table.entry.Key,error=error.Message});}
+            }
+            foreach(uint hash in conflictingNames){displayNames.Remove(hash);Log(new{status="name-conflict",hash});}
+            var definitions=resources.Values.Where(v=>v.Count==1&&v[0].entry.Type==SimsCatalogReader.Definition).Select(v=>v[0]).GroupBy(v=>v.entry.Instance).ToDictionary(g=>g.Key,g=>g.ToList());
+            var catalogTags=new Dictionary<string,List<uint>>();var catalogKeys=new Dictionary<string,List<string>>();var catalogNames=new Dictionary<string,string>();
+            var modelCache=new Dictionary<string,List<string>>();int linked=0,catalogFailures=0;
+            progress?.Invoke("Decoding Sims catalog categories…");
+            foreach(var candidates in resources.Values.Where(v=>v[0].entry.Type==SimsCatalogReader.Catalog)) {
+                if(Cancelled())break;
+                try {
+                    if(candidates.Count!=1)throw new NotSupportedException("Ambiguous catalog resource; patch precedence not validated");
+                    var c=candidates[0];byte[] catalogBytes=c.package.Read(c.entry);var tags=SimsCatalogReader.Tags(catalogBytes);uint nameHash=SimsCatalogReader.NameHash(catalogBytes);
+                    if(!definitions.TryGetValue(c.entry.Instance,out var defs)||defs.Count!=1)throw new NotSupportedException("Missing or ambiguous object definition");
+                    var d=defs[0];var models=SimsCatalogReader.Models(d.package.Read(d.entry),out string name);
+                    if(displayNames.TryGetValue(nameHash,out string displayName)&&!string.IsNullOrWhiteSpace(displayName))name=displayName;
+                    else Log(new{status="name-unresolved",key=c.entry.Key,nameHash,fallback="OBJD internal name"});
+                    foreach(string model in models) {
+                        if(!modelCache.TryGetValue(model,out var meshes))modelCache[model]=meshes=SimsMeshReader.ModelMlodKeys(Unique(model));
+                        foreach(string mesh in meshes) {
+                            if(!resources.TryGetValue(mesh,out var meshMatches)||meshMatches.Count!=1)throw new NotSupportedException("Missing or ambiguous mesh for catalog association "+mesh);
+                            if(!catalogTags.ContainsKey(mesh)){catalogTags[mesh]=new List<uint>();catalogKeys[mesh]=new List<string>();}
+                            catalogTags[mesh].AddRange(tags);catalogKeys[mesh].Add(c.entry.Key);
+                            if(!string.IsNullOrWhiteSpace(name)&&(!catalogNames.ContainsKey(mesh)||string.CompareOrdinal(name,catalogNames[mesh])<0))catalogNames[mesh]=name;
+                        }
+                    }
+                    linked++;
+                }catch(Exception error){catalogFailures++;Log(new{status="catalog-unlinked",key=candidates[0].entry.Key,error=error.Message});}
+            }
+            Log(new{status="catalog-summary",linked,catalogFailures});
+            void WriteCatalog(string file,string meshKey) {
+                if(!catalogTags.TryGetValue(meshKey,out var tags))return;
+                catalogNames.TryGetValue(meshKey,out string name);var data=SimsCatalogReader.Classify(tags,name,catalogKeys[meshKey]);
+                string sidecar=file+".catalog.json",temp=sidecar+"."+Guid.NewGuid().ToString("N")+".tmp";
+                try {File.WriteAllText(temp,Json(new{data.name,data.room,data.category,data.rooms,data.categories,data.catalogTags,data.catalogKeys,data.catalogSource}),new UTF8Encoding(false));if(File.Exists(sidecar))File.Replace(temp,sidecar,null);else File.Move(temp,sidecar);}
+                finally {if(File.Exists(temp))File.Delete(temp);}
+            }
             int exported=0,skipped=0,failed=packageFailures;
             foreach(var package in packages) {
                 string relative=Path.GetRelativePath(input,package.Path);string packageId;
@@ -95,10 +154,10 @@ public static class SimsBatchExporter
                     if(Cancelled())break;
                     string file=Path.Combine(destination,entry.Key.Replace(':','_')+".obj");
                     if(entry.IsDeleted||entry.IsEmpty){skipped++;Log(new{status="empty-or-deleted",source=relative,key=entry.Key});continue;}
-                    if(File.Exists(file)){skipped++;Log(new{status="existing-output",source=relative,key=entry.Key,output=file});continue;}
+                    if(File.Exists(file)){WriteCatalog(file,entry.Key);skipped++;Log(new{status="existing-output",source=relative,key=entry.Key,output=file});continue;}
                     try {
-                        var meshes=SimsMeshReader.Decode(package,entry,Resolve);WriteObj(file,meshes);exported++;
-                        Log(new{status="geometry-only",source=relative,key=entry.Key,output=file,parts=meshes.Count,vertices=meshes.Sum(m=>m.vertices.Length),triangles=meshes.Sum(m=>m.triangles.Length/3),textures=false,uvs=false,catalogLinked=false});
+                        var meshes=SimsMeshReader.Decode(package,entry,Resolve);WriteObj(file,meshes);WriteCatalog(file,entry.Key);exported++;
+                        Log(new{status="geometry-only",source=relative,key=entry.Key,output=file,parts=meshes.Count,vertices=meshes.Sum(m=>m.vertices.Length),triangles=meshes.Sum(m=>m.triangles.Length/3),textures=false,uvs=false,catalogLinked=catalogTags.ContainsKey(entry.Key)});
                     }catch(Exception error){failed++;Log(new{status="unsupported-or-invalid",source=relative,key=entry.Key,error=error.Message});}
                 }
                 progress?.Invoke($"Exported {exported}, skipped {skipped}, unsupported/failed {failed} — {relative}");if(Cancelled())break;

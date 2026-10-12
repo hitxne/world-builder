@@ -12,12 +12,28 @@ using UnityEngine.UIElements;
 public sealed partial class WorldBuilderRuntime
 {
     volatile bool libraryImportRunning, cancelLibraryImport;
-    [Serializable] sealed class LibraryMetadata { public string name,source,warning,room,category; }
+    [Serializable] sealed class LibraryMetadata { public string name,source,warning,room,category,catalogSource; public string[] rooms,categories,catalogKeys; public uint[] catalogTags; public bool organizationOverride; }
     void WriteLibraryMetadata(string path,string name,string source,string warning)
     {
         var metadata=ReadAssetMetadata(path)??new LibraryMetadata();metadata.name=name;metadata.source=source;metadata.warning=warning;
         WorkspaceAtomicFile.Write(path+".metadata.json",JsonUtility.ToJson(metadata,true));
         if(File.Exists(path+".preview.png"))File.Delete(path+".preview.png");
+    }
+    void RefreshSimsCatalog(string target,string file)
+    {
+        string sidecar=file+".catalog.json";if(!File.Exists(sidecar))return;
+        if(new FileInfo(sidecar).Length>1024*1024)throw new IOException("Catalog metadata exceeds 1 MB limit");
+        var decoded=JsonUtility.FromJson<SimsCatalogReader.Metadata>(File.ReadAllText(sidecar));
+        if(decoded==null||decoded.catalogKeys==null||decoded.catalogKeys.Length==0)return;
+        var metadata=ReadAssetMetadata(target)??new LibraryMetadata{source=file};
+        // Labels saved before automatic classification existed are also manual overrides.
+        if(string.IsNullOrEmpty(metadata.catalogSource)&&(!string.IsNullOrWhiteSpace(metadata.room)&&metadata.room!="Unclassified"||!string.IsNullOrWhiteSpace(metadata.category)&&metadata.category!="Unclassified"))metadata.organizationOverride=true;
+        if(!metadata.organizationOverride) {
+            metadata.room=decoded.room;metadata.category=decoded.category;metadata.rooms=decoded.rooms;metadata.categories=decoded.categories;
+            if(!string.IsNullOrWhiteSpace(decoded.name))metadata.name=decoded.name;
+        }
+        metadata.catalogSource=decoded.catalogSource;metadata.catalogKeys=decoded.catalogKeys;metadata.catalogTags=decoded.catalogTags;
+        WorkspaceAtomicFile.Write(target+".metadata.json",JsonUtility.ToJson(metadata,true));
     }
     string LibraryFolder=>Path.Combine(Application.persistentDataPath,"Assets");
     void SaveLibrary()
@@ -84,7 +100,7 @@ public sealed partial class WorldBuilderRuntime
 #else
             Button(box,"Choose OBJ inside export folder",()=>{string chosen=WorkspaceFiles.Pick(false,"Choose an OBJ in the export folder","obj");if(!string.IsNullOrEmpty(chosen))folder.value=Path.GetDirectoryName(chosen);});
 #endif
-            var progress=Label(box,"Ready. Existing library entries are skipped.","hint");
+            var progress=Label(box,"Ready. Existing geometry is kept; decoded catalog labels are refreshed.","hint");
             var start=Button(box,"Import folder",()=>{_ = ImportSimsExports(folder.value,progress);});
             Button(box,"Cancel import",()=>{cancelLibraryImport=true;progress.text="Cancellation requested; completed imports are kept.";});
             Button(box,"Close",()=>{cancelLibraryImport=true;CloseDialog();});
@@ -107,20 +123,20 @@ public sealed partial class WorldBuilderRuntime
                 try {
                     string id;using(var hash=SHA256.Create())id=BitConverter.ToString(hash.ComputeHash(Encoding.UTF8.GetBytes(Path.GetFullPath(file).ToUpperInvariant()))).Replace("-","").ToLowerInvariant();
                     string target=Path.Combine(LibraryFolder,id+".wbworld");
-                    if(File.Exists(target)){skipped++;progress.text="Imported "+imported+" • skipped "+skipped+" • failed "+failed+" / "+files.Length;await Task.Yield();continue;}
+                    if(File.Exists(target)){RefreshSimsCatalog(target,file);skipped++;progress.text="Imported "+imported+" • skipped "+skipped+" • failed "+failed+" / "+files.Length;await Task.Yield();continue;}
                     if(new FileInfo(file).Length>32*1024*1024)throw new IOException("OBJ exceeds 32 MB import limit.");
                     var item=WorkspaceObjMaterials.Import(file,out string warning);
                     using(var header=new StreamReader(file))if((header.ReadLine()??"").StartsWith("# Sims object MLOD geometry only:",StringComparison.Ordinal))warning="Geometry only: Sims UVs, materials and textures were not decoded. "+warning;
                     item.id=Guid.NewGuid().ToString("N");item.libraryId=id;item.parentId=null;item.position=Vector3.zero;
                     string name="The Sims 4 / "+Path.GetRelativePath(folder,file);item.name=Path.GetFileNameWithoutExtension(file);
                     new WorkspaceDocument{title=name,objects=new List<WorkspaceProject>{item}}.Save(target);
-                    WriteLibraryMetadata(target,name,file,warning);imported++;
+                    WriteLibraryMetadata(target,name,file,warning);RefreshSimsCatalog(target,file);imported++;
                     if(!string.IsNullOrEmpty(warning))report.AppendLine("WARNING: "+file+" — "+warning);
                 } catch(Exception error){failed++;report.AppendLine("FAILED: "+file+" — "+error.Message);}
                 progress.text="Imported "+imported+" • skipped "+skipped+" • failed "+failed+" / "+files.Length;
                 await Task.Yield();
             }
-            if(this!=null){string summary=(cancelLibraryImport?"Cancelled. ":"Finished. ")+"Imported "+imported+", skipped "+skipped+", failed "+failed+".";progress.text=summary;report.Insert(0,summary+Environment.NewLine);WorkspaceAtomicFile.Write(Path.Combine(LibraryFolder,"Sims-import-report.txt"),report.ToString());Status(summary+" Open Local Library and search The Sims 4.");}
+            if(this!=null){string summary=(cancelLibraryImport?"Cancelled. ":"Finished. ")+"Imported "+imported+", skipped "+skipped+", failed "+failed+".";progress.text=summary;report.Insert(0,summary+Environment.NewLine);WorkspaceAtomicFile.Write(Path.Combine(LibraryFolder,"Sims-import-report.txt"),report.ToString());Status(summary+" Open Local Library; browse by room or type.");}
         } catch(Exception error){if(this!=null){progress.text="Import stopped: "+error.Message;Status(progress.text);}}
         finally {libraryImportRunning=false;}
     }

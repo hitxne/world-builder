@@ -32,6 +32,28 @@ public static class SimsMeshReader
         }
         return result;
     }
+    public static List<string> ModelMlodKeys(byte[] bytes)
+    {
+        var container=Container(bytes);var result=new List<string>();
+        foreach(var chunk in container.Chunks) {
+            if(Encoding.ASCII.GetString(chunk.Bytes,0,4)!="MODL")continue;
+            using(var r=new BinaryReader(new MemoryStream(chunk.Bytes))) {
+                r.ReadUInt32();uint version=r.ReadUInt32();int count=r.ReadInt32();
+                if(count<0||count>1024)throw new FormatException("Invalid model LOD count");
+                r.ReadBytes(24);
+                if(version==258){int extra=r.ReadInt32();if(extra<0||extra>1024)throw new FormatException("Invalid extra bounds count");r.ReadBytes(checked(extra*24+8));}
+                else if(version==0x300)r.ReadBytes(20);
+                else if(version!=256&&version!=257)throw new NotSupportedException("Unsupported MODL version "+version);
+                for(int i=0;i<count;i++) {
+                    uint reference=r.ReadUInt32();r.ReadBytes(16);int index=(int)(reference&0x0fffffff)-1;uint kind=reference>>28;
+                    if(reference==0)continue;if(kind==1)index+=container.Public;
+                    var list=kind==3?container.External:container.Chunks;
+                    if((kind!=0&&kind!=1&&kind!=3)||index<0||index>=list.Count)throw new FormatException("Invalid model LOD reference");
+                    var key=list[index];if(key.Type==SimsPackage.Mlod)result.Add(SimsCatalogReader.Key(key.Type,key.Group,key.Instance));
+                }
+            }
+        }return result;
+    }
     static byte[] Resolve(SimsPackage package, Rcol rcol, uint reference, string tag, Func<uint,uint,ulong,byte[]> externalResource)
     {
         int index = checked((int)(reference & 0x0fffffffu)) - 1, kind = (int)(reference >> 28);

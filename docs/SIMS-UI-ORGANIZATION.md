@@ -28,7 +28,7 @@ Lot mode is unavailable until a selected/active lot exists. Selecting a descenda
 
 ## Categories and settings are functional
 
-Room/type labels belong to local library metadata; no room/type is inferred from unnamed MLOD resource IDs. Organize asset assigns a readable name, room and type; filters then use those assignments. Original paths/warnings and meshes are preserved. A newly imported catalog is therefore Unclassified until metadata is assigned or actual game catalog decoding is implemented.
+Room/type labels belong to local library metadata; no room/type is inferred from unnamed MLOD resource IDs. Organize asset assigns a readable name, room and type; filters use decoded classifications or those manual overrides. Original paths/warnings and meshes are preserved. Supported Sims COBJ/OBJD/MODL links now automatically populate room/type metadata; unknown tags and unsupported/ambiguous links remain unclassified. Multiple classifications are retained. See SIMS-CATALOG-DECODING.md.
 
 Appearance uses the canonical three themes and persisted UI scale. Workspace controls panel visibility/layout. Editing exposes snapping/grid/wall height. Graphics uses the configured Unity quality levels, not invented graphical capability switches. Controls documents the actual supported bindings. The schema does not add nonfunctional audio, household, cheat, inventory or Live Mode options.
 

@@ -29,13 +29,13 @@ public sealed partial class WorldBuilderRuntime
                     string name=metadata?.name??WorkspaceDocument.Open(path).title;
                     string classification=browse.value=="By room"?(metadata?.room??"Unclassified"):(metadata?.category??"Unclassified");
                     if(string.IsNullOrWhiteSpace(classification))classification="Unclassified";
-                    if(browse.value!="All objects"&&filter.value!="All"&&classification!=filter.value)continue;
-                    if(simsOnly&&!name.StartsWith("The Sims 4 /",StringComparison.OrdinalIgnoreCase))continue;
+                    if(browse.value!="All objects"&&filter.value!="All"&&classification!=filter.value&&Array.IndexOf((browse.value=="By room"?metadata?.rooms:metadata?.categories)??new string[0],filter.value)<0)continue;
+                    if(simsOnly&&string.IsNullOrEmpty(metadata?.catalogSource)&&!name.StartsWith("The Sims 4 /",StringComparison.OrdinalIgnoreCase))continue;
                     if(name.IndexOf(search.value??"",StringComparison.OrdinalIgnoreCase)<0)continue;
                     if(matched++<page*12)continue;if(shown>=12){more=true;break;}shown++;
                     string assetPath=path;var tile=new Button(()=>Try(()=>OpenLibraryPreview(assetPath,returnToLibrary)));tile.AddToClassList("asset-tile");grid.Add(tile);
                     var image=new Image{scaleMode=ScaleMode.ScaleToFit,pickingMode=PickingMode.Ignore};image.AddToClassList("asset-thumbnail");tile.Add(image);
-                    string label=Path.GetFileNameWithoutExtension(name);if(name.StartsWith("The Sims 4 /",StringComparison.OrdinalIgnoreCase)&&label.Length>24)label="Sims object "+label.Substring(label.Length-12);var caption=new Label(label){pickingMode=PickingMode.Ignore};caption.AddToClassList("asset-caption");tile.Add(caption);
+                    string label=string.IsNullOrEmpty(metadata?.catalogSource)?Path.GetFileNameWithoutExtension(name):name;if(name.StartsWith("The Sims 4 /",StringComparison.OrdinalIgnoreCase)&&label.Length>24&&string.IsNullOrEmpty(metadata?.catalogSource))label="Sims object "+label.Substring(label.Length-12);var caption=new Label(label){pickingMode=PickingMode.Ignore};caption.AddToClassList("asset-caption");tile.Add(caption);
                     tile.tooltip=name+(string.IsNullOrEmpty(metadata?.warning)?"":"\n"+metadata.warning);RequestThumbnail(path,image);
                 } catch(Exception error){Label(grid,"Asset unavailable: "+error.Message,"hint");}
             }
