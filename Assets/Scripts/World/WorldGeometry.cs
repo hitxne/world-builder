@@ -108,6 +108,21 @@ public static class WorldGeometry
         float t2=t*t,t3=t2*t;
         return (b*2+(c-a)*t+(a*2-b*5+c*4-d)*t2+(b*3-a-c*3+d)*t3)*0.5f;
     }
+    // Project every generated strip vertex, not just sparse spline control points.
+    // The callback supports transformed terrain/roads and preserves uncovered spans.
+    public static void ConformRoad(WorldGeometryMesh mesh,Func<WorldPoint,float,WorldPoint?> project)
+    {
+        if(mesh==null||project==null)throw new ArgumentNullException();
+        var original=(WorldPoint[])mesh.vertices.Clone();
+        for(int group=0;group<mesh.groups.Length;group++) {
+            float clearance=group==1?0.15f:group==2?0.07f:0.05f;
+            var visited=new HashSet<int>();
+            foreach(int index in mesh.groups[group])if(visited.Add(index)) {
+                var result=project(original[index],clearance);
+                if(result.HasValue)mesh.vertices[index]=result.Value;
+            }
+        }
+    }
     static void Road(WorldConstruction p,Builder b)
     {
         if(p.points==null||p.points.Length<2||p.points.Length>256||p.width<1||p.width>40||p.sidewalk<0||p.sidewalk>10)throw new ArgumentException("Invalid road spline.");

@@ -86,7 +86,7 @@ public sealed partial class WorldBuilderRuntime
         if(workspaceMode=="World") {
             if(toolCategory=="Terrain") {
                 ToolChoice(choices,"Raise","raise");ToolChoice(choices,"Lower","lower");ToolChoice(choices,"Smooth","smooth");ToolChoice(choices,"Flatten","flatten");ToolChoice(choices,"Paint Sand","sand");ToolChoice(choices,"Paint Grass","grass");
-                Number(settings,"Brush radius",brushRadius,1,40,v=>brushRadius=v);Number(settings,"Strength",brushStrength,0.05f,2,v=>brushStrength=v);
+                BrushSlider(settings,"Brush radius (m)",brushRadius,1,40,v=>brushRadius=v);BrushSlider(settings,"Strength",brushStrength,0.05f,2,v=>brushStrength=v);
             } else if(toolCategory=="Roads") {
                 ToolChoice(choices,"Draw Road","road");Button(choices,"Finish Road",FinishRoad);Number(settings,"Road width",roadWidth,2,20,v=>roadWidth=v);
             } else if(toolCategory=="Lots") {ToolChoice(choices,"Draw Lot","lot");Button(choices,"Build Selected Lot",EnterLot);}
@@ -241,17 +241,41 @@ public sealed partial class WorldBuilderRuntime
     {
         var identity=terrain.GetComponent<WorkspaceIdentity>();
         WorldGeometry.Brush(identity.construction,P(terrain.transform.InverseTransformPoint(point)),brushRadius,brushStrength,constructionTool,flattenHeight);
-        RebuildConstruction(terrain);Status("Terrain "+constructionTool+" • radius "+brushRadius+" m");
+        RebuildConstruction(terrain);
+        if(constructionTool!="sand"&&constructionTool!="grass")RefreshTerrainRoads();
+        Status("Terrain "+constructionTool+" • radius "+brushRadius+" m");
+    }
+    WorldPoint? ProjectRoadVertex(Transform road,WorkspaceIdentity[] terrains,WorldPoint vertex,float clearance)
+    {
+        var point=road.TransformPoint(V(vertex));bool found=false;float height=float.NegativeInfinity;
+        foreach(var terrain in terrains) {
+            var source=terrain.construction;if(source?.kind!="terrain")continue;
+            var local=terrain.transform.InverseTransformPoint(point);
+            if(Mathf.Abs(local.x)>source.size.x/2||Mathf.Abs(local.z)>source.size.z/2)continue;
+            local.y=WorldGeometry.Height(source,local.x,local.z);
+            float candidate=terrain.transform.TransformPoint(local).y;
+            height=Mathf.Max(height,candidate);found=true;
+        }
+        if(!found)return null;
+        point.y=height+clearance;return P(road.InverseTransformPoint(point));
+    }
+    void RefreshTerrainRoads()
+    {
+        foreach(var identity in world.GetComponentsInChildren<WorkspaceIdentity>())
+            if(identity.construction?.kind=="road"&&identity.construction.FollowTerrain)RebuildConstruction(identity.gameObject);
+        Physics.SyncTransforms();
     }
     GameObject CreateConstruction(string name,WorldConstruction construction,Vector3 position,Transform parent)
     {
         var data=ConstructionData(construction);data.name=name;data.id=Guid.NewGuid().ToString("N");data.position=parent.InverseTransformPoint(position);
-        var go=Model(data,parent,31);selected=go;return go;
+        var go=Model(data,parent,31);if(construction.kind=="road"&&construction.FollowTerrain)RebuildConstruction(go);selected=go;return go;
     }
     WorkspaceProject ConstructionData(WorldConstruction p)=>WorldGeometryUnity.Project(p);
     void RebuildConstruction(GameObject go)
     {
-        var identity=go.GetComponent<WorkspaceIdentity>();var data=ConstructionData(identity.construction);var mesh=data.CreateMesh();
+        var identity=go.GetComponent<WorkspaceIdentity>();
+        var terrains=world.GetComponentsInChildren<WorkspaceIdentity>();
+        var data=WorldGeometryUnity.Project(identity.construction,(vertex,clearance)=>ProjectRoadVertex(go.transform,terrains,vertex,clearance));var mesh=data.CreateMesh();
         var old=identity.ownedMesh;identity.ownedMesh=mesh;go.GetComponent<MeshFilter>().sharedMesh=mesh;
         var collider=go.GetComponent<MeshCollider>();collider.sharedMesh=null;collider.sharedMesh=mesh;
         if(old!=null)Destroy(old);
@@ -282,7 +306,7 @@ public sealed partial class WorldBuilderRuntime
             var localCenter=terrain.transform.InverseTransformPoint(center);
             float localLevel=Mathf.Max(Mathf.Max(first.y,second.y),WorldGeometry.Height(recipe,localCenter.x,localCenter.z));
             WorldGeometry.FlattenRectangle(recipe,Mathf.Min(first.x,second.x),Mathf.Max(first.x,second.x),Mathf.Min(first.z,second.z),Mathf.Max(first.z,second.z),localLevel);
-            RebuildConstruction(terrain);level=terrain.transform.TransformPoint(new Vector3(localCenter.x,localLevel,localCenter.z)).y;
+            RebuildConstruction(terrain);RefreshTerrainRoads();level=terrain.transform.TransformPoint(new Vector3(localCenter.x,localLevel,localCenter.z)).y;
         }
         center.y=level+0.15f;
         activeLot=CreateConstruction("Lot",new WorldConstruction{kind="lot",size=new WorldPoint(width,0.1f,depth)},center,world);
@@ -368,6 +392,9 @@ public sealed partial class WorldBuilderRuntime
         Label(inspector,"EDITABLE "+p.kind.ToUpperInvariant(),"section");
         if(p.kind=="lot")Button(inspector,"Enter Lot Build Mode",EnterLot);
         if(p.kind=="road") {
+            var follow=new Toggle("Follow terrain"){value=p.FollowTerrain};inspector.Add(follow);
+            follow.RegisterValueChangedCallback(e=>{p.independentElevation=!e.newValue;RebuildConstruction(selected);Changed();});
+            Label(inspector,"Follow terrain controls road elevation. Disable it to edit elevated road heights.","hint");
             Number(inspector,"Width",p.width,1,40,v=>{p.width=v;RebuildConstruction(selected);Changed();});
             Number(inspector,"Sidewalk",p.sidewalk,0,10,v=>{p.sidewalk=v;RebuildConstruction(selected);Changed();});
         }
@@ -382,6 +409,14 @@ public sealed partial class WorldBuilderRuntime
         if(p.kind=="wall")Number(inspector,"Wall height",p.size.y,2,6,v=>{float previous=p.size.y;p.size.y=v;try{RebuildConstruction(selected);}catch{p.size.y=previous;throw;}Changed();});
         if(p.kind=="roof")Number(inspector,"Roof rise",p.size.y,0.2f,4,v=>{p.size.y=v;RebuildConstruction(selected);Changed();});
         if(p.kind=="water")Label(inspector,"Change Position Y to adjust the independent water level.","hint");
+    }
+    void BrushSlider(VisualElement parent,string label,float value,float min,float max,Action<float> apply)
+    {
+        var slider=new Slider(label,min,max){value=value,showInputField=true};parent.Add(slider);
+        slider.RegisterValueChangedCallback(e=>{
+            if(float.IsNaN(e.newValue)||float.IsInfinity(e.newValue)){slider.SetValueWithoutNotify(e.previousValue);return;}
+            float bounded=Mathf.Clamp(e.newValue,min,max);slider.SetValueWithoutNotify(bounded);apply(bounded);
+        });
     }
     void Number(VisualElement parent,string label,float value,float min,float max,Action<float> apply)
     {

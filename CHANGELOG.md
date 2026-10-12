@@ -80,3 +80,11 @@ Validation: source configuration/GUID/input checks, C# syntax parsing and whites
 - Use explicit float zero for StyleLength pixel values to disambiguate float/StyleKeyword constructors (CS0121).
 - Replace deprecated FindFirstObjectByType bootstrap lookup with FindAnyObjectByType (CS0618).
 - Source checks passed; Unity compilation must be confirmed in the installed editor.
+
+## 2026-10-12 — terrain brush sliders and road conformance
+
+- Add brush radius/strength sliders with numeric input.
+- Project generated road, sidewalk and marking vertices onto terrain and rebuild colliders after height edits in the same history step.
+- Persist the Follow terrain road setting; uncovered spans retain generated geometry.
+- Add regression cases for raising/lowering between control points, surface offsets and uncovered spans. Unity integration remains unverified.
+- Actual C# geometry/container harness passed 41,541 geometry assertions; Unity runtime validation remains pending.

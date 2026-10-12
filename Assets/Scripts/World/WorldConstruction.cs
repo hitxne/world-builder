@@ -31,6 +31,8 @@ public sealed class WorldConstruction
     public float width = 6, sidewalk = 1.2f, waterLevel = 1;
     public string surface = "asphalt";
     public float friction = 1;
+    public bool independentElevation;
+    public bool FollowTerrain => !independentElevation;
 }
 public sealed class WorldGeometryMesh
 {

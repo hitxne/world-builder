@@ -38,3 +38,6 @@ Label, Button, .unity-base-field { flex-shrink: 0; }
 .unity-popup-field__input, .unity-base-popup-field__text { background-color: var(--raised); color: var(--text); }
 .unity-scroller Button { min-height: 14px; padding: 0; margin: 0; }
 .sidebar, .inspector { background-color: var(--surface); }
+
+.unity-base-slider__track { background-color: var(--edge); min-height: 4px; }
+.unity-base-slider__dragger { background-color: var(--accent); min-width: 12px; min-height: 18px; }

@@ -88,3 +88,8 @@ changes local yaw; Scale is uniform. Release commits one undo step; Escape
 restores the starting transform. With the viewport focused, G/R/S select these tools.
 Select a library asset, then click terrain or the active lot to place it; Escape
 cancels before creating anything. These controls still need Unity runtime validation.
+
+Terrain brushes now expose radius and strength sliders with numeric values.
+Terrain-following roads, sidewalks, markings and colliders update after sculpting
+and share the stroke undo step. Turn off **Follow terrain** in road Properties for
+elevated roads. This is surface conformance, not an intersection or cut/fill solver.

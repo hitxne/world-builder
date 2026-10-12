@@ -38,6 +38,17 @@ class Program
         var roadMesh=WorldGeometry.Build(road);Valid(roadMesh,"road");
         var roadVertices=roadMesh.groups[0].Select(i=>roadMesh.vertices[i]).ToArray();Check(Math.Abs(roadVertices.Max(v=>v.x)-roadVertices.Min(v=>v.x)-6)<0.001,"road width");
         Check(roadMesh.groups[1].Length>0&&roadMesh.groups[2].Length>0,"sidewalk and marking geometry");
+        Check(JsonSerializer.Deserialize<WorldConstruction>("{}",new JsonSerializerOptions{IncludeFields=true}).FollowTerrain,"legacy roads default to terrain following");
+        var flatTerrain=WorldGeometry.Island(100,100,7);Array.Clear(flatTerrain.heights,0,flatTerrain.heights.Length);
+        var crossing=new WorldConstruction{kind="road",points=new[]{new WorldPoint(-30,0,0),new WorldPoint(30,0,0)}};
+        WorldGeometry.Brush(flatTerrain,new WorldPoint(0,0,0),10,1,"raise",0);
+        var raisedRoad=WorldGeometry.Build(crossing);WorldGeometry.ConformRoad(raisedRoad,(v,up)=>new WorldPoint(v.x,WorldGeometry.Height(flatTerrain,v.x,v.z)+up,v.z));
+        Valid(raisedRoad,"terrain-following road");Check(raisedRoad.vertices.Any(v=>Math.Abs(v.x)<5&&v.y>0.05f),"road responds between control points");
+        WorldGeometry.Brush(flatTerrain,new WorldPoint(0,0,0),10,2,"lower",0);
+        var loweredRoad=WorldGeometry.Build(crossing);WorldGeometry.ConformRoad(loweredRoad,(v,up)=>new WorldPoint(v.x,WorldGeometry.Height(flatTerrain,v.x,v.z)+up,v.z));
+        Check(loweredRoad.vertices.Where((v,i)=>Math.Abs(v.x)<5&&v.y<raisedRoad.vertices[i].y).Any(),"road follows lowering");
+        for(int g=0;g<3;g++)foreach(int index in loweredRoad.groups[g]){var v=loweredRoad.vertices[index];float up=g==1?0.15f:g==2?0.07f:0.05f;Check(Math.Abs(v.y-WorldGeometry.Height(flatTerrain,v.x,v.z)-up)<0.0001f,"road/sidewalk/marking clearance");}
+        var uncovered=WorldGeometry.Build(crossing);var unchanged=(WorldPoint[])uncovered.vertices.Clone();WorldGeometry.ConformRoad(uncovered,(v,up)=>null);Check(uncovered.vertices.SequenceEqual(unchanged),"uncovered spans unchanged");
         var wall=new WorldConstruction{kind="wall",width=0.2f,size=new WorldPoint(1,3,1),points=new[]{new WorldPoint(0,0,0),new WorldPoint(6,0,0)},openings=new[]{new WorldOpening{kind="door",center=3,width=1,bottom=0,height=2.1f}}};
         var wallMesh=WorldGeometry.Build(wall);Valid(wallMesh,"wall with aperture");
         // No panel triangle spans the clear center of the doorway on either wall face.

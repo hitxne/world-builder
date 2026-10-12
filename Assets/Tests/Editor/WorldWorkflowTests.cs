@@ -81,4 +81,34 @@ public class WorldWorkflowTests
             var moved=JsonUtility.FromJson<WorkspaceDocument>(history.Redo());Assert.AreEqual(new Vector3(3,0,4),moved.objects[0].position);
         } finally {if(runtime!=null)SetRuntime(runtime,"world",null);UnityEngine.Object.DestroyImmediate(host);UnityEngine.Object.DestroyImmediate(world);}
     }
+
+    [Test] public void RoadSurfaceFollowsRaiseAndLowerBetweenControlPoints()
+    {
+        var terrain=WorldGeometry.Island(100,100,7);Array.Clear(terrain.heights,0,terrain.heights.Length);
+        var road=new WorldConstruction{kind="road",points=new[]{new WorldPoint(-30,0,0),new WorldPoint(30,0,0)}};
+        var flat=WorldGeometry.Build(road);
+        WorldGeometry.Brush(terrain,new WorldPoint(0,0,0),10,1,"raise",0);
+        var raised=WorldGeometry.Build(road);
+        WorldGeometry.ConformRoad(raised,(v,clearance)=>new WorldPoint(v.x,WorldGeometry.Height(terrain,v.x,v.z)+clearance,v.z));
+        bool middleRaised=false;
+        foreach(int index in raised.groups[0]) {
+            var v=raised.vertices[index];Assert.AreEqual(WorldGeometry.Height(terrain,v.x,v.z)+0.05f,v.y,0.00001f);
+            if(Math.Abs(v.x)<5&&v.y>flat.vertices[index].y)middleRaised=true;
+        }
+        Assert.IsTrue(middleRaised,"A brush between sparse endpoints must affect road surface vertices");
+        WorldGeometry.Brush(terrain,new WorldPoint(0,0,0),10,2,"lower",0);
+        var lowered=WorldGeometry.Build(road);WorldGeometry.ConformRoad(lowered,(v,clearance)=>new WorldPoint(v.x,WorldGeometry.Height(terrain,v.x,v.z)+clearance,v.z));
+        bool middleLowered=false;
+        for(int i=0;i<lowered.vertices.Length;i++)if(Math.Abs(lowered.vertices[i].x)<5&&lowered.vertices[i].y<raised.vertices[i].y)middleLowered=true;
+        Assert.IsTrue(middleLowered);
+        foreach(int index in lowered.groups[1]){var v=lowered.vertices[index];Assert.AreEqual(WorldGeometry.Height(terrain,v.x,v.z)+0.15f,v.y,0.00001f);}
+        foreach(int index in lowered.groups[2]){var v=lowered.vertices[index];Assert.AreEqual(WorldGeometry.Height(terrain,v.x,v.z)+0.07f,v.y,0.00001f);}
+    }
+    [Test] public void RoadProjectionPreservesUncoveredGeometryAndSplineSource()
+    {
+        var road=new WorldConstruction{kind="road",points=new[]{new WorldPoint(0,4,0),new WorldPoint(20,4,0)}};
+        var mesh=WorldGeometry.Build(road);var original=(WorldPoint[])mesh.vertices.Clone();
+        WorldGeometry.ConformRoad(mesh,(v,clearance)=>null);
+        CollectionAssert.AreEqual(original,mesh.vertices);Assert.AreEqual(4,road.points[0].y);
+    }
 }
