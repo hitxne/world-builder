@@ -5,12 +5,16 @@ Target editor: **6000.6.5f1**. Work is on `development/world-builder-operational
 [PR #1](https://github.com/hitxne/world-builder/pull/1) remains draft while native
 Unity/Windows validation is incomplete.
 
-## Current blocking priority: UI design and usability
+## Core priorities: usability and large-map scalability
 
 Make the existing world/lot workflow understandable and usable before expanding
 features. A feature is not accepted merely because its code exists: users must be
 able to find it, understand its state, perform the action and recover from mistakes.
 See [usability priority and acceptance gate](docs/UI-USABILITY-PRIORITY.md).
+Large-map scalability is a parallel architectural requirement: terrain chunks,
+streamed detail, shared assets, precision and incremental persistence must support
+the intended huge map. See [large-world priority](docs/LARGE-WORLD-PRIORITY.md).
+The current small-scene prototype is not yet suitable for a huge production map.
 
 ## Use the world/lot workflow
 

@@ -1,6 +1,6 @@
 # UI design and usability — blocking priority
 
-This user-directed priority supersedes the feature-first continuation order in earlier milestone notes. Preserve the original mission and existing features. Focus development on making those features understandable, discoverable and practical to use. New construction features, deeper format support and target-game exporters wait until the core workflow passes this gate. Fixes necessary to enable or protect that workflow remain in scope.
+This user-directed priority supersedes the feature-first continuation order in earlier milestone notes. Preserve the original mission and existing features. Focus development on making those features understandable, discoverable and practical to use. New construction features, deeper format support and target-game exporters wait until the core workflow passes this gate. Large-world architecture is a parallel user-mandated priority: implement its foundations alongside usability so the editing workflow does not depend on a small-scene design. Fixes necessary to enable or protect that workflow remain in scope.
 
 ## Product workflow
 

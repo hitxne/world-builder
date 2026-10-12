@@ -104,3 +104,9 @@ Validation: source configuration/GUID/input checks, C# syntax parsing and whites
 - Right-click rotates pending placement or cancels a construction tool; right-drag pans and middle-drag orbits the camera.
 - Show a Controls reference and scope shortcuts away from text input/dialogs. Replace the conflicting G/R/S modeling shortcuts.
 - Source checks pass; Unity input/runtime validation remains pending. These are adapted controls, not a complete Sims interface clone.
+
+## 2026-10-12 — large-map scalability priority
+
+- Add large-world architecture as a core priority alongside UI usability.
+- Record existing scene/file/terrain limits and require chunked persistence, local edits, asset sharing, streaming/LOD and precision management.
+- Define reproducible scale validation before advertising huge-map support; this planning update does not implement streaming.
