@@ -66,7 +66,7 @@ public sealed partial class WorldBuilderRuntime
                 }
                 if(rootObject==null)throw new FormatException("Asset has no root");
                 while(stage.childCount>0)stage.GetChild(0).SetParent(PlacementParent(),false);
-                rootObject.transform.position=position;selected=rootObject;Changed();Status("Placed editable library asset. Move, Rotate and Scale are available in the catalog.");
+                rootObject.transform.position=position;rootObject.transform.Rotate(Vector3.up,placementYaw,Space.Self);selected=rootObject;Changed();Status("Placed editable library asset. Move, Rotate and Scale are available in the catalog.");
             } catch {Clear(stage);throw;}finally{Destroy(stage.gameObject);}
     }
     static string FindOldId(Dictionary<string,string> mapping,string id)

@@ -95,3 +95,12 @@ Validation: source configuration/GUID/input checks, C# syntax parsing and whites
 - Assign it to PanelSettings before UIDocument initialization; retain Workspace.uss as the shared application theme layer.
 - Build resource preparation validates theme import and retains it through Resources in the Windows player.
 - Source checks pass; Unity theme import/rendering still needs local verification.
+
+## 2026-10-12 — Sims-inspired PC build controls
+
+- Research EA Help rotation instructions, the official Build Mode manual and historical EA-community keyboard guidance.
+- Add H Hand, E copy picker, K click-delete, R Properties, B walls, comma/period 45-degree rotation, Alt off-grid/free rotation, G snapping and F5 half/quarter spacing.
+- Add bracket brush radius, floor shortcuts, camera pan/top view, build/furnish/library shortcuts and Shift repeat placement.
+- Right-click rotates pending placement or cancels a construction tool; right-drag pans and middle-drag orbits the camera.
+- Show a Controls reference and scope shortcuts away from text input/dialogs. Replace the conflicting G/R/S modeling shortcuts.
+- Source checks pass; Unity input/runtime validation remains pending. These are adapted controls, not a complete Sims interface clone.

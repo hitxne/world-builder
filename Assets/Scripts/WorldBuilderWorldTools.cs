@@ -26,6 +26,11 @@ public sealed partial class WorldBuilderRuntime
     Vector2 gestureScreenStart;
     Plane gesturePlane;
     string pendingLibraryPath;
+    GameObject pendingCopySource;
+    float placementYaw;
+    bool gridEnabled=true,offGrid,repeatPlacement;
+    Slider brushRadiusSlider;
+    bool HasPlacement => !string.IsNullOrEmpty(pendingLibraryPath)||pendingCopySource!=null;
     Vector3? firstCorner;
     readonly List<WorldPoint> roadPoints=new List<WorldPoint>();
     float flattenHeight, lastAutosave;
@@ -82,11 +87,11 @@ public sealed partial class WorldBuilderRuntime
         var choices=new VisualElement();choices.AddToClassList("catalog-choices");content.Add(choices);
         var settings=new VisualElement();settings.AddToClassList("catalog-settings");content.Add(settings);
         ToolChoice(choices,"Select","select");
-        ToolChoice(choices,"Move","move");ToolChoice(choices,"Rotate","rotate");ToolChoice(choices,"Scale","scale");
+        ToolChoice(choices,"Hand (H)","move");ToolChoice(choices,"Copy (E)","eyedropper");ToolChoice(choices,"Delete (K)","delete");ToolChoice(choices,"Rotate","rotate");ToolChoice(choices,"Scale","scale");
         if(workspaceMode=="World") {
             if(toolCategory=="Terrain") {
                 ToolChoice(choices,"Raise","raise");ToolChoice(choices,"Lower","lower");ToolChoice(choices,"Smooth","smooth");ToolChoice(choices,"Flatten","flatten");ToolChoice(choices,"Paint Sand","sand");ToolChoice(choices,"Paint Grass","grass");
-                BrushSlider(settings,"Brush radius (m)",brushRadius,1,40,v=>brushRadius=v);BrushSlider(settings,"Strength",brushStrength,0.05f,2,v=>brushStrength=v);
+                brushRadiusSlider=BrushSlider(settings,"Brush radius (m)",brushRadius,1,40,v=>brushRadius=v);BrushSlider(settings,"Strength",brushStrength,0.05f,2,v=>brushStrength=v);
             } else if(toolCategory=="Roads") {
                 ToolChoice(choices,"Draw Road","road");Button(choices,"Finish Road",FinishRoad);Number(settings,"Road width",roadWidth,2,20,v=>roadWidth=v);
             } else if(toolCategory=="Lots") {ToolChoice(choices,"Draw Lot","lot");Button(choices,"Build Selected Lot",EnterLot);}
@@ -111,10 +116,12 @@ public sealed partial class WorldBuilderRuntime
     }
     void ToolChoice(VisualElement parent,string label,string tool){toolButtons[tool]=Button(parent,label,()=>SetTool(tool));}
     void SetTool(string tool){CancelConstruction();constructionTool=tool;RefreshWorldTools();Status(ToolInstruction());}
-    void CancelConstruction(){EndObjectGesture(true);pendingLibraryPath=null;ConstructionPointerUp();firstCorner=null;roadPoints.Clear();constructionTool="select";RefreshWorldTools();}
+    void CancelConstruction(){EndObjectGesture(true);pendingLibraryPath=null;pendingCopySource=null;placementYaw=0;ConstructionPointerUp();firstCorner=null;roadPoints.Clear();constructionTool="select";RefreshWorldTools();}
     string ToolInstruction()
     {
-        if(!string.IsNullOrEmpty(pendingLibraryPath))return "Click terrain or the active lot to place the library object. Escape cancels.";
+        if(HasPlacement)return "Click to place. Comma/period or right-click rotate 45°. Shift repeats placement. Escape cancels.";
+        if(constructionTool=="eyedropper")return "Click an object to copy it, then click to place. Comma/period rotate; Escape cancels.";
+        if(constructionTool=="delete")return "Click an object to delete it. Ctrl+Z restores it. Escape returns to selection.";
         if(constructionTool=="move")return "Drag an object on its horizontal plane. Grid snapping applies. Escape restores its position.";
         if(constructionTool=="rotate")return "Drag an object horizontally to rotate around its local vertical axis. Escape cancels.";
         if(constructionTool=="scale")return "Drag an object horizontally to scale uniformly. Escape cancels.";
@@ -123,7 +130,7 @@ public sealed partial class WorldBuilderRuntime
         if(constructionTool=="door"||constructionTool=="window")return "Click an existing wall to create an opening and frame.";
         if(IsBrush())return "Hold left mouse over terrain to sculpt or paint. Release records one undo step.";
         if(constructionTool=="tree"||constructionTool=="stairs")return "Click to place. Objects can be moved in Properties.";
-        return "Left click selects; right drag orbits; middle drag pans; wheel zooms.";
+        return "Left click selects; right drag pans; middle drag orbits; wheel zooms. H moves, E copies, K deletes.";
     }
     bool BeginObjectGesture(Vector2 point)
     {
@@ -154,14 +161,14 @@ public sealed partial class WorldBuilderRuntime
                 if(!gesturePlane.Raycast(WorkRay(point),out float distance))return;
                 var next=gestureWorldStart+WorkRay(point).GetPoint(distance)-gestureHitStart;
                 var parent=gestureObject.parent;var local=parent==null?next:parent.InverseTransformPoint(next);
-                local.x=Mathf.Round(local.x/gridSize)*gridSize;local.z=Mathf.Round(local.z/gridSize)*gridSize;
+                if(gridEnabled&&!offGrid){local.x=Mathf.Round(local.x/gridSize)*gridSize;local.z=Mathf.Round(local.z/gridSize)*gridSize;}
                 // Move within a lot without silently moving furniture outside its bounds.
                 if(workspaceMode=="Lot"&&activeLot!=null&&parent==activeLot.transform) {
                     var size=activeLot.GetComponent<WorkspaceIdentity>().construction.size;
                     if(Mathf.Abs(local.x)>size.x/2||Mathf.Abs(local.z)>size.z/2){Status("Keep the object origin inside the active lot.");return;}
                 }
                 gestureObject.localPosition=local;
-            } else if(constructionTool=="rotate")gestureObject.localRotation=gestureRotation*Quaternion.Euler(0,(point.x-gestureScreenStart.x)*0.5f,0);
+            } else if(constructionTool=="rotate")gestureObject.localRotation=gestureRotation*Quaternion.Euler(0,offGrid?(point.x-gestureScreenStart.x)*0.5f:Mathf.Round((point.x-gestureScreenStart.x)*0.5f/45)*45,0);
             else if(constructionTool=="scale")gestureObject.localScale=gestureScale*Mathf.Clamp(Mathf.Exp((point.x-gestureScreenStart.x)*0.01f),0.05f,20);
             Physics.SyncTransforms();Status(constructionTool+": "+gestureObject.name+" — release to apply, Escape to cancel.");
         });
@@ -197,17 +204,26 @@ public sealed partial class WorldBuilderRuntime
     {
         if(workspaceMode=="Lot"&&activeLot!=null) {
             var local=activeLot.transform.InverseTransformPoint(worldPoint);
-            local.x=Mathf.Round(local.x/gridSize)*gridSize;local.z=Mathf.Round(local.z/gridSize)*gridSize;local.y=floorLevel*3.2f;
+            if(gridEnabled&&!offGrid){local.x=Mathf.Round(local.x/gridSize)*gridSize;local.z=Mathf.Round(local.z/gridSize)*gridSize;}local.y=floorLevel*3.2f;
             var size=activeLot.GetComponent<WorkspaceIdentity>().construction.size;
             if(Mathf.Abs(local.x)>size.x/2||Mathf.Abs(local.z)>size.z/2)throw new InvalidOperationException("Construction must stay inside the active lot.");
             return activeLot.transform.TransformPoint(local);
         }
-        worldPoint.x=Mathf.Round(worldPoint.x/gridSize)*gridSize;worldPoint.z=Mathf.Round(worldPoint.z/gridSize)*gridSize;return worldPoint;
+        if(gridEnabled&&!offGrid){worldPoint.x=Mathf.Round(worldPoint.x/gridSize)*gridSize;worldPoint.z=Mathf.Round(worldPoint.z/gridSize)*gridSize;}return worldPoint;
     }
     bool ConstructionPointerDown(Vector2 point)
     {
-        if(!string.IsNullOrEmpty(pendingLibraryPath)) {
-            Try(()=>{if(!Ground(point,out var hit,out var terrain))return;var placement=Snap(hit);string path=pendingLibraryPath;PlaceLibrary(path,placement);pendingLibraryPath=null;RefreshWorldTools();});
+        if(HasPlacement) {
+            Try(()=>{
+                if(!Ground(point,out var hit,out var terrain))return;var placement=Snap(hit);
+                if(pendingCopySource!=null){selected=CloneObject(pendingCopySource,PlacementParent());selected.transform.position=placement;selected.transform.Rotate(Vector3.up,placementYaw,Space.Self);if(!repeatPlacement)pendingCopySource=null;Changed();}
+                else {PlaceLibrary(pendingLibraryPath,placement);if(!repeatPlacement)pendingLibraryPath=null;}
+                if(!repeatPlacement)placementYaw=0;RefreshWorldTools();Status("Object placed. Ctrl+Z undoes placement.");
+            });return true;
+        }
+        if(constructionTool=="eyedropper"||constructionTool=="delete") {
+            Pick(point);
+            if(selected!=null){if(constructionTool=="delete")Delete();else {var source=selected;SetTool("select");pendingCopySource=source;RefreshWorldTools();Status(ToolInstruction());}}
             return true;
         }
         if(constructionTool=="select"||workspaceMode=="Asset")return false;
@@ -377,8 +393,8 @@ public sealed partial class WorldBuilderRuntime
     void RefreshWorldTools()
     {
         foreach(var pair in modeButtons)pair.Value.EnableInClassList("selected",pair.Key==workspaceMode);
-        foreach(var pair in toolButtons)pair.Value.EnableInClassList("selected",string.IsNullOrEmpty(pendingLibraryPath)&&pair.Key==constructionTool);
-        if(toolStatus!=null)toolStatus.text="Active: "+(string.IsNullOrEmpty(pendingLibraryPath)?constructionTool:"Place Library Asset")+" • Floor "+floorLevel+" — "+ToolInstruction();
+        foreach(var pair in toolButtons)pair.Value.EnableInClassList("selected",!HasPlacement&&pair.Key==constructionTool);
+        if(toolStatus!=null)toolStatus.text="Active: "+(HasPlacement?"Place Object ("+placementYaw+"°)":constructionTool)+" • Floor "+floorLevel+" • Snap "+(gridEnabled&&!offGrid?"on":"off")+" — "+ToolInstruction();
     }
     void ResetWorldTools(){activeLot=null;activeLotId=null;floorLevel=0;CancelConstruction();if(constructionPanel!=null)SetMode("World");}
     void ReconnectWorldTools()
@@ -410,13 +426,13 @@ public sealed partial class WorldBuilderRuntime
         if(p.kind=="roof")Number(inspector,"Roof rise",p.size.y,0.2f,4,v=>{p.size.y=v;RebuildConstruction(selected);Changed();});
         if(p.kind=="water")Label(inspector,"Change Position Y to adjust the independent water level.","hint");
     }
-    void BrushSlider(VisualElement parent,string label,float value,float min,float max,Action<float> apply)
+    Slider BrushSlider(VisualElement parent,string label,float value,float min,float max,Action<float> apply)
     {
         var slider=new Slider(label,min,max){value=value,showInputField=true};parent.Add(slider);
         slider.RegisterValueChangedCallback(e=>{
             if(float.IsNaN(e.newValue)||float.IsInfinity(e.newValue)){slider.SetValueWithoutNotify(e.previousValue);return;}
             float bounded=Mathf.Clamp(e.newValue,min,max);slider.SetValueWithoutNotify(bounded);apply(bounded);
-        });
+        });return slider;
     }
     void Number(VisualElement parent,string label,float value,float min,float max,Action<float> apply)
     {

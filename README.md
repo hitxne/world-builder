@@ -85,7 +85,7 @@ See [directive audit](docs/DIRECTIVE-AUDIT.md) for current acceptance status.
 Direct editing: choose **Move**, **Rotate** or **Scale** in the catalog and drag
 an object in the viewport. Move snaps to the grid on a horizontal plane; Rotate
 changes local yaw; Scale is uniform. Release commits one undo step; Escape
-restores the starting transform. With the viewport focused, G/R/S select these tools.
+restores the starting transform. With the viewport focused, H selects Hand/Move. See Controls for the Sims-inspired mappings.
 Select a library asset, then click terrain or the active lot to place it; Escape
 cancels before creating anything. These controls still need Unity runtime validation.
 
@@ -93,3 +93,7 @@ Terrain brushes now expose radius and strength sliders with numeric values.
 Terrain-following roads, sidewalks, markings and colliders update after sculpting
 and share the stroke undo step. Turn off **Follow terrain** in road Properties for
 elevated roads. This is surface conformance, not an intersection or cut/fill solver.
+
+See [PC build controls](docs/SIMS-BUILD-CONTROLS.md). The top-bar **Controls**
+button displays the mappings inside the application. Shortcuts act in the focused
+editable viewport; typing in input fields and using dialogs remains separate.

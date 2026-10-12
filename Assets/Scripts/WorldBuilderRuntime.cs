@@ -125,7 +125,7 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
         var views = Row(center, "views");
         referenceImage = View(views, "REFERENCE — read only", referenceTexture, false);
         workImage = View(views, "EDITABLE SCENE", workTexture, true);
-        Label(center, "Left click: select   •   Right drag: orbit   •   Middle drag: pan   •   Wheel: zoom", "hint");
+        Label(center, "Left click: select/build   •   Right drag: pan   •   Middle drag: orbit   •   Wheel: zoom   •   Controls: top bar", "hint");
         inspector = new ScrollView(); inspector.AddToClassList("inspector"); body.Add(inspector);
         var catalog = new ScrollView(); catalog.name="construction-catalog"; catalog.AddToClassList("catalog"); root.Add(catalog); catalogDock=catalog;
         statusLabel = Label(root, "Ready. Create objects or import a Blender OBJ.", "status");
@@ -135,18 +135,57 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
         propertiesWidth=PlayerPrefs.GetFloat("worldbuilder.layout.propertiesWidth",255);
         catalogHeight=PlayerPrefs.GetFloat("worldbuilder.layout.catalogHeight",240);
         root.RegisterCallback<GeometryChangedEvent>(e=>ApplyLayout());ApplyLayout();
-        root.RegisterCallback<KeyDownEvent>(e => {
-            if (modal != null || e.target is TextField || e.target is FloatField || e.target is TextElement) return;
-            if (e.ctrlKey && e.keyCode == KeyCode.S) { Save(false); e.StopPropagation(); }
-            if (e.ctrlKey && e.keyCode == KeyCode.Z) { EndObjectGesture(true); Undo(); e.StopPropagation(); }
-            if (e.ctrlKey && e.keyCode == KeyCode.Y) { EndObjectGesture(true); Redo(); e.StopPropagation(); }
-            if(!e.ctrlKey&&!e.altKey&&e.target==workImage) {
-                if(e.keyCode==KeyCode.G)SetTool("move");if(e.keyCode==KeyCode.R)SetTool("rotate");if(e.keyCode==KeyCode.S)SetTool("scale");
+        root.RegisterCallback<KeyDownEvent>(HandleBuildKey);
+        Button(top,"Controls",()=>Dialog("Build controls","World Builder uses Sims-inspired PC editing controls. Mouse: left select/build, right-drag pan, middle-drag orbit, wheel zoom. Right-click rotates a pending object or cancels a construction tool.",box=>{
+            Label(box,"H Hand/move • E Copy • K Delete • R Properties • B Wall\nG Snap • F5 Half/quarter grid • Alt Free placement/rotation • , / . Rotate 45°\nShift Repeat placement • [ / ] Brush radius • PageUp/PageDown Floor • T Top view\nW/A/S/D or arrows Camera pan • F Frame • F2 Furnish • F3 Build • F4 Library\nCtrl+S Save • Ctrl+Z Undo • Ctrl+Y Redo • Escape Cancel","hint");Button(box,"Close",CloseDialog);
+        }));
+    }
+    void RotateBuildObject(float degrees)
+    {
+        if(HasPlacement){placementYaw=Mathf.Repeat(placementYaw+degrees,360);RefreshWorldTools();return;}
+        EndObjectGesture(false);
+        if(selected==null){Status("Select an object first.");return;}
+        selected.transform.Rotate(Vector3.up,degrees,Space.Self);Physics.SyncTransforms();Changed();
+    }
+    void HandleBuildKey(KeyDownEvent e)
+    {
+        if(modal!=null||e.target is TextField||e.target is FloatField||e.target is TextElement)return;
+        bool handled=true;
+        if(e.ctrlKey) {
+            if(e.keyCode==KeyCode.S){EndObjectGesture(false);Save(false);}
+            else if(e.keyCode==KeyCode.Z)Undo();else if(e.keyCode==KeyCode.Y)Redo();else handled=false;
+        } else if(e.keyCode==KeyCode.Escape){CancelConstruction();Status("Tool cancelled.");}
+        else if(e.keyCode==KeyCode.F4)OpenLibrary();
+        else if(e.keyCode==KeyCode.F2||e.keyCode==KeyCode.F3){EnterLot();if(workspaceMode=="Lot"){CancelConstruction();toolCategory=e.keyCode==KeyCode.F2?"Furnish":"Structure";BuildConstructionPanel();}}
+        else if(e.target==workImage) {
+            switch(e.keyCode) {
+                case KeyCode.H:SetTool("move");break;
+                case KeyCode.E:SetTool(constructionTool=="eyedropper"?"select":"eyedropper");break;
+                case KeyCode.K:SetTool(constructionTool=="delete"?"select":"delete");break;
+                case KeyCode.R:propertiesDrawer=true;propertiesVisible=true;ApplyLayout();SaveLayout();break;
+                case KeyCode.B:EnterLot();if(workspaceMode=="Lot")SetTool("wall");break;
+                case KeyCode.G:gridEnabled=!gridEnabled;RefreshWorldTools();break;
+                case KeyCode.F5:gridSize=Mathf.Abs(gridSize-0.5f)<0.001f?0.25f:0.5f;BuildConstructionPanel();break;
+                case KeyCode.Comma:RotateBuildObject(-45);break;
+                case KeyCode.Period:RotateBuildObject(45);break;
+                case KeyCode.Delete:EndObjectGesture(true);Delete();break;
+                case KeyCode.PageUp:case KeyCode.PageDown:
+                    if(workspaceMode=="Lot"){CancelConstruction();floorLevel=Mathf.Clamp(floorLevel+(e.keyCode==KeyCode.PageUp?1:-1),0,5);RefreshWorldTools();}break;
+                case KeyCode.LeftBracket:case KeyCode.RightBracket:
+                    brushRadius=Mathf.Clamp(brushRadius+(e.keyCode==KeyCode.RightBracket?1:-1),1,40);brushRadiusSlider?.SetValueWithoutNotify(brushRadius);RefreshWorldTools();break;
+                case KeyCode.T:SetCameraView(new Vector2(89,0));break;
+                case KeyCode.F:FrameSelected();break;
+                case KeyCode.Return:FinishRoad();break;
+                case KeyCode.W:case KeyCode.UpArrow:case KeyCode.S:case KeyCode.DownArrow:case KeyCode.A:case KeyCode.LeftArrow:case KeyCode.D:case KeyCode.RightArrow:
+                    var forward=Vector3.ProjectOnPlane(workCamera.transform.forward,Vector3.up).normalized;
+                    if(forward.sqrMagnitude<0.01f)forward=Vector3.forward;
+                    var right=Vector3.ProjectOnPlane(workCamera.transform.right,Vector3.up).normalized;
+                    bool back=e.keyCode==KeyCode.S||e.keyCode==KeyCode.DownArrow,left=e.keyCode==KeyCode.A||e.keyCode==KeyCode.LeftArrow,horizontal=left||e.keyCode==KeyCode.D||e.keyCode==KeyCode.RightArrow;
+                    workCenter+=(horizontal?right*(left?-1:1):forward*(back?-1:1))*workDistance*0.04f;break;
+                default:handled=false;break;
             }
-            if (e.keyCode == KeyCode.F) FrameSelected();
-            if(e.keyCode==KeyCode.Return) FinishRoad();
-            if(e.keyCode==KeyCode.Escape) CancelConstruction();
-        });
+        } else handled=false;
+        if(handled)e.StopPropagation();
     }
     void SetCameraView(Vector2 angles)
     {
@@ -202,7 +241,10 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
         int drag = -1; Vector2 previous = Vector2.zero;
         image.RegisterCallback<PointerDownEvent>(e => {
             if (modal != null) return;
-            image.Focus();
+            image.Focus();offGrid=e.altKey;repeatPlacement=e.shiftKey;
+            if(editable&&e.button==1&&(HasPlacement||constructionTool!="select"&&constructionTool!="move")) {
+                if(HasPlacement)RotateBuildObject(45);else CancelConstruction();e.StopPropagation();return;
+            }
             if (e.button == 0 && editable) {
                 if (BeginObjectGesture(e.localPosition) || ConstructionPointerDown(e.localPosition)) { image.CapturePointer(e.pointerId); }
                 else Pick(e.localPosition);
@@ -211,10 +253,11 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
             e.StopPropagation();
         });
         image.RegisterCallback<PointerMoveEvent>(e => {
+            offGrid=e.altKey;
             if (editable && modal == null) { UpdateObjectGesture(e.localPosition); if(!objectGesture)ConstructionPointerMove(e.localPosition); }
             if (drag < 0 || modal != null) return;
             Vector2 point = e.position, delta = point - previous; previous = point;
-            if (drag == 1) {
+            if (drag == 2) {
                 if (editable) workAngles += new Vector2(delta.y, delta.x) * 0.25f;
                 else referenceAngles += new Vector2(delta.y, delta.x) * 0.25f;
             } else {
