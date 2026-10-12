@@ -73,3 +73,10 @@ Validation: source configuration/GUID/input checks, C# syntax parsing and whites
 - Define task-based navigation, placement previews, selection/tool feedback and recovery requirements.
 - Replace the feature-first continuation order in the directive audit.
 - This is a priority/acceptance update; it does not claim the current interface passed usability testing.
+
+## 2026-10-12 — reported Unity compilation corrections
+
+- Rename the camera positioning method to avoid shadowing the UI Toolkit Position enum (CS0119).
+- Use explicit float zero for StyleLength pixel values to disambiguate float/StyleKeyword constructors (CS0121).
+- Replace deprecated FindFirstObjectByType bootstrap lookup with FindAnyObjectByType (CS0618).
+- Source checks passed; Unity compilation must be confirmed in the installed editor.

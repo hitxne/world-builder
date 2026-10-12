@@ -36,7 +36,7 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void Bootstrap()
     {
-        if (FindFirstObjectByType<WorldBuilderRuntime>() == null)
+        if (FindAnyObjectByType<WorldBuilderRuntime>() == null)
             new GameObject("World Builder Runtime").AddComponent<WorldBuilderRuntime>();
     }
     void Start()
@@ -68,11 +68,11 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
     }
     void Update()
     {
-        Position(workCamera, workAngles, workCenter, workDistance);
-        Position(referenceCamera, referenceAngles, referenceCenter, referenceDistance);
+        PositionCamera(workCamera, workAngles, workCenter, workDistance);
+        PositionCamera(referenceCamera, referenceAngles, referenceCenter, referenceDistance);
         WorldUpdate();
     }
-    static void Position(Camera camera, Vector2 angles, Vector3 center, float distance)
+    static void PositionCamera(Camera camera, Vector2 angles, Vector3 center, float distance)
     {
         var orbit = Quaternion.Euler(Mathf.Clamp(angles.x, -89, 89), angles.y, 0);
         camera.transform.position = center + orbit * Vector3.back * distance;
@@ -163,13 +163,13 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
         bool narrowScene=width>0&&width<760,narrowProperties=width>0&&width<1060;
         bool showScene=narrowScene?sceneDrawer:sceneVisible,showProperties=narrowProperties?propertiesDrawer:propertiesVisible;
         sceneDock.style.position=narrowScene?Position.Absolute:Position.Relative;
-        sceneDock.style.left=narrowScene?new StyleLength(0):new StyleLength(StyleKeyword.Auto);
-        sceneDock.style.top=narrowScene?new StyleLength(0):new StyleLength(StyleKeyword.Auto);
-        sceneDock.style.bottom=narrowScene?new StyleLength(0):new StyleLength(StyleKeyword.Auto);
+        sceneDock.style.left=narrowScene?new StyleLength(0f):new StyleLength(StyleKeyword.Auto);
+        sceneDock.style.top=narrowScene?new StyleLength(0f):new StyleLength(StyleKeyword.Auto);
+        sceneDock.style.bottom=narrowScene?new StyleLength(0f):new StyleLength(StyleKeyword.Auto);
         inspector.style.position=narrowProperties?Position.Absolute:Position.Relative;
-        inspector.style.right=narrowProperties?new StyleLength(0):new StyleLength(StyleKeyword.Auto);
-        inspector.style.top=narrowProperties?new StyleLength(0):new StyleLength(StyleKeyword.Auto);
-        inspector.style.bottom=narrowProperties?new StyleLength(0):new StyleLength(StyleKeyword.Auto);
+        inspector.style.right=narrowProperties?new StyleLength(0f):new StyleLength(StyleKeyword.Auto);
+        inspector.style.top=narrowProperties?new StyleLength(0f):new StyleLength(StyleKeyword.Auto);
+        inspector.style.bottom=narrowProperties?new StyleLength(0f):new StyleLength(StyleKeyword.Auto);
         if(narrowScene&&showScene&&sceneDock.parent.IndexOf(sceneDock)!=sceneDock.parent.childCount-1)sceneDock.BringToFront();
         else if(!narrowScene&&sceneDock.parent.IndexOf(sceneDock)!=0)sceneDock.parent.Insert(0,sceneDock);
         if(showProperties&&inspector.parent.IndexOf(inspector)!=inspector.parent.childCount-1)inspector.BringToFront();
