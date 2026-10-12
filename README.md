@@ -12,7 +12,7 @@ A Windows-first, game-feeling, standalone map and asset creation tool. The first
 2. Install the High Definition Render Pipeline package if Unity prompts you to resolve packages.
 3. Open any empty scene and choose **World Builder > Create Starter Scene** from the Unity editor menu.
 4. Press Play. The runtime Asset Creator UI should open.
-5. Use **Import OBJ** to select a local Blender-exported `.obj` file with optional `.mtl` and linked PNG/JPG textures. A Windows native file picker is included; manual path entry is also available.
+5. Use **Import OBJ** to select a local Blender-exported `.obj` file (geometry, UVs, and normals only in this first prototype; MTL/textures are next). The Unity Editor has an OBJ file picker. Standalone builds currently require the `WORLD_BUILDER_OBJ_PATH` environment variable; a native Windows file picker is planned.
 6. Orbit either viewport with left-drag, zoom with the scroll wheel.
 7. Native Windows builds must be built and tested on a Windows machine with Unity installed.
 
@@ -27,6 +27,6 @@ A Windows-first, game-feeling, standalone map and asset creation tool. The first
 
 ## Current implementation boundaries
 
-The prototype includes a two-camera viewport, camera orbit, a runtime OBJ/MTL reader, basic material preview and persistence of local asset metadata, plus directory-probe foundations. The full procedural 3D building systems, original game-resource decoders, texture-brush painting, high-quality baking, production asset library, signed updates, and game exporters are **planned but not yet implemented**.
+The prototype includes a two-camera viewport, camera orbit, a runtime OBJ geometry reader and persistence of the last selected local source path, plus directory-probe foundations. The full procedural 3D building systems, original game-resource decoders, texture-brush painting, high-quality baking, production asset library, signed updates, and game exporters are **planned but not yet implemented**.
 
 Do not commit copyrighted game assets, extracted packages, or imported commercial models to this repository. It currently contains only project source and documentation.
