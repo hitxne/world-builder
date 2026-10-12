@@ -13,6 +13,12 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
     GameObject referenceRoot, workRoot;
     string modelPath = "", status = "Import a Blender OBJ to begin.";
     string installationStatus = "Not scanned";
+    string[] gameNames = { "Forza Horizon 5", "The Sims 4" };
+    string[] gamePaths = new string[2];
+    List<string> catalog = new List<string>();
+    Vector2 catalogScroll;
+    bool showBrowser = false;
+    int selectedGame = 0;
     Vector2 referenceAngles = new Vector2(25, -25), workAngles = new Vector2(25, -25);
     float referenceDistance = 8f, workDistance = 8f;
     Vector3 referenceCenter, workCenter;
@@ -27,6 +33,7 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
         workCamera = CreateCamera("Work Camera", out workTexture);
         MakePrimitive(referenceRoot.transform, PrimitiveType.Cube, new Vector3(0, 0.5f, 0));
         MakePrimitive(workRoot.transform, PrimitiveType.Cube, new Vector3(0, 0.5f, 0));
+        for (int i = 0; i < gamePaths.Length; i++) gamePaths[i] = PlayerPrefs.GetString("worldbuilder.gamePath." + i, "");
         LocateInstallations();
     }
 
@@ -90,7 +97,8 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
         GUI.color = new Color(0.08f, 0.105f, 0.14f);
         GUI.DrawTexture(new Rect(0, 0, w, h), Texture2D.whiteTexture);
         GUI.color = Color.white;
-        GUI.Label(new Rect(24, 12, 550, 28), "WORLD BUILDER  /  ASSET CREATOR  /  v0.1 prototype");
+        GUI.Label(new Rect(24, 12, 550, 28), "WORLD BUILDER  /  ASSET CREATOR  /  v0.2 preview");
+        if (GUI.Button(new Rect(w - 635, 10, 130, 32), "Game Browser")) showBrowser = !showBrowser;
         if (GUI.Button(new Rect(w - 495, 10, 130, 32), "Import OBJ")) Import();
         if (GUI.Button(new Rect(w - 355, 10, 155, 32), "Refresh Game Paths")) LocateInstallations();
         if (GUI.Button(new Rect(w - 190, 10, 165, 32), "Reimport")) ImportExisting();
@@ -112,7 +120,8 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
         GUI.Label(new Rect(24, h - 133, w - 48, 26), "STATUS  " + status);
         GUI.Label(new Rect(24, h - 107, w - 48, 26), "GAME INSTALLATIONS  " + installationStatus);
         GUI.Label(new Rect(24, h - 76, w - 48, 26), "Controls: hover viewport • left-drag orbit • mouse wheel zoom • Import OBJ / Reimport");
-        GUI.Label(new Rect(24, h - 50, w - 48, 26), "Prototype: viewing + importing only. Material brush, export, asset library, and game decoders are not implemented.");
+        GUI.Label(new Rect(24, h - 50, w - 48, 26), "Browser indexes loose OBJ files only. Proprietary Sims/Forza packages are not decoded.");
+        if (showBrowser) DrawGameBrowser(w, h);
         GUI.matrix = matrix;
     }
 
@@ -217,13 +226,103 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
 
     void LocateInstallations()
     {
-        var paths = new[] {
+        string[] defaults = {
             @"C:\Program Files (x86)\Steam\steamapps\common\ForzaHorizon5",
             @"C:\Program Files\EA Games\The Sims 4"
         };
-        installationStatus = "Forza: " + (Directory.Exists(paths[0]) ? "folder detected" : "not found at default path")
-            + " | Sims 4: " + (Directory.Exists(paths[1]) ? "folder detected" : "not found at default path")
-            + " (no proprietary asset decoding)";
+        for (int i = 0; i < gamePaths.Length; i++)
+            if (string.IsNullOrWhiteSpace(gamePaths[i]) && Directory.Exists(defaults[i])) gamePaths[i] = defaults[i];
+        installationStatus = "Forza: " + (Directory.Exists(gamePaths[0]) ? "folder detected" : "choose folder")
+            + " | Sims 4: " + (Directory.Exists(gamePaths[1]) ? "folder detected" : "choose folder");
+    }
+
+    void ChooseGameFolder()
+    {
+#if UNITY_EDITOR
+        string path = UnityEditor.EditorUtility.OpenFolderPanel("Locate " + gameNames[selectedGame], gamePaths[selectedGame], "");
+        if (string.IsNullOrWhiteSpace(path)) return;
+        gamePaths[selectedGame] = path;
+        PlayerPrefs.SetString("worldbuilder.gamePath." + selectedGame, path);
+        PlayerPrefs.Save();
+        LocateInstallations();
+        ScanLooseModels();
+#else
+        status = "Folder picker is currently Editor-only; native Windows picker is planned.";
+#endif
+    }
+
+    void ScanLooseModels()
+    {
+        catalog.Clear();
+        string path = gamePaths[selectedGame];
+        if (!Directory.Exists(path)) { status = "Select an existing game folder first."; return; }
+        try
+        {
+            // Only loose, readable OBJ files. No proprietary package parsing or extraction.
+            // Bound the scan to avoid blocking the Editor on huge installations.
+            var pending = new Queue<string>();
+            pending.Enqueue(path);
+            int folders = 0;
+            while (pending.Count > 0 && folders < 250 && catalog.Count < 250)
+            {
+                var folder = pending.Dequeue();
+                folders++;
+                try
+                {
+                    foreach (var file in Directory.EnumerateFiles(folder, "*.obj"))
+                    {
+                        catalog.Add(file);
+                        if (catalog.Count >= 250) break;
+                    }
+                    foreach (var child in Directory.EnumerateDirectories(folder))
+                        if (pending.Count < 1000) pending.Enqueue(child);
+                }
+                catch (UnauthorizedAccessException) { }
+                catch (IOException) { }
+            }
+            status = "Indexed " + catalog.Count + " loose OBJ models in " + folders +
+                " folders. Proprietary game archives are not supported.";
+        }
+        catch (Exception e) { status = "Scan failed: " + e.Message; }
+    }
+
+    void DrawGameBrowser(float w, float h)
+    {
+        float width = Mathf.Min(630f, w - 40f);
+        var panel = new Rect((w - width) / 2f, 52f, width, Mathf.Min(h - 110f, 570f));
+        GUI.Box(panel, "");
+        float x = panel.x + 16f, y = panel.y + 12f, inner = panel.width - 32f;
+        GUI.Label(new Rect(x, y, inner - 85f, 24f), "GAME ASSET BROWSER  /  read-only discovery");
+        if (GUI.Button(new Rect(panel.xMax - 85f, y, 65f, 25f), "Close")) showBrowser = false;
+        y += 36f;
+        if (GUI.Button(new Rect(x, y, inner / 2f - 5f, 30f), "Forza Horizon 5"))
+            { selectedGame = 0; catalog.Clear(); }
+        if (GUI.Button(new Rect(x + inner / 2f + 5f, y, inner / 2f - 5f, 30f), "The Sims 4"))
+            { selectedGame = 1; catalog.Clear(); }
+        y += 38f;
+        GUI.Label(new Rect(x, y, inner, 36f), gameNames[selectedGame] + ": " +
+            (Directory.Exists(gamePaths[selectedGame]) ? gamePaths[selectedGame] : "No folder selected"));
+        y += 40f;
+        if (GUI.Button(new Rect(x, y, 155f, 30f), "Choose Folder")) ChooseGameFolder();
+        if (GUI.Button(new Rect(x + 165f, y, 160f, 30f), "Scan Loose OBJ")) ScanLooseModels();
+        y += 38f;
+        GUI.Label(new Rect(x, y, inner, 22f), "Found " + catalog.Count + " compatible loose .obj files (max 250)");
+        y += 26f;
+        var scrollRect = new Rect(x, y, inner, Mathf.Max(65f, panel.yMax - y - 48f));
+        var contentRect = new Rect(0, 0, inner - 25f, Mathf.Max(scrollRect.height, catalog.Count * 32f));
+        catalogScroll = GUI.BeginScrollView(scrollRect, catalogScroll, contentRect);
+        for (int i = 0; i < catalog.Count; i++)
+        {
+            string file = catalog[i];
+            if (GUI.Button(new Rect(0, i * 32f, inner - 32f, 28f), Path.GetFileName(file)))
+            {
+                modelPath = file;
+                ImportExisting();
+                showBrowser = false;
+            }
+        }
+        GUI.EndScrollView();
+        GUI.Label(new Rect(x, panel.yMax - 34f, inner, 28f), "No decoding, extraction, or redistribution of proprietary game assets.");
     }
 
     void OnDestroy()
