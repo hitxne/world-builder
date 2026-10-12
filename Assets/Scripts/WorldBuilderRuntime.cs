@@ -457,7 +457,7 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
             Dialog("Sims package resources", Path.GetFileName(path) + " • " + package.Entries.Count + " resources. MLOD previews are neutral geometry only; cross-package dependencies, textures and unsupported vertex layouts remain pending.", box => {
                 var list = new ScrollView(); list.style.height = 320; box.Add(list);
                 int shown = 0;
-                foreach (var entry in package.Entries) if (entry.Type == SimsPackage.Mlod && shown++ < 250) {
+                foreach (var entry in package.Entries) if (!entry.IsDeleted && entry.Type == SimsPackage.Mlod && shown++ < 250) {
                     var resource = entry;
                     Button(list, "Preview MLOD " + resource.Instance.ToString("X16"), () => PreviewSims(package, resource));
                 }

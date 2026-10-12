@@ -95,3 +95,26 @@ All on the user's machine. The preceding workspace must also pass its smoke test
    UVs and texture previews. Research supported plain/archive workflows separately.
 4. Translate material references, show missing dependencies and provenance; retain
    editable master assets and controlled import permissions.
+
+## Diagnostic follow-up from actual metadata — 2026-10-12
+
+The user-provided v1 report scanned 629 Sims packages (full directory scan), but
+sampled only ClientDeltaBuild0–7. Seven indexes parsed; those samples contained no
+MLOD. ClientDeltaBuild0 failed a resource-bounds check. Upstream package code treats
+`0xffffffff` offsets and the size=1/memsize=0xffffffff pattern as deleted resources.
+The reader now recognizes those tombstones without invalidating the whole index,
+and still refuses to read their nonexistent payloads. This is a candidate fix for
+the observed failure, not a verified diagnosis from the metadata alone.
+
+Forza scan stopped at 1500 folders: 20,204 files encountered, 9,624 ZIPs and 8
+MiniZips counted, no loose models listed. This is a partial inventory, not proof that
+no loose files exist elsewhere. The v1 archive counts of zero did not inspect inside
+archives and must not be interpreted as empty archives.
+
+Diagnostic v2 samples eight files per family: Sims FullBuild, DeltaBuild and other;
+Forza car ZIPs, track ZIPs and other ZIPs. Standard ZIP central-directory metadata
+reports names, compression methods and encryption flags without inflation or
+extraction. Nonstandard containers, ZIP64 and custom formats report explicit limits.
+MiniZip diagnostics report only a container-signature value; no MiniZip decoder is
+claimed. Synthetic tombstone and ZIP-directory NUnit fixtures were added. Cloud
+source/grammar checks passed; Unity execution and real-file retry remain pending.

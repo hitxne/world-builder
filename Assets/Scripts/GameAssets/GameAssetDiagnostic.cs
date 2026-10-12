@@ -10,7 +10,7 @@ public static class GameAssetDiagnostic
     [Serializable] public sealed class Report
     {
         public string generatedUtc = DateTime.UtcNow.ToString("O");
-        public string reportVersion = "1";
+        public string reportVersion = "2";
         public string note = "Metadata only. Bounded scan, not a full installation inventory. No game resource bytes included.";
         public List<Game> games = new List<Game>();
     }
@@ -28,6 +28,9 @@ public static class GameAssetDiagnostic
         public string relativePath, format, error;
         public long sizeBytes;
         public int resourceCount, meshResourceCount;
+        public string inspectionStatus;
+        public int deletedResources, encryptedEntries;
+        public List<string> meshNames = new List<string>();
         public List<Count> resourceTypes = new List<Count>();
     }
     public static Report Scan(string[] names, string[] paths)
@@ -47,8 +50,17 @@ public static class GameAssetDiagnostic
                         game.encounteredFiles++; string ext = Path.GetExtension(path).ToLowerInvariant();
                         if (ext == ".package" || ext == ".modelbin" || ext == ".swatchbin" || ext == ".zip" || ext == ".minizip" || ext == ".obj") {
                             counts[ext] = counts.TryGetValue(ext, out int count) ? count + 1 : 1;
-                            sampled.TryGetValue(ext, out int n);
-                            if (n < 8) { sampled[ext] = n + 1; game.samples.Add(Inspect(path, root, ext)); }
+                            string family = ext;
+                            if (ext == ".package") {
+                                string name = System.IO.Path.GetFileName(path).ToLowerInvariant();
+                                family += name.Contains("fullbuild") ? ":full" : name.Contains("deltabuild") ? ":delta" : ":other";
+                            }
+                            if (ext == ".zip") {
+                                string relative = path.Substring(root.Length).ToLowerInvariant().Replace('\\', '/');
+                                family += relative.Contains("/cars/") ? ":cars" : relative.Contains("/tracks/") ? ":tracks" : ":other";
+                            }
+                            sampled.TryGetValue(family, out int n);
+                            if (n < 8) { sampled[family] = n + 1; game.samples.Add(Inspect(path, root, ext)); }
                         }
                         if (game.encounteredFiles >= 50000) break;
                     }
@@ -73,6 +85,7 @@ public static class GameAssetDiagnostic
             if (extension == ".package") {
                 var package = new SimsPackage(path); sample.resourceCount = package.Entries.Count;
                 foreach (var entry in package.Entries) {
+                    if (entry.IsDeleted) { sample.deletedResources++; continue; }
                     if (entry.Type == SimsPackage.Mlod) sample.meshResourceCount++;
                     string type = entry.Type.ToString("X8"); types[type] = types.TryGetValue(type, out int count) ? count + 1 : 1;
                 }
@@ -82,6 +95,17 @@ public static class GameAssetDiagnostic
                     if (blob.Tag == ForzaBundle.MeshTag) sample.meshResourceCount++;
                     string type = blob.Tag.ToString("X8") + ":" + blob.Major + "." + blob.Minor;
                     types[type] = types.TryGetValue(type, out int count) ? count + 1 : 1;
+                }
+            }
+            else if (extension == ".zip") {
+                var archive = GameArchiveDiagnostic.Inspect(path);
+                sample.resourceCount = archive.Entries; sample.meshResourceCount = archive.MeshEntries;
+                sample.encryptedEntries = archive.EncryptedEntries; sample.inspectionStatus = archive.Status; sample.meshNames = archive.MeshNames;
+                foreach (var method in archive.Methods) types[method.Key] = method.Value;
+            } else if (extension == ".minizip") {
+                using (var stream = File.OpenRead(path)) using (var reader = new BinaryReader(stream)) {
+                    if (stream.Length < 4) throw new FormatException("MiniZip file too short.");
+                    sample.inspectionStatus = "MiniZip reader pending; container signature 0x" + reader.ReadUInt32().ToString("X8");
                 }
             }
             foreach (var type in types) sample.resourceTypes.Add(new Count { extension = type.Key, files = type.Value });

@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text;
+using System.IO.Compression;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -102,5 +103,28 @@ public sealed class GameAdapterTests
         }));
         var bundle = new ForzaBundle(path); var model = ForzaMeshPreview.Decode(bundle, bundle.Blobs[0]);
         Assert.AreEqual(Vector3.up, model.vertices[2]); CollectionAssert.AreEqual(new[] { 0,1,2 }, model.triangles);
+    }
+
+    [Test] public void DbpfTombstoneDoesNotInvalidatePackage()
+    {
+        string path = Package(new byte[] { 1, 2 }, SimsPackage.Mlod);
+        byte[] bytes = File.ReadAllBytes(path);
+        Array.Copy(BitConverter.GetBytes(uint.MaxValue), 0, bytes, bytes.Length - 16, 4);
+        File.WriteAllBytes(path, bytes);
+        var package = new SimsPackage(path);
+        Assert.IsTrue(package.Entries[0].IsDeleted);
+        Assert.Throws<NotSupportedException>(() => package.Read(package.Entries[0]));
+    }
+    [Test] public void ZipDiagnosticReadsDirectoryAndMeshNamesWithoutInflating()
+    {
+        string path = Path.Combine(folder, "sample.zip");
+        using (var stream = File.Create(path)) using (var zip = new ZipArchive(stream, ZipArchiveMode.Create)) {
+            var entry = zip.CreateEntry("scene/original-test.modelbin");
+            using (var output = entry.Open()) output.Write(new byte[] { 1,2,3 }, 0, 3);
+        }
+        var result = GameArchiveDiagnostic.Inspect(path);
+        Assert.AreEqual(1, result.Entries); Assert.AreEqual(1, result.MeshEntries);
+        Assert.AreEqual(0, result.EncryptedEntries);
+        Assert.AreEqual("scene/original-test.modelbin", result.MeshNames[0]);
     }
 }

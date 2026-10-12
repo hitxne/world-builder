@@ -22,3 +22,10 @@
 - Export metadata-only game diagnostics without uploading installation resources.
 - Add original synthetic adapter tests and format-source/license documentation.
 - Real game assets, Unity tests and Windows execution remain unverified.
+
+## Diagnostic follow-up — unreleased
+- Recognize Sims delta-package deletion/tombstone records without rejecting the index.
+- Sample FullBuild/DeltaBuild separately and car/track ZIP groups separately.
+- Inspect standard ZIP directories for mesh names, compression and encryption metadata.
+- Report MiniZip signatures and unsupported archive formats explicitly.
+- Actual metadata guided changes; game-resource payloads and Unity tests remain unverified.
