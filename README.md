@@ -8,7 +8,7 @@ Unity/Windows validation is incomplete.
 ## Use the world/lot workflow
 
 1. Open this project in Unity 6000.6.5f1 and press Play.
-2. Click **Florida Island Test** in World Mode to create an original island, ocean,
+2. Choose **World Build > Create World > Florida Island Test** to create an original island, ocean,
    neighborhood road, editable lot, house and palms. Or Generate Island with your
    own dimensions/seed and build from an empty world.
 3. Sculpt terrain with Raise/Lower/Smooth/Flatten, and paint Sand/Grass.
@@ -68,3 +68,9 @@ files are included. See [game adapter status](docs/GAME-ASSET-ADAPTERS.md).
 
 Primary eventual game export: original Assetto Corsa (2014); GTA V second;
 CarX Street experimental. Generic OBJ export is not a complete Assetto Corsa track.
+
+Workspace controls: **Layout** resizes panels and restores defaults. **Scene** and
+**Properties** toggle panels; narrow windows open them as temporary drawers.
+Hierarchy **Search** filters names. Catalog category changes cancel the previous
+tool; **Cancel Tool** and Escape are available. Camera offers Top/Front/Side views.
+See [directive audit](docs/DIRECTIVE-AUDIT.md) for current acceptance status.

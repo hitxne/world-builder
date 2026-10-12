@@ -18,6 +18,12 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
     Image workImage, referenceImage;
     Label statusLabel, titleLabel;
     Button undoButton, redoButton;
+    VisualElement sceneDock;
+    ScrollView catalogDock;
+    string hierarchyQuery="";
+    bool sceneVisible=true, propertiesVisible=true, sceneDrawer, propertiesDrawer;
+    float sceneWidth=220, propertiesWidth=255, catalogHeight=240;
+    Button sceneToggle, propertiesToggle;
     readonly WorkspaceHistory history = new WorkspaceHistory();
     string projectPath = "", title = "Untitled world", savedState = "";
     int theme;
@@ -93,26 +99,40 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
         Button(top,"Save",()=>Save(false));
         undoButton = Button(top,"Undo",Undo); redoButton = Button(top,"Redo",Redo);
         Button(top,"Theme",()=>{theme=(theme+1)%3;ApplyTheme();PlayerPrefs.SetInt("worldbuilder.theme",theme);PlayerPrefs.Save();});
+        Button(top,"Layout",OpenLayoutSettings);
         var navigation = Row(root,"mode-navigation"); navigation.name="mode-navigation";
         var body = Row(root, "body");
-        var left = new VisualElement(); left.AddToClassList("sidebar"); body.Add(left);
+        var left = new VisualElement(); left.AddToClassList("sidebar"); body.Add(left); sceneDock=left;
         Label(left,"SCENE OBJECTS","section");
+        var search=new TextField("Search"); left.Add(search);
+        search.RegisterValueChangedCallback(e=>{hierarchyQuery=e.newValue??"";Refresh();});
         hierarchy = new ScrollView(); hierarchy.AddToClassList("dock-scroll"); left.Add(hierarchy);
         var center = new VisualElement(); center.AddToClassList("center"); body.Add(center);
         var tools = Row(center, "toolbar");
-        Button(tools,"Scene",()=>left.style.display=left.style.display.value==DisplayStyle.None?DisplayStyle.Flex:DisplayStyle.None);
-        Button(tools,"Properties",()=>inspector.style.display=inspector.style.display.value==DisplayStyle.None?DisplayStyle.Flex:DisplayStyle.None);
+        sceneToggle=Button(tools,"Scene",()=>{if(root.contentRect.width<760){sceneDrawer=!sceneDrawer;propertiesDrawer=false;}else{sceneVisible=!sceneVisible;SaveLayout();}ApplyLayout();});
+        propertiesToggle=Button(tools,"Properties",()=>{if(root.contentRect.width<1060){propertiesDrawer=!propertiesDrawer;sceneDrawer=false;}else{propertiesVisible=!propertiesVisible;SaveLayout();}ApplyLayout();});
         Button(tools, "Frame Selected", FrameSelected);
         Button(tools, "Frame All", FrameAll);
         Button(tools, "Duplicate", Duplicate); Button(tools, "Delete", Delete);
-        Button(tools, "Perspective / Ortho", () => { workCamera.orthographic = !workCamera.orthographic; workCamera.orthographicSize = workDistance * 0.4f; });
+        Button(tools,"Camera",()=>Dialog("Camera views","Choose the editable viewport orientation.",box=>{
+            Button(box,"Perspective",()=>{workCamera.orthographic=false;CloseDialog();});
+            Button(box,"Top",()=>SetCameraView(new Vector2(89,0)));
+            Button(box,"Front",()=>SetCameraView(new Vector2(0,0)));
+            Button(box,"Side",()=>SetCameraView(new Vector2(0,90)));Button(box,"Close",CloseDialog);
+        }));
         var views = Row(center, "views");
         referenceImage = View(views, "REFERENCE — read only", referenceTexture, false);
         workImage = View(views, "EDITABLE SCENE", workTexture, true);
         Label(center, "Left click: select   •   Right drag: orbit   •   Middle drag: pan   •   Wheel: zoom", "hint");
         inspector = new ScrollView(); inspector.AddToClassList("inspector"); body.Add(inspector);
-        var catalog = new ScrollView(); catalog.name="construction-catalog"; catalog.AddToClassList("catalog"); root.Add(catalog);
+        var catalog = new ScrollView(); catalog.name="construction-catalog"; catalog.AddToClassList("catalog"); root.Add(catalog); catalogDock=catalog;
         statusLabel = Label(root, "Ready. Create objects or import a Blender OBJ.", "status");
+        sceneVisible=PlayerPrefs.GetInt("worldbuilder.layout.scene",1)!=0;
+        propertiesVisible=PlayerPrefs.GetInt("worldbuilder.layout.properties",1)!=0;
+        sceneWidth=PlayerPrefs.GetFloat("worldbuilder.layout.sceneWidth",220);
+        propertiesWidth=PlayerPrefs.GetFloat("worldbuilder.layout.propertiesWidth",255);
+        catalogHeight=PlayerPrefs.GetFloat("worldbuilder.layout.catalogHeight",240);
+        root.RegisterCallback<GeometryChangedEvent>(e=>ApplyLayout());ApplyLayout();
         root.RegisterCallback<KeyDownEvent>(e => {
             if (modal != null || e.target is TextField || e.target is FloatField || e.target is TextElement) return;
             if (e.ctrlKey && e.keyCode == KeyCode.S) { Save(false); e.StopPropagation(); }
@@ -121,6 +141,52 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
             if (e.keyCode == KeyCode.F) FrameSelected();
             if(e.keyCode==KeyCode.Return) FinishRoad();
             if(e.keyCode==KeyCode.Escape) CancelConstruction();
+        });
+    }
+    void SetCameraView(Vector2 angles)
+    {
+        workAngles=angles;workCamera.orthographic=true;workCamera.orthographicSize=workDistance*0.4f;CloseDialog();
+    }
+    void SaveLayout()
+    {
+        PlayerPrefs.SetInt("worldbuilder.layout.scene",sceneVisible?1:0);PlayerPrefs.SetInt("worldbuilder.layout.properties",propertiesVisible?1:0);
+        PlayerPrefs.SetFloat("worldbuilder.layout.sceneWidth",sceneWidth);PlayerPrefs.SetFloat("worldbuilder.layout.propertiesWidth",propertiesWidth);
+        PlayerPrefs.SetFloat("worldbuilder.layout.catalogHeight",catalogHeight);PlayerPrefs.Save();
+    }
+    void ApplyLayout()
+    {
+        if(sceneDock==null||inspector==null||catalogDock==null)return;
+        float width=root.contentRect.width,height=root.contentRect.height;
+        bool narrowScene=width>0&&width<760,narrowProperties=width>0&&width<1060;
+        bool showScene=narrowScene?sceneDrawer:sceneVisible,showProperties=narrowProperties?propertiesDrawer:propertiesVisible;
+        sceneDock.style.position=narrowScene?Position.Absolute:Position.Relative;
+        sceneDock.style.left=narrowScene?new StyleLength(0):new StyleLength(StyleKeyword.Auto);
+        sceneDock.style.top=narrowScene?new StyleLength(0):new StyleLength(StyleKeyword.Auto);
+        sceneDock.style.bottom=narrowScene?new StyleLength(0):new StyleLength(StyleKeyword.Auto);
+        inspector.style.position=narrowProperties?Position.Absolute:Position.Relative;
+        inspector.style.right=narrowProperties?new StyleLength(0):new StyleLength(StyleKeyword.Auto);
+        inspector.style.top=narrowProperties?new StyleLength(0):new StyleLength(StyleKeyword.Auto);
+        inspector.style.bottom=narrowProperties?new StyleLength(0):new StyleLength(StyleKeyword.Auto);
+        if(narrowScene&&showScene&&sceneDock.parent.IndexOf(sceneDock)!=sceneDock.parent.childCount-1)sceneDock.BringToFront();
+        else if(!narrowScene&&sceneDock.parent.IndexOf(sceneDock)!=0)sceneDock.parent.Insert(0,sceneDock);
+        if(showProperties&&inspector.parent.IndexOf(inspector)!=inspector.parent.childCount-1)inspector.BringToFront();
+        sceneDock.style.display=showScene?DisplayStyle.Flex:DisplayStyle.None;
+        inspector.style.display=showProperties?DisplayStyle.Flex:DisplayStyle.None;
+        sceneDock.style.width=Mathf.Clamp(sceneWidth,180,320);inspector.style.width=Mathf.Clamp(propertiesWidth,220,360);
+        catalogDock.style.height=height>0?Mathf.Min(catalogHeight,Mathf.Max(120,height*0.32f)):catalogHeight;
+        sceneToggle.EnableInClassList("selected",showScene);propertiesToggle.EnableInClassList("selected",showProperties);
+        sceneToggle.SetEnabled(true);propertiesToggle.SetEnabled(true);
+        sceneToggle.tooltip="Show or hide scene hierarchy. Opens a temporary drawer in narrow windows.";
+        propertiesToggle.tooltip="Show or hide properties. Opens a temporary drawer in narrow windows.";
+    }
+    void OpenLayoutSettings()
+    {
+        Dialog("Workspace layout","Sizes and panel visibility are remembered between launches. Narrow windows temporarily collapse side panels.",box=>{
+            Number(box,"Scene width",sceneWidth,180,320,v=>{sceneWidth=v;SaveLayout();ApplyLayout();});
+            Number(box,"Properties width",propertiesWidth,220,360,v=>{propertiesWidth=v;SaveLayout();ApplyLayout();});
+            Number(box,"Catalog height",catalogHeight,120,320,v=>{catalogHeight=v;SaveLayout();ApplyLayout();});
+            Button(box,"Restore Default Layout",()=>{sceneVisible=propertiesVisible=true;sceneDrawer=propertiesDrawer=false;sceneWidth=220;propertiesWidth=255;catalogHeight=240;SaveLayout();ApplyLayout();CloseDialog();});
+            Button(box,"Close",CloseDialog);
         });
     }
     Image View(VisualElement parent, string titleText, RenderTexture texture, bool editable)
@@ -369,7 +435,11 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
         undoButton.SetEnabled(history.CanUndo); redoButton.SetEnabled(history.CanRedo);
         hierarchy.Clear();
         foreach (var identity in world.GetComponentsInChildren<WorkspaceIdentity>()) {
-            var go = identity.gameObject; var button = Button(hierarchy, go.name, () => { selected = go; Refresh(); });
+            var go = identity.gameObject;
+            if(hierarchyQuery.Length>0 && go.name.IndexOf(hierarchyQuery,StringComparison.OrdinalIgnoreCase)<0)continue;
+            var button = Button(hierarchy, go.name, () => { selected = go; Refresh(); });
+            int depth=0;for(var ancestor=go.transform.parent;ancestor!=null&&ancestor!=world;ancestor=ancestor.parent)depth++;
+            button.style.marginLeft=3+depth*12;
             if (go == selected) button.AddToClassList("selected");
         }
         inspector.Clear(); Label(inspector, "PROPERTIES", "section");
@@ -641,7 +711,7 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
     }
     Button Button(VisualElement parent, string text, Action action)
     {
-        var button = new Button(() => Try(action)) { text = text }; parent.Add(button); return button;
+        var button = new Button(() => Try(action)) { text = text, tooltip = text }; parent.Add(button); return button;
     }
     void Try(Action action) { try { action(); } catch (Exception e) { Status(e.Message); Debug.LogException(e); Refresh(); } }
     void Status(string text) { if (statusLabel != null) statusLabel.text = text; }

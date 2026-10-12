@@ -50,7 +50,7 @@ public sealed partial class WorldBuilderRuntime
     }
     void SetMode(string mode)
     {
-        CancelConstruction();workspaceMode=mode;toolCategory=mode=="World"?"Terrain":mode=="Lot"?"Structure":"Models";
+        CancelConstruction();workspaceMode=mode;toolCategory=mode=="World"?(world.childCount==0?"Create World":"Terrain"):mode=="Lot"?"Structure":"Models";
         referencePane.style.display=mode=="Asset"?DisplayStyle.Flex:DisplayStyle.None;
         referenceCamera.enabled=mode=="Asset";
         if(mode=="Lot"&&activeLot!=null){selected=activeLot;FrameSelected();}
@@ -71,7 +71,7 @@ public sealed partial class WorldBuilderRuntime
         constructionPanel.Clear();toolButtons.Clear();
         var categories=Row(constructionPanel,"catalog-tabs");
         string[] names=workspaceMode=="World"?new[]{"Terrain","Roads","Lots","Scenery","Create World"}:workspaceMode=="Lot"?new[]{"Structure","Openings","Floors","Furnish"}:new[]{"Models"};
-        foreach(var category in names){var c=category;var button=Button(categories,c,()=>{toolCategory=c;BuildConstructionPanel();});if(c==toolCategory)button.AddToClassList("selected");}
+        foreach(var category in names){var c=category;var button=Button(categories,c,()=>{CancelConstruction();toolCategory=c;BuildConstructionPanel();});if(c==toolCategory)button.AddToClassList("selected");}
         var content=Row(constructionPanel,"catalog-content");
         var choices=new VisualElement();choices.AddToClassList("catalog-choices");content.Add(choices);
         var settings=new VisualElement();settings.AddToClassList("catalog-settings");content.Add(settings);
@@ -99,11 +99,12 @@ public sealed partial class WorldBuilderRuntime
             Button(choices,"Cube",()=>AddPrimitive(PrimitiveType.Cube,"Cube"));Button(choices,"Plane",()=>AddPrimitive(PrimitiveType.Plane,"Plane"));Button(choices,"Sphere",()=>AddPrimitive(PrimitiveType.Sphere,"Sphere"));Button(choices,"Cylinder",()=>AddPrimitive(PrimitiveType.Cylinder,"Cylinder"));
         }
         Number(settings,"Grid (meters)",gridSize,0.25f,5,v=>gridSize=v);
+        Button(settings,"Cancel Tool",()=>{CancelConstruction();Status("Tool cancelled.");});
         toolStatus=Label(constructionPanel,"","hint");RefreshWorldTools();
     }
     void ToolChoice(VisualElement parent,string label,string tool){toolButtons[tool]=Button(parent,label,()=>SetTool(tool));}
     void SetTool(string tool){CancelConstruction();constructionTool=tool;RefreshWorldTools();Status(ToolInstruction());}
-    void CancelConstruction(){stroke=false;firstCorner=null;roadPoints.Clear();constructionTool="select";RefreshWorldTools();}
+    void CancelConstruction(){ConstructionPointerUp();firstCorner=null;roadPoints.Clear();constructionTool="select";RefreshWorldTools();}
     string ToolInstruction()
     {
         if(constructionTool=="road")return "Click terrain to add road points, then Finish Road or Enter. Escape cancels.";
