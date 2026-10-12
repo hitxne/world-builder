@@ -40,7 +40,7 @@ public sealed partial class WorldBuilderRuntime
     }
     void PreparePlacementPreview()
     {
-        string key=pendingCopySource!=null?"copy:"+pendingCopySource.GetInstanceID():pendingLibraryPath;
+        string key=pendingCopySource!=null?"copy:"+pendingCopySource.GetComponent<WorkspaceIdentity>()?.id:pendingLibraryPath;
         if(key==previewKey)return;ClearPlacementPreview();previewKey=key;
         placementPreview=new GameObject("Placement preview — transient").transform;
         try {
