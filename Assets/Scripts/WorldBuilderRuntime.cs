@@ -81,6 +81,8 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
     void BuildUI()
     {
         panel = ScriptableObject.CreateInstance<PanelSettings>();
+        panel.themeStyleSheet = Resources.Load<ThemeStyleSheet>("WorldBuilderRuntimeTheme");
+        if(panel.themeStyleSheet==null)throw new InvalidOperationException("World Builder runtime theme is missing. Let Unity finish importing the project, then restart Play. The Windows build must include WorldBuilderRuntimeTheme.tss.");
         panel.scaleMode = PanelScaleMode.ConstantPixelSize;
         panel.referenceResolution = new Vector2Int(1440, 900);
         ui = gameObject.AddComponent<UIDocument>(); ui.panelSettings = panel;

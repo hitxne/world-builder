@@ -88,3 +88,10 @@ Validation: source configuration/GUID/input checks, C# syntax parsing and whites
 - Persist the Follow terrain road setting; uncovered spans retain generated geometry.
 - Add regression cases for raising/lowering between control points, surface offsets and uncovered spans. Unity integration remains unverified.
 - Actual C# geometry/container harness passed 41,541 geometry assertions; Unity runtime validation remains pending.
+
+## 2026-10-12 — runtime base theme correction
+
+- Generate/import a runtime TSS inheriting unity-theme://default through the canonical resource preparation service.
+- Assign it to PanelSettings before UIDocument initialization; retain Workspace.uss as the shared application theme layer.
+- Build resource preparation validates theme import and retains it through Resources in the Windows player.
+- Source checks pass; Unity theme import/rendering still needs local verification.
