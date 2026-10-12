@@ -57,6 +57,7 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
         InitializeWorldTools();
         history.Reset(State()); savedState = State(); Refresh();
         Application.wantsToQuit += WantsToQuit;
+        _ = UpgradeSavedSimsLibrary();
     }
     Camera CameraFor(string name, int layer, out RenderTexture texture)
     {
@@ -257,7 +258,7 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
             workAngles.x = Mathf.Clamp(workAngles.x, -89, 89); referenceAngles.x = Mathf.Clamp(referenceAngles.x, -89, 89);
         });
         image.RegisterCallback<PointerUpEvent>(e => { if (editable) {EndObjectGesture(false);ConstructionPointerUp();} drag = -1; image.ReleasePointer(e.pointerId); });
-        image.RegisterCallback<PointerCaptureOutEvent>(e => { drag = -1; if(editable) {EndObjectGesture(false);ConstructionPointerUp();} });
+        image.RegisterCallback<PointerCaptureOutEvent>(e => { drag = -1; if(editable) {EndObjectGesture(false);ConstructionPointerUp(true);} });
         image.RegisterCallback<WheelEvent>(e => {
             if (modal != null) return;
             if (editable) { workDistance = Mathf.Clamp(workDistance * Mathf.Exp(e.delta.y * 0.08f), 0.25f, 10000); workCamera.orthographicSize = workDistance * 0.4f; }
@@ -302,6 +303,7 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
             data.vertices=derived.vertices;data.uv=derived.uv;data.triangles=derived.triangles;data.submeshes=derived.submeshes;data.normals=null;
             if(data.materialColors==null)data.materialColors=derived.materialColors;
         }
+        SyncSimsLibraryAppearance(data);
         Mesh mesh = data.CreateMesh();
         var go = new GameObject(data.name); go.transform.SetParent(parent, false); go.layer = layer;
         var identity = go.AddComponent<WorkspaceIdentity>(); identity.ownedMesh = mesh;
@@ -311,11 +313,12 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
         identity.ownedMaterials = new Material[colors.Length];
         for(int i=0;i<colors.Length;i++) {
             var material=identity.ownedMaterials[i]=Material(colors[i]);
+            if(data.materialNames!=null&&i<data.materialNames.Length)material.name=data.materialNames[i];
             if(data.metallic!=null&&i<data.metallic.Length&&material.HasProperty("_Metallic"))material.SetFloat("_Metallic",Mathf.Clamp01(data.metallic[i]));
             if(data.smoothness!=null&&i<data.smoothness.Length&&material.HasProperty("_Smoothness"))material.SetFloat("_Smoothness",Mathf.Clamp01(data.smoothness[i]));
         }
         identity.ownedMaterial=identity.ownedMaterials[0];
-        identity.construction=data.construction; identity.libraryId=data.libraryId; identity.albedo=data.albedo;
+        identity.construction=data.construction; identity.libraryId=data.libraryId; identity.albedo=data.albedo;identity.sourceAppearance=data.sourceAppearance;identity.appearanceFingerprint=data.appearanceFingerprint;
         if(data.albedo!=null) {
             identity.ownedTextures=new Texture2D[data.albedo.Length];
             for(int i=0;i<data.albedo.Length&&i<identity.ownedMaterials.Length;i++)if(data.albedo[i]!=null) {
@@ -324,6 +327,12 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
                 if(!texture.LoadImage(bytes)||texture.width>8192||texture.height>8192)throw new FormatException("Unsupported or oversized texture image.");
                 var material=identity.ownedMaterials[i];
                 if(material.HasProperty("_BaseColorMap"))material.SetTexture("_BaseColorMap",texture);else material.mainTexture=texture;
+                if(data.sourceAppearance!=null) {
+                    material.EnableKeyword("_ALPHATEST_ON");material.SetOverrideTag("RenderType","TransparentCutout");material.renderQueue=2450;
+                    foreach(string property in new[]{"_AlphaClip","_AlphaCutoffEnable"})if(material.HasProperty(property))material.SetFloat(property,1);
+                    foreach(string property in new[]{"_Cutoff","_AlphaCutoff"})if(material.HasProperty(property))material.SetFloat(property,0.5f);
+                    if(material.HasProperty("_Mode"))material.SetFloat("_Mode",1);
+                }
             }
         }
         go.AddComponent<MeshRenderer>().sharedMaterials = identity.ownedMaterials;
@@ -769,6 +778,7 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
         if (displayCamera != null) Destroy(displayCamera.gameObject);
         if (workTexture != null) { workTexture.Release(); Destroy(workTexture); }
         if (referenceTexture != null) { referenceTexture.Release(); Destroy(referenceTexture); }
+        ClearRoadDragPreview();
         if (ui != null) Destroy(ui); if (panel != null) Destroy(panel);
     }
 }

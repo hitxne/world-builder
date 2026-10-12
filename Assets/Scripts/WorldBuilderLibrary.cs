@@ -75,20 +75,20 @@ public sealed partial class WorldBuilderRuntime
             _ = ExtractAndImportSims(installation,progress);
         });
     }
-    async Task ExtractAndImportSims(string installation,Label progress)
+    async Task<bool> ExtractAndImportSims(string installation,Label progress)
     {
         libraryImportRunning=true;cancelLibraryImport=false;
         string output=Path.Combine(Application.persistentDataPath,"SimsExports");
         var messages=new ConcurrentQueue<string>();bool ready=false;
         try {
             var extraction=Task.Run(()=>SimsBatchExporter.Run(installation,output,message=>messages.Enqueue(message),()=>cancelLibraryImport));
-            while(!extraction.IsCompleted){if(this==null){cancelLibraryImport=true;break;}while(messages.TryDequeue(out string message))progress.text=message;await Task.Delay(100);}
+            while(!extraction.IsCompleted){if(this==null){cancelLibraryImport=true;break;}while(messages.TryDequeue(out string message)){progress.text=message;if(progress.panel==null)Status(message);}await Task.Delay(100);}
             int code=await extraction;
             if(this!=null&&!cancelLibraryImport&&code!=130){progress.text="Adding exported objects to the library…";ready=true;}
             else if(this!=null)progress.text="Cancelled. Completed exports remain for the next run.";
         } catch(Exception error){if(this!=null){progress.text="Sims import stopped: "+error.Message;Status(progress.text);}}
         finally {libraryImportRunning=false;}
-        if(ready){await ImportSimsExports(output,progress);if(this!=null)Status("Sims asset job finished. Open Local Library; unsupported formats and missing materials remain reported.");}
+        if(ready)return await ImportSimsExports(output,progress);return false;
     }
     void OpenSimsExportImport()
     {
@@ -106,11 +106,11 @@ public sealed partial class WorldBuilderRuntime
             Button(box,"Close",()=>{cancelLibraryImport=true;CloseDialog();});
         });
     }
-    async Task ImportSimsExports(string folder,Label progress)
+    async Task<bool> ImportSimsExports(string folder,Label progress)
     {
-        if(libraryImportRunning)return;
+        if(libraryImportRunning)return false;
         libraryImportRunning=true;cancelLibraryImport=false;
-        var report=new StringBuilder();int imported=0,skipped=0,failed=0;
+        var report=new StringBuilder();int imported=0,skipped=0,failed=0,updated=0;
         try {
             folder=Path.GetFullPath(folder);if(!Directory.Exists(folder))throw new DirectoryNotFoundException("Export folder does not exist.");
             PlayerPrefs.SetString("worldbuilder.simsExportFolder",folder);PlayerPrefs.Save();Directory.CreateDirectory(LibraryFolder);
@@ -123,27 +123,29 @@ public sealed partial class WorldBuilderRuntime
                 try {
                     string id;using(var hash=SHA256.Create())id=BitConverter.ToString(hash.ComputeHash(Encoding.UTF8.GetBytes(Path.GetFullPath(file).ToUpperInvariant()))).Replace("-","").ToLowerInvariant();
                     string target=Path.Combine(LibraryFolder,id+".wbworld");
-                    if(File.Exists(target)){RefreshSimsCatalog(target,file);skipped++;progress.text="Imported "+imported+" • skipped "+skipped+" • failed "+failed+" / "+files.Length;await Task.Yield();continue;}
+                    if(File.Exists(target)){if(UpgradeSimsAppearance(target,file))updated++;RefreshSimsCatalog(target,file);skipped++;progress.text="Imported "+imported+" • updated "+updated+" • skipped "+skipped+" • failed "+failed+" / "+files.Length;await Task.Yield();continue;}
                     if(new FileInfo(file).Length>32*1024*1024)throw new IOException("OBJ exceeds 32 MB import limit.");
                     var item=WorkspaceObjMaterials.Import(file,out string warning);
                     using(var header=new StreamReader(file))if((header.ReadLine()??"").StartsWith("# Sims object MLOD geometry only:",StringComparison.Ordinal))warning="Geometry only: Sims UVs, materials and textures were not decoded. "+warning;
+                    AttachSimsAppearance(item,file);warning=AppearanceWarning(item,warning);
                     item.id=Guid.NewGuid().ToString("N");item.libraryId=id;item.parentId=null;item.position=Vector3.zero;
                     string name="The Sims 4 / "+Path.GetRelativePath(folder,file);item.name=Path.GetFileNameWithoutExtension(file);
                     new WorkspaceDocument{title=name,objects=new List<WorkspaceProject>{item}}.Save(target);
                     WriteLibraryMetadata(target,name,file,warning);RefreshSimsCatalog(target,file);imported++;
                     if(!string.IsNullOrEmpty(warning))report.AppendLine("WARNING: "+file+" — "+warning);
                 } catch(Exception error){failed++;report.AppendLine("FAILED: "+file+" — "+error.Message);}
-                progress.text="Imported "+imported+" • skipped "+skipped+" • failed "+failed+" / "+files.Length;
+                progress.text="Imported "+imported+" • updated "+updated+" • skipped "+skipped+" • failed "+failed+" / "+files.Length;
                 await Task.Yield();
             }
-            if(this!=null){string summary=(cancelLibraryImport?"Cancelled. ":"Finished. ")+"Imported "+imported+", skipped "+skipped+", failed "+failed+".";progress.text=summary;report.Insert(0,summary+Environment.NewLine);WorkspaceAtomicFile.Write(Path.Combine(LibraryFolder,"Sims-import-report.txt"),report.ToString());Status(summary+" Open Local Library; browse by room or type.");}
-        } catch(Exception error){if(this!=null){progress.text="Import stopped: "+error.Message;Status(progress.text);}}
+            if(this!=null){RefreshPlacedSimsAppearance();BuildConstructionPanel();string summary=(cancelLibraryImport?"Cancelled. ":"Finished. ")+"Imported "+imported+", updated "+updated+", skipped "+skipped+", failed "+failed+".";progress.text=summary;report.Insert(0,summary+Environment.NewLine);WorkspaceAtomicFile.Write(Path.Combine(LibraryFolder,"Sims-import-report.txt"),report.ToString());Status(summary+" Open Local Library; browse by room or type.");}
+        } catch(Exception error){failed++;if(this!=null){progress.text="Import stopped: "+error.Message;Status(progress.text);}}
         finally {libraryImportRunning=false;}
+        return !cancelLibraryImport&&failed==0;
     }
     void BeginLibraryPlacement(string path)
     {
         CancelConstruction();
-        if(workspaceMode=="Asset")SetMode("World");
+        if(workspaceMode=="Asset"){SetMode("World");toolCategory="Objects";BuildConstructionPanel();}
         pendingLibraryPath=path;CloseDialog();RefreshWorldTools();Status(ToolInstruction());
     }
     void PlaceLibrary(string path,Vector3 position)

@@ -24,7 +24,8 @@ public static class SimsBatchExporter
     {
         if(value==null)return "null";if(value is string)return Quote((string)value);if(value is bool)return (bool)value?"true":"false";
         if(value is System.Collections.IEnumerable sequence){var items=new List<string>();foreach(var item in sequence)items.Add(Encode(item));return "["+string.Join(",",items)+"]";}
-        return Convert.ToString(value,CultureInfo.InvariantCulture);
+        if(value.GetType().IsPrimitive||value is decimal)return Convert.ToString(value,CultureInfo.InvariantCulture);
+        return Json(value);
     }
     static string Json(object row)
     {
@@ -33,6 +34,7 @@ public static class SimsBatchExporter
             var value=property.GetValue(row);string encoded=Encode(value);
             properties.Add(Quote(property.Name)+":"+encoded);
         }
+        foreach(var field in row.GetType().GetFields())properties.Add(Quote(field.Name)+":"+Encode(field.GetValue(row)));
         return "{"+string.Join(",",properties)+"}";
     }
     public static string InstallationFromExe(string executable)
@@ -48,21 +50,59 @@ public static class SimsBatchExporter
     }
     static string Key(uint type,uint group,ulong instance)=>$"{type:X8}:{group:X8}:{instance:X16}";
     static string Number(float value){if(float.IsNaN(value)||float.IsInfinity(value))throw new FormatException("Non-finite vertex");return value.ToString("R",CultureInfo.InvariantCulture);}
-    static void WriteObj(string path,List<SimsDecodedMesh> meshes)
+    static void WriteObj(string path,List<SimsDecodedMesh> meshes,string materialFile=null)
     {
         string temp=path+"."+Guid.NewGuid().ToString("N")+".tmp";
         try {
             using(var writer=new StreamWriter(temp,false,new UTF8Encoding(false))) {
-                writer.WriteLine("# Sims object MLOD geometry only: UVs, materials and textures are not decoded.");int offset=1;
+                writer.WriteLine("# Sims MLOD appearance export v2; unsupported appearance is reported.");if(materialFile!=null)writer.WriteLine("mtllib "+materialFile);int offset=1,uvOffset=1,normalOffset=1,part=0;
                 foreach(var mesh in meshes) {
-                    writer.WriteLine("o "+mesh.id.Replace(':','_'));
+                    writer.WriteLine("o "+mesh.id.Replace(':','_'));writer.WriteLine("usemtl sims_part_"+part++);
                     foreach(var v in mesh.vertices)writer.WriteLine("v "+Number(v.x)+" "+Number(v.y)+" "+Number(v.z));
-                    for(int i=0;i<mesh.triangles.Length;i+=3)writer.WriteLine($"f {offset+mesh.triangles[i]} {offset+mesh.triangles[i+1]} {offset+mesh.triangles[i+2]}");
+                    if(mesh.hasUv)foreach(var uv in mesh.uv)writer.WriteLine("vt "+Number(uv.x)+" "+Number(1-uv.y));
+                    if(mesh.normals!=null)foreach(var n in mesh.normals)writer.WriteLine("vn "+Number(n.x)+" "+Number(n.y)+" "+Number(n.z));
+                    string Corner(int index)=>Number(offset+index)+(mesh.hasUv||mesh.normals!=null?"/"+(mesh.hasUv?(uvOffset+index).ToString(CultureInfo.InvariantCulture):"")+(mesh.normals!=null?"/"+(normalOffset+index).ToString(CultureInfo.InvariantCulture):""):"");
+                    for(int i=0;i<mesh.triangles.Length;i+=3)writer.WriteLine("f "+Corner(mesh.triangles[i])+" "+Corner(mesh.triangles[i+1])+" "+Corner(mesh.triangles[i+2]));
+                    if(mesh.hasUv)uvOffset+=mesh.vertices.Length;if(mesh.normals!=null)normalOffset+=mesh.vertices.Length;
                     offset+=mesh.vertices.Length;
                 }
             }
-            File.Move(temp,path);
+            if(File.Exists(path))File.Replace(temp,path,null);else File.Move(temp,path);
         } finally {if(File.Exists(temp))File.Delete(temp);}
+    }
+    static void Atomic(string path,byte[] bytes)
+    {
+        string temp=path+"."+Guid.NewGuid().ToString("N")+".tmp";
+        try {File.WriteAllBytes(temp,bytes);if(File.Exists(path))File.Replace(temp,path,null);else File.Move(temp,path);}finally{if(File.Exists(temp))File.Delete(temp);}
+    }
+    static string Hash(byte[] bytes){using(var sha=SHA256.Create())return BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-","").ToLowerInvariant();}
+    static bool Upgraded(string file){using(var r=new StreamReader(file))return r.ReadLine()=="# Sims MLOD appearance export v2; unsupported appearance is reported.";}
+    static bool WriteAppearance(string file,List<SimsDecodedMesh> meshes,Func<uint,uint,ulong,byte[]> resolve,byte[] source,Action<object> log)
+    {
+        string folder=file+".appearance";Directory.CreateDirectory(folder);Atomic(Path.Combine(folder,"source.mlod.bin"),source);
+        var materialRows=new List<object>();var mtl=new StringBuilder("# Supported Sims diffuse appearance; original shader data retained in sidecar\n");bool textured=false;
+        for(int i=0;i<meshes.Count;i++) {
+            var mesh=meshes[i];var material=mesh.material;string name="sims_part_"+i;
+            mtl.Append("newmtl ").Append(name).Append("\nKd ").Append(material==null?"0.65 0.72 0.78":string.Join(" ",material.color.Select(Number))).Append("\nd 1\n");
+            if(!string.IsNullOrEmpty(mesh.appearanceWarning))log(new{status="appearance-unresolved",output=file,part=i,error=mesh.appearanceWarning});
+            if(material==null){materialRows.Add(new{name,shader=0u,rawMaterial=(string)null,maps=new object[0]});continue;}
+            string rawMaterial="material_"+i+".bin";Atomic(Path.Combine(folder,rawMaterial),material.original);var maps=new List<object>();
+            foreach(var map in material.maps) {
+                string rawTexture=map.Key.Replace(':','_')+".bin",converted=null,error=null,sha256=null;
+                try {
+                    byte[] bytes=resolve(map.type,map.group,map.instance);sha256=Hash(bytes);Atomic(Path.Combine(folder,rawTexture),bytes);
+                    try {converted=map.Key.Replace(':','_')+".png";Atomic(Path.Combine(folder,converted),SimsTextureReader.Png(bytes));}
+                    catch(Exception conversion){converted=null;error=conversion.Message;}
+                    if(map.semantic==0x6CC0FD85&&converted!=null&&mesh.hasUv){mtl.Append("map_Kd ").Append(Path.GetFileName(folder)).Append('/').Append(converted).Append('\n');textured=true;}
+                }catch(Exception missing){rawTexture=null;error=missing.Message;}
+                if(error!=null)log(new{status="texture-unresolved",output=file,part=i,key=map.Key,error});
+                maps.Add(new{semantic=map.semantic,key=map.Key,rawTexture,converted,error,sha256});
+            }
+            materialRows.Add(new{name,material.shader,color=material.color,uvScale=material.uvScale,rawMaterial,maps,warning=material.warning});
+        }
+        Atomic(Path.ChangeExtension(file,".mtl"),Encoding.UTF8.GetBytes(mtl.ToString()));
+        string manifest=Json(new{version=2,materials=materialRows,source="source.mlod.bin",sourceHash=Hash(source),limitations="Default material state and UV0 diffuse approximation; original shader records/maps retained"});
+        Atomic(file+".appearance.json",Encoding.UTF8.GetBytes(manifest));return textured;
     }
     public static int Run(string input,string output,Action<string> progress=null,Func<bool> isCancelled=null)
     {
@@ -86,20 +126,22 @@ public static class SimsBatchExporter
                     }
                 }catch(Exception error){packageFailures++;Log(new{status="package-error",source=path,error=error.Message});}
             }
-            byte[] Resolve(uint type,uint group,ulong instance){
-                string key=Key(type,group,instance);
-                if(!resources.TryGetValue(key,out var matches))throw new NotSupportedException("Missing cross-package dependency "+key);
-                if(matches.Count!=1)throw new NotSupportedException("Ambiguous cross-package dependency "+key+"; patch precedence not yet validated");
-                return matches[0].package.Read(matches[0].entry);
+            var canonical=new Dictionary<string,(SimsPackage package,SimsPackage.Entry entry)>();
+            (SimsPackage package,SimsPackage.Entry entry) Canonical(string key) {
+                if(canonical.TryGetValue(key,out var known))return known;
+                if(!resources.TryGetValue(key,out var matches)||matches.Count==0)throw new NotSupportedException("Missing dependency "+key);
+                if(matches.Count>1) {
+                    string expected=Hash(matches[0].package.Read(matches[0].entry));
+                    foreach(var duplicate in matches.Skip(1))if(Hash(duplicate.package.Read(duplicate.entry))!=expected)throw new NotSupportedException("Conflicting dependency "+key+"; patch precedence not validated");
+                }
+                return canonical[key]=matches[0];
             }
-            byte[] Unique(string key) {
-                if(!resources.TryGetValue(key,out var matches)||matches.Count!=1)throw new NotSupportedException("Missing or ambiguous catalog dependency "+key);
-                return matches[0].package.Read(matches[0].entry);
-            }
+            byte[] Unique(string key){var match=Canonical(key);return match.package.Read(match.entry);}
+            byte[] Resolve(uint type,uint group,ulong instance)=>Unique(Key(type,group,instance));
             var wantedNames=new HashSet<uint>();
             foreach(var catalog in resources.Values.Where(v=>v[0].entry.Type==SimsCatalogReader.Catalog)) {
                 if(Cancelled())break;
-                if(catalog.Count==1)try {wantedNames.Add(SimsCatalogReader.NameHash(catalog[0].package.Read(catalog[0].entry)));}catch(Exception){/* Catalog pass reports invalid records. */}
+                try {wantedNames.Add(SimsCatalogReader.NameHash(Unique(catalog[0].entry.Key)));}catch(Exception){/* Catalog pass reports invalid records. */}
             }
             var displayNames=new Dictionary<uint,string>();var conflictingNames=new HashSet<uint>();
             progress?.Invoke("Reading Sims object display names…");
@@ -112,15 +154,17 @@ public static class SimsBatchExporter
                 }catch(Exception error){Log(new{status="names-unresolved",key=table.entry.Key,error=error.Message});}
             }
             foreach(uint hash in conflictingNames){displayNames.Remove(hash);Log(new{status="name-conflict",hash});}
-            var definitions=resources.Values.Where(v=>v.Count==1&&v[0].entry.Type==SimsCatalogReader.Definition).Select(v=>v[0]).GroupBy(v=>v.entry.Instance).ToDictionary(g=>g.Key,g=>g.ToList());
+            var definitions=new Dictionary<ulong,List<(SimsPackage package,SimsPackage.Entry entry)>>();
+            foreach(var candidates in resources.Values.Where(v=>v[0].entry.Type==SimsCatalogReader.Definition))try {
+                var definition=Canonical(candidates[0].entry.Key);if(!definitions.TryGetValue(definition.entry.Instance,out var list))definitions[definition.entry.Instance]=list=new List<(SimsPackage,SimsPackage.Entry)>();list.Add(definition);
+            }catch(Exception error){Log(new{status="catalog-unlinked",key=candidates[0].entry.Key,error=error.Message});}
             var catalogTags=new Dictionary<string,List<uint>>();var catalogKeys=new Dictionary<string,List<string>>();var catalogNames=new Dictionary<string,string>();
             var modelCache=new Dictionary<string,List<string>>();int linked=0,catalogFailures=0;
             progress?.Invoke("Decoding Sims catalog categories…");
             foreach(var candidates in resources.Values.Where(v=>v[0].entry.Type==SimsCatalogReader.Catalog)) {
                 if(Cancelled())break;
                 try {
-                    if(candidates.Count!=1)throw new NotSupportedException("Ambiguous catalog resource; patch precedence not validated");
-                    var c=candidates[0];byte[] catalogBytes=c.package.Read(c.entry);var tags=SimsCatalogReader.Tags(catalogBytes);uint nameHash=SimsCatalogReader.NameHash(catalogBytes);
+                    var c=Canonical(candidates[0].entry.Key);byte[] catalogBytes=c.package.Read(c.entry);var tags=SimsCatalogReader.Tags(catalogBytes);uint nameHash=SimsCatalogReader.NameHash(catalogBytes);
                     if(!definitions.TryGetValue(c.entry.Instance,out var defs)||defs.Count!=1)throw new NotSupportedException("Missing or ambiguous object definition");
                     var d=defs[0];var models=SimsCatalogReader.Models(d.package.Read(d.entry),out string name);
                     if(displayNames.TryGetValue(nameHash,out string displayName)&&!string.IsNullOrWhiteSpace(displayName))name=displayName;
@@ -128,7 +172,7 @@ public static class SimsBatchExporter
                     foreach(string model in models) {
                         if(!modelCache.TryGetValue(model,out var meshes))modelCache[model]=meshes=SimsMeshReader.ModelMlodKeys(Unique(model));
                         foreach(string mesh in meshes) {
-                            if(!resources.TryGetValue(mesh,out var meshMatches)||meshMatches.Count!=1)throw new NotSupportedException("Missing or ambiguous mesh for catalog association "+mesh);
+                            Canonical(mesh);
                             if(!catalogTags.ContainsKey(mesh)){catalogTags[mesh]=new List<uint>();catalogKeys[mesh]=new List<string>();}
                             catalogTags[mesh].AddRange(tags);catalogKeys[mesh].Add(c.entry.Key);
                             if(!string.IsNullOrWhiteSpace(name)&&(!catalogNames.ContainsKey(mesh)||string.CompareOrdinal(name,catalogNames[mesh])<0))catalogNames[mesh]=name;
@@ -154,10 +198,10 @@ public static class SimsBatchExporter
                     if(Cancelled())break;
                     string file=Path.Combine(destination,entry.Key.Replace(':','_')+".obj");
                     if(entry.IsDeleted||entry.IsEmpty){skipped++;Log(new{status="empty-or-deleted",source=relative,key=entry.Key});continue;}
-                    if(File.Exists(file)){WriteCatalog(file,entry.Key);skipped++;Log(new{status="existing-output",source=relative,key=entry.Key,output=file});continue;}
+                    if(File.Exists(file)&&Upgraded(file)){WriteCatalog(file,entry.Key);skipped++;Log(new{status="existing-output",source=relative,key=entry.Key,output=file});continue;}
                     try {
-                        var meshes=SimsMeshReader.Decode(package,entry,Resolve);WriteObj(file,meshes);WriteCatalog(file,entry.Key);exported++;
-                        Log(new{status="geometry-only",source=relative,key=entry.Key,output=file,parts=meshes.Count,vertices=meshes.Sum(m=>m.vertices.Length),triangles=meshes.Sum(m=>m.triangles.Length/3),textures=false,uvs=false,catalogLinked=catalogTags.ContainsKey(entry.Key)});
+                        var meshes=SimsMeshReader.Decode(package,entry,Resolve);bool textured=WriteAppearance(file,meshes,Resolve,package.Read(entry),Log);WriteObj(file,meshes,Path.GetFileName(Path.ChangeExtension(file,".mtl")));WriteCatalog(file,entry.Key);exported++;
+                        Log(new{status=textured?"appearance-supported":"geometry-only",source=relative,key=entry.Key,output=file,parts=meshes.Count,vertices=meshes.Sum(m=>m.vertices.Length),triangles=meshes.Sum(m=>m.triangles.Length/3),textures=textured,uvs=meshes.All(m=>m.hasUv),catalogLinked=catalogTags.ContainsKey(entry.Key)});
                     }catch(Exception error){failed++;Log(new{status="unsupported-or-invalid",source=relative,key=entry.Key,error=error.Message});}
                 }
                 progress?.Invoke($"Exported {exported}, skipped {skipped}, unsupported/failed {failed} — {relative}");if(Cancelled())break;

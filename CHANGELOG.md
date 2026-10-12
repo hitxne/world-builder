@@ -161,3 +161,10 @@ Validation: source configuration/GUID/input checks, C# syntax parsing and whites
 - Refresh existing imports on the same EXE workflow without replacing geometry or asset identity; preserve manual overrides and offer automatic-label reset.
 - Expand visual filters for dining rooms, appliances, plumbing, electronics and activities.
 - Shared exporter compilation and synthetic integration checks pass; current-game coverage and Unity rendering remain unverified.
+
+## Automatic appearance upgrades and Sims-style placement — unreleased
+- Automatically migrate existing Sims imports using the saved installation; retain library IDs/manual labels and refresh thumbnails/placed appearance.
+- Decode supported UVs/normals, default MTST/MATD diffuse materials, BC1/BC2/BC3 and DST1/DST5 textures; preserve resolved original shader/texture bytes in saves and source-bundle export.
+- Replace Buy dropdown navigation with a persistent room/function rail; place directly from cards with a separate preview/details action.
+- Add road presets, drag/release road construction with terrain-conforming preview, angle/endpoint snapping, curved routes and Roadside objects.
+- Shared exporter compile/integration checks pass. Unity compilation, native rendering/gesture validation and game-format coverage remain unverified.

@@ -73,8 +73,9 @@ public sealed partial class WorldBuilderRuntime
         if(feedbackOverlay==null||workImage==null)return;feedbackPaths.Clear();feedbackValid=true;previewBadge.style.display=HasPlacement&&modal==null?DisplayStyle.Flex:DisplayStyle.None;
         if(selected!=feedbackSelection){feedbackSelection=selected;selectedRenderers=selected!=null?selected.GetComponentsInChildren<Renderer>():null;}
         if(modal==null)FeedbackBounds(selectedRenderers);
+        if(roadDrag&&modal==null){feedbackPaths.Add(new[]{roadDragStart,roadDragEnd});previewBadge.text="ROAD PREVIEW — release to build • Escape cancels";previewBadge.style.display=DisplayStyle.Flex;}else previewBadge.text="PLACEMENT PREVIEW — click to place • Escape cancels";
         if(!HasPlacement&&placementPreview!=null)ClearPlacementPreview();
-        if(modal==null&&feedbackHover&&(HasPlacement||IsBrush()||firstCorner.HasValue||constructionTool=="road")) {
+        if(modal==null&&feedbackHover&&(HasPlacement||IsBrush()||firstCorner.HasValue||constructionTool=="roadcurve")) {
             try {
                 if(Ground(feedbackPointer,out var hit,out var terrain)) {
                     if(HasPlacement) {
@@ -84,7 +85,7 @@ public sealed partial class WorldBuilderRuntime
                         for(int i=0;i<ring.Length;i++){float angle=i*Mathf.PI*2/48;var local=center+new Vector3(Mathf.Cos(angle)*brushRadius,0,Mathf.Sin(angle)*brushRadius);local.y=WorldGeometry.Height(source,local.x,local.z)+0.08f;ring[i]=terrain.transform.TransformPoint(local);}feedbackPaths.Add(ring);
                     } else {
                         var point=Snap(hit);
-                        if(constructionTool=="road"){var points=new List<Vector3>();foreach(var p in roadPoints)points.Add(V(p));points.Add(point);if(points.Count>1)feedbackPaths.Add(points.ToArray());}
+                        if(constructionTool=="roadcurve"){var points=new List<Vector3>();foreach(var p in roadPoints)points.Add(V(p));points.Add(point);if(points.Count>1)feedbackPaths.Add(points.ToArray());}
                         else if(firstCorner.HasValue){var start=firstCorner.Value;if(constructionTool=="wall")feedbackPaths.Add(new[]{start,point});else feedbackPaths.Add(new[]{start,new Vector3(point.x,start.y,start.z),point,new Vector3(start.x,point.y,point.z),start});}
                     }
                 }

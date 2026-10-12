@@ -37,3 +37,5 @@ Appearance uses the canonical three themes and persisted UI scale. Workspace con
 Configuration/GUID/input checks, C# syntax parsing and whitespace checks executed. Unity API compilation, DPI/layout checks, thumbnail rendering, input/interaction testing, setting persistence and Windows acceptance remain pending. No extra geometry harness run was needed for this UI-only increment.
 
 Manual acceptance: start empty, create/open a world, find each World category, create/select a lot, enter Lot, build and furnish, inspect an asset in the separate Assets view, return without losing the scene, change an appearance/editing setting and reopen, categorize a test asset and find it through room/type filtering, and verify Undo/cancel/Save remain reachable. Check the actual UI at small and normal desktop widths before claiming usability acceptance.
+
+The next pass replaces room/type dropdowns with a persistent room/function rail, direct card placement and a separate ⋯ preview/details action. Roads gain presets and drag/release placement with their own contextual object catalog. See SIMS-APPEARANCE-AND-ROAD-WORKFLOW.md.

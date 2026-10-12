@@ -139,3 +139,11 @@ After updating, choose **Add Sims assets** and select the EXE again to refresh
 existing imports without recreating their geometry. Multiple room/type tags are
 preserved; manual labels take precedence. Unsupported or ambiguous links remain
 unclassified and are reported. See [catalog decoding](docs/SIMS-CATALOG-DECODING.md).
+
+Existing Sims imports now upgrade automatically on startup using the saved game
+installation: names, categories, supported UVs/materials/textures and thumbnails.
+Original resolved shader/texture payloads are preserved in source snapshots.
+Buy cards place directly; ⋯ opens preview/details. World > Roads offers road
+presets and drag/release straight-road building, plus curved routes and roadside
+objects. See [appearance and road workflow](docs/SIMS-APPEARANCE-AND-ROAD-WORKFLOW.md)
+for supported formats, native validation and remaining renderer/junction limits.

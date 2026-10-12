@@ -70,3 +70,30 @@ Button.asset-tile, .catalog-choices Button.asset-tile { width: 132px; min-height
 .start-card Label { white-space: normal; }
 .narrow-layout .settings-layout { flex-direction: column; }
 .narrow-layout .settings-navigation { width: auto; flex-direction: row; flex-wrap: wrap; }
+
+/* Buy catalog: persistent room/function rail, name search and actual preview cards. */
+.catalog.buy-catalog { height: 340px; }
+.buy-catalog-header { align-items: center; flex-wrap: wrap; }
+.buy-search { flex-grow: 1; min-width: 140px; }
+.buy-search .unity-base-field__label { min-width: 48px; }
+.buy-browse-tabs Button, .catalog-choices .buy-browse-tabs Button { width: auto; min-height: 28px; padding: 5px 10px; }
+.buy-catalog-content { flex-wrap: nowrap; }
+.buy-category-rail { width: 156px; height: 230px; flex-shrink: 0; margin-right: 8px; }
+Button.buy-category-button, .catalog-choices Button.buy-category-button { flex-direction: row; align-items: center; width: 136px; min-height: 32px; padding: 4px; margin: 2px; -unity-text-align: middle-left; }
+.buy-category-button Label { flex-shrink: 1; white-space: normal; font-size: 12px; }
+.buy-category-icon { width: 28px; height: 28px; flex-shrink: 0; margin-right: 6px; color: var(--text); }
+.buy-category-button.selected .buy-category-icon { color: var(--accent); }
+.buy-results { flex-grow: 1; flex-basis: 0; min-width: 0; }
+.buy-grid-scroll { height: 194px; min-height: 120px; }
+.buy-pagination { align-items: center; }
+.buy-result-heading { flex-grow: 1; flex-shrink: 1; color: var(--muted); font-size: 12px; }
+.buy-pagination Button, .catalog-choices .buy-pagination Button { width: 28px; min-height: 26px; padding: 2px; }
+.buy-results Button.asset-tile { width: 112px; min-height: 92px; }
+.buy-results .asset-thumbnail { height: 58px; min-height: 58px; }
+.narrow-layout .buy-category-rail { width: 116px; }
+.narrow-layout Button.buy-category-button { width: 100px; }
+.road-sections, .road-presets, .road-drawing-tools { width: 100%; flex-wrap: wrap; }
+.road-presets Button { min-height: 54px; }
+.asset-card { position: relative; width: 112px; margin: 3px; }
+.buy-results .asset-card Button.asset-tile { width: 112px; margin: 0; }
+Button.asset-details, .catalog-choices Button.asset-details { position: absolute; right: 4px; top: 4px; width: 24px; min-height: 22px; height: 22px; padding: 0; margin: 0; background-color: var(--raised); }

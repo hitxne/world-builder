@@ -7,7 +7,7 @@ using UnityEngine;
 // Materials/texture bridge layered on the geometry importer. Source files are read-only.
 public static class WorkspaceObjMaterials
 {
-    sealed class Definition { public string name, texture; public Color color=Color.gray; }
+    sealed class Definition { public string name, texture; public Color color=Color.white; }
     public static WorkspaceProject Import(string path,out string warning)
     {
         warning="";var mesh=WorldBuilderObj.Load(path);
@@ -41,6 +41,8 @@ public static class WorkspaceObjMaterials
                         float r=float.Parse(parts[0],CultureInfo.InvariantCulture),g=float.Parse(parts[1],CultureInfo.InvariantCulture),b=float.Parse(parts[2],CultureInfo.InvariantCulture);
                         if(float.IsNaN(r)||float.IsNaN(g)||float.IsNaN(b)||float.IsInfinity(r)||float.IsInfinity(g)||float.IsInfinity(b))throw new FormatException("Invalid MTL color.");
                         currentDefinition.color=new Color(Mathf.Clamp01(r),Mathf.Clamp01(g),Mathf.Clamp01(b));
+                    } else if(currentDefinition!=null&&(key=="d"||key=="Tr")) {
+                        float alpha=float.Parse(value,CultureInfo.InvariantCulture);if(float.IsNaN(alpha)||float.IsInfinity(alpha))throw new FormatException("Invalid MTL opacity");currentDefinition.color.a=Mathf.Clamp01(key=="Tr"?1-alpha:alpha);
                     } else if(currentDefinition!=null&&key=="map_Kd") {
                         if(value.StartsWith("-")){errors.Add("Texture-map options require conversion: "+value);continue;}
                         currentDefinition.texture=System.IO.Path.GetFullPath(System.IO.Path.Combine(System.IO.Path.GetDirectoryName(file),value));
@@ -61,7 +63,7 @@ public static class WorkspaceObjMaterials
                 }
             }
             warning=string.Join("; ",errors);
-            return new WorkspaceProject{name=System.IO.Path.GetFileNameWithoutExtension(path),source=path,id=Guid.NewGuid().ToString("N"),vertices=mesh.vertices,normals=mesh.normals,uv=mesh.uv,triangles=sourceTriangles,submeshes=sets,materialColors=colors,albedo=textures};
+            return new WorkspaceProject{materialNames=groups.ToArray(),name=System.IO.Path.GetFileNameWithoutExtension(path),source=path,id=Guid.NewGuid().ToString("N"),vertices=mesh.vertices,normals=mesh.normals,uv=mesh.uv,triangles=sourceTriangles,submeshes=sets,materialColors=colors,albedo=textures};
         } finally {UnityEngine.Object.Destroy(mesh);}
     }
 }

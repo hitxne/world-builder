@@ -5,6 +5,7 @@ public sealed class WorkspaceIdentity : MonoBehaviour
     public WorldConstruction construction;
     public string libraryId;
     public WorkspaceTexture[] albedo;
+    public WorkspaceSourceAppearance sourceAppearance;public string appearanceFingerprint;
     public Texture2D[] ownedTextures;
     public Mesh ownedMesh;
     public Material[] ownedMaterials;

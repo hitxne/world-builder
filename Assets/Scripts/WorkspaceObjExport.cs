@@ -50,7 +50,8 @@ public static class WorkspaceObjExport
                     obj.Append('\n');
                 }
                 Color color = WorkspaceProject.ReadColor(materials[Mathf.Min(group,materials.Length-1)]);
-                mtl.Append("newmtl ").Append(matName).Append("\nKd ").Append(V(new Vector3(color.r, color.g, color.b))).Append("\nd 1\n");
+                mtl.Append("# Source material: ").Append(materials[Mathf.Min(group,materials.Length-1)].name.Replace("\n"," ").Replace("\r"," ")).Append('\n');
+                mtl.Append("newmtl ").Append(matName).Append("\nKd ").Append(V(new Vector3(color.r, color.g, color.b))).Append("\nd ").Append(F(color.a)).Append('\n');
                 var textures=child.GetComponent<WorkspaceIdentity>()?.albedo;
                 if(textures!=null&&group<textures.Length&&textures[group]!=null) {
                     string extension=Path.GetExtension(textures[group].name).ToLowerInvariant();
@@ -61,6 +62,15 @@ public static class WorkspaceObjExport
                         throw new IOException("Choose another export folder to preserve the imported texture source.");
                     WorkspaceAtomicFile.WriteBytes(destination,Convert.FromBase64String(textures[group].base64));
                     mtl.Append("map_Kd ").Append(filename).Append('\n');
+                }
+            }
+            var appearance=child.GetComponent<WorkspaceIdentity>()?.sourceAppearance;
+            if(appearance!=null) {
+                string folder=Path.Combine(Path.GetDirectoryName(path),"WorldBuilder_"+name+"_source");Directory.CreateDirectory(folder);
+                WorkspaceAtomicFile.Write(Path.Combine(folder,"manifest.json"),appearance.manifestJson??"{}");
+                foreach(var resource in appearance.resources??new WorkspaceTexture[0]) {
+                    if(resource==null||Path.GetFileName(resource.name)!=resource.name)throw new FormatException("Invalid source appearance resource name");
+                    WorkspaceAtomicFile.WriteBytes(Path.Combine(folder,resource.name),Convert.FromBase64String(resource.base64));
                 }
             }
             offset += vertices.Length;

@@ -8,7 +8,7 @@ Room tags map to Living room, Bathroom, Bedroom, Dining room, Kitchen, Outdoors 
 
 ## Bounds and coverage
 
-COBJ CommonBlock versions 1–11 use version-specific 16/32-bit tags and style/pack fields. OBJD property tables and swapped-instance ITG model lists are bounded. RCOL 3 MODL versions 256, 257, 258 and 0x300 are supported. Unknown versions, missing dependencies and duplicate resource keys are reported as catalog-unlinked; patch precedence is not inferred. Shared meshes aggregate tags from their validated catalog records. Objects without supported tags remain Unclassified. This does not add procedural floor/wall catalog export, textures, swatch assembly or full current-game coverage.
+COBJ CommonBlock versions 1–11 use version-specific 16/32-bit tags and style/pack fields. OBJD property tables and swapped-instance ITG model lists are bounded. RCOL 3 MODL versions 256, 257, 258 and 0x300 are supported. Unknown versions, missing dependencies and conflicting duplicate resource keys are reported as catalog-unlinked; identical duplicate payloads are accepted; patch precedence is not inferred. Shared meshes aggregate tags from their validated catalog records. Objects without supported tags remain Unclassified. This does not add procedural floor/wall catalog export, swatch assembly or full current-game coverage. Supported texture preservation/conversion is covered in SIMS-APPEARANCE-AND-ROAD-WORKFLOW.md.
 
 ## Format references
 

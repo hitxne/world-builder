@@ -17,6 +17,9 @@ public sealed class WorkspaceProject
     public float[] metallic, smoothness;
     public WorkspaceTriangles[] submeshes;
     public WorkspaceTexture[] albedo;
+    public string[] materialNames;
+    public WorkspaceSourceAppearance sourceAppearance;
+    public string appearanceFingerprint;
     public string libraryId;
     public Color color = new Color(0.65f, 0.72f, 0.78f, 1);
     public Vector3 position, rotation, scale = Vector3.one;
@@ -31,6 +34,8 @@ public sealed class WorkspaceProject
             construction = model.GetComponent<WorkspaceIdentity>()?.construction,
             libraryId = model.GetComponent<WorkspaceIdentity>()?.libraryId,
             albedo = model.GetComponent<WorkspaceIdentity>()?.albedo,
+            sourceAppearance=model.GetComponent<WorkspaceIdentity>()?.sourceAppearance,appearanceFingerprint=model.GetComponent<WorkspaceIdentity>()?.appearanceFingerprint,
+            materialNames=Array.ConvertAll(model.GetComponent<Renderer>().sharedMaterials,m=>m!=null?m.name:"Material"),
             parentId = model.transform.parent?.GetComponent<WorkspaceIdentity>()?.id,
             submeshes = CaptureSubmeshes(mesh), materialColors = CaptureColors(model.GetComponent<Renderer>()),
             metallic=CaptureProperty(model.GetComponent<Renderer>(),"_Metallic"),smoothness=CaptureProperty(model.GetComponent<Renderer>(),"_Smoothness"),
@@ -114,3 +119,6 @@ public sealed class WorkspaceTriangles { public int[] indices; }
 
 [Serializable]
 public sealed class WorkspaceTexture { public string name, base64, sourcePath; }
+
+[Serializable]
+public sealed class WorkspaceSourceAppearance { public string manifestJson; public WorkspaceTexture[] resources; }

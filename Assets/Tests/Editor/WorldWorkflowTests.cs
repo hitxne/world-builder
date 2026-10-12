@@ -129,4 +129,28 @@ public class WorldWorkflowTests
         project.NormalizeConstruction();Assert.IsTrue(project.HasConstruction);
         Assert.Throws<ArgumentException>(()=>WorldGeometry.Build(project.construction));
     }
+    [Test] public void ImportedAppearanceSurvivesSaveAndObjExport()
+    {
+        string folder=Path.Combine(Path.GetTempPath(),Guid.NewGuid().ToString("N"));Directory.CreateDirectory(folder);
+        var root=new GameObject("appearance export fixture");Mesh mesh=null;Material material=null;Texture2D image=null;
+        try {
+            image=new Texture2D(1,1);image.SetPixel(0,0,Color.red);image.Apply();byte[] png=image.EncodeToPNG();
+            string obj=Path.Combine(folder,"chair.obj");File.WriteAllBytes(Path.Combine(folder,"chair.png"),png);
+            File.WriteAllText(Path.Combine(folder,"chair.mtl"),"newmtl Chair fabric\nKd 1 1 1\nd 0.8\nmap_Kd chair.png\n");
+            File.WriteAllText(obj,"mtllib chair.mtl\nv 0 0 0\nv 1 0 0\nv 0 1 0\nvt 0 0\nvt 1 0\nvt 0 1\nvn 0 0 1\nusemtl Chair fabric\nf 1/1/1 2/2/1 3/3/1\n");
+            var item=WorkspaceObjMaterials.Import(obj,out var warning);Assert.IsEmpty(warning);Assert.AreEqual("Chair fabric",item.materialNames[0]);Assert.AreEqual(0.8f,item.materialColors[0].a,0.001f);
+            item.appearanceFingerprint="fixture revision";item.sourceAppearance=new WorkspaceSourceAppearance{manifestJson="{\"version\":2}",resources=new[]{new WorkspaceTexture{name="original.bin",base64=Convert.ToBase64String(new byte[]{1,2,3,4})}}};
+            string project=Path.Combine(folder,"chair.wbworld");new WorkspaceDocument{objects=new List<WorkspaceProject>{item}}.Save(project);
+            var loaded=WorkspaceDocument.Open(project).objects[0];Assert.AreEqual("fixture revision",loaded.appearanceFingerprint);Assert.AreEqual(item.sourceAppearance.resources[0].base64,loaded.sourceAppearance.resources[0].base64);
+            CollectionAssert.AreEqual(png,Convert.FromBase64String(loaded.albedo[0].base64));CollectionAssert.AreEqual(item.uv,loaded.uv);
+            var go=new GameObject("Chair");go.transform.SetParent(root.transform);mesh=loaded.CreateMesh();go.AddComponent<MeshFilter>().sharedMesh=mesh;
+            material=new Material(Shader.Find("Standard")){name="Chair fabric",color=loaded.materialColors[0]};go.AddComponent<MeshRenderer>().sharedMaterials=new[]{material};
+            var identity=go.AddComponent<WorkspaceIdentity>();identity.albedo=loaded.albedo;identity.sourceAppearance=loaded.sourceAppearance;
+            WorkspaceObjExport.Export(root.transform,Path.Combine(folder,"result.obj"));
+            Assert.IsTrue(File.ReadAllText(Path.Combine(folder,"result.mtl")).Contains("map_Kd"));
+            CollectionAssert.AreEqual(new byte[]{1,2,3,4},File.ReadAllBytes(Path.Combine(folder,"WorldBuilder_object_0_Chair_source","original.bin")));
+            var roundtrip=WorkspaceObjMaterials.Import(Path.Combine(folder,"result.obj"),out warning);Assert.IsEmpty(warning);CollectionAssert.AreEqual(png,Convert.FromBase64String(roundtrip.albedo[0].base64));
+        }finally {UnityEngine.Object.DestroyImmediate(root);if(mesh!=null)UnityEngine.Object.DestroyImmediate(mesh);if(material!=null)UnityEngine.Object.DestroyImmediate(material);if(image!=null)UnityEngine.Object.DestroyImmediate(image);Directory.Delete(folder,true);}
+    }
+
 }

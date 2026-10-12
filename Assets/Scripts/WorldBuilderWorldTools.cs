@@ -83,6 +83,7 @@ public sealed partial class WorldBuilderRuntime
     }
     void BuildConstructionPanel()
     {
+        root.Q<ScrollView>("construction-catalog").EnableInClassList("buy-catalog",toolCategory=="Objects"||toolCategory=="Furnish"||toolCategory=="Library"||toolCategory=="Roads"&&roadsideObjects);
         constructionPanel.Clear();
         var categories=Row(constructionPanel,"catalog-tabs");
         string[] names=workspaceMode=="World"?new[]{"Terrain","Roads","Lots","Objects"}:workspaceMode=="Lot"?new[]{"Structure","Openings","Floors","Furnish"}:new[]{"Import","Primitives","Library"};
@@ -96,7 +97,7 @@ public sealed partial class WorldBuilderRuntime
                 ToolChoice(choices,"Raise","raise");ToolChoice(choices,"Lower","lower");ToolChoice(choices,"Smooth","smooth");ToolChoice(choices,"Flatten","flatten");ToolChoice(choices,"Paint Sand","sand");ToolChoice(choices,"Paint Grass","grass");
                 brushRadiusSlider=BrushSlider(settings,"Brush radius (m)",brushRadius,1,40,v=>brushRadius=v);BrushSlider(settings,"Strength",brushStrength,0.05f,2,v=>brushStrength=v);
             } else if(toolCategory=="Roads") {
-                ToolChoice(choices,"Draw Road","road");Button(choices,"Finish Road",FinishRoad);Number(settings,"Road width",roadWidth,2,20,v=>roadWidth=v);
+                RoadBuildCatalog(choices,settings);
             } else if(toolCategory=="Lots") {ToolChoice(choices,"Draw Lot","lot");Button(choices,"Build Selected Lot",EnterLot);}
             else if(toolCategory=="Objects"){BuildAssetCatalog(choices);}
             else {
@@ -124,7 +125,7 @@ public sealed partial class WorldBuilderRuntime
     }
     void ToolChoice(VisualElement parent,string label,string tool){toolButtons[tool]=Button(parent,label,()=>SetTool(tool));}
     void SetTool(string tool){CancelConstruction();constructionTool=tool;RefreshWorldTools();Status(ToolInstruction());}
-    void CancelConstruction(){ClearPlacementPreview();EndObjectGesture(true);pendingLibraryPath=null;pendingCopySource=null;placementYaw=0;ConstructionPointerUp();firstCorner=null;roadPoints.Clear();constructionTool="select";RefreshWorldTools();}
+    void CancelConstruction(){EndRoadDrag(true);ClearPlacementPreview();EndObjectGesture(true);pendingLibraryPath=null;pendingCopySource=null;placementYaw=0;ConstructionPointerUp();firstCorner=null;roadPoints.Clear();constructionTool="select";RefreshWorldTools();}
     string ToolInstruction()
     {
         if(HasPlacement)return "Click to place. Comma/period or right-click rotate 45°. Shift repeats placement. Escape cancels.";
@@ -133,7 +134,8 @@ public sealed partial class WorldBuilderRuntime
         if(constructionTool=="move")return "Drag an object on its horizontal plane. Grid snapping applies. Escape restores its position.";
         if(constructionTool=="rotate")return "Drag an object horizontally to rotate around its local vertical axis. Escape cancels.";
         if(constructionTool=="scale")return "Drag an object horizontally to scale uniformly. Escape cancels.";
-        if(constructionTool=="road")return "Click terrain to add road points, then Finish Road or Enter. Escape cancels.";
+        if(constructionTool=="road")return "Drag to preview a road; release to build. Snaps to 45° and road ends. Alt draws freely; Escape cancels.";
+        if(constructionTool=="roadcurve")return "Click route points, then Finish route or Enter. Escape cancels.";
         if(constructionTool=="room"||constructionTool=="lot"||constructionTool=="floor"||constructionTool=="roof"||constructionTool=="wall")return "Click two grid-snapped corners/endpoints. Escape cancels.";
         if(constructionTool=="door"||constructionTool=="window")return "Click an existing wall to create an opening and frame.";
         if(IsBrush())return "Hold left mouse over terrain to sculpt or paint. Release records one undo step.";
@@ -243,7 +245,8 @@ public sealed partial class WorldBuilderRuntime
                 stroke=true;flattenHeight=terrain.transform.InverseTransformPoint(hit).y;ApplyBrush(terrain,hit);return;
             }
             hit=Snap(hit);
-            if(constructionTool=="road"){roadPoints.Add(P(hit));Status("Road points: "+roadPoints.Count+". Finish Road to create it.");return;}
+            if(constructionTool=="road"){BeginRoadDrag(hit);return;}
+            if(constructionTool=="roadcurve"){if(roadPoints.Count==0)CacheRoadEnds();roadPoints.Add(P(RoadEndSnap(hit)));Status("Road points: "+roadPoints.Count+". Finish Road to create it.");return;}
             if(constructionTool=="tree"){CreateConstruction("Palm",new WorldConstruction{kind="tree",size=new WorldPoint(1,6,1)},hit,world);Changed();return;}
             if(constructionTool=="stairs"){CreateConstruction("Stairs",new WorldConstruction{kind="stairs",size=new WorldPoint(1.5f,3.2f,4)},hit,PlacementParent());Changed();return;}
             if(firstCorner==null){firstCorner=hit;Status("First point set. Click the second point.");return;}
@@ -257,10 +260,11 @@ public sealed partial class WorldBuilderRuntime
     }
     void ConstructionPointerMove(Vector2 point)
     {
+        if(roadDrag){Try(()=>{if(Ground(point,out var hit,out var terrain))UpdateRoadDrag(hit);});return;}
         if(!stroke||!IsBrush())return;
         Try(()=>{if(Ground(point,out var hit,out var terrain)&&terrain!=null)ApplyBrush(terrain,hit);});
     }
-    void ConstructionPointerUp(){if(!stroke)return;stroke=false;Changed();}
+    void ConstructionPointerUp(bool cancelRoad=false){Try(()=>EndRoadDrag(cancelRoad));if(!stroke)return;stroke=false;Changed();}
     void ApplyBrush(GameObject terrain,Vector3 point)
     {
         var identity=terrain.GetComponent<WorkspaceIdentity>();
@@ -384,8 +388,8 @@ public sealed partial class WorldBuilderRuntime
     }
     void FinishRoad()
     {
-        if(roadPoints.Count<2){if(constructionTool=="road")Status("Add at least two road points.");return;}
-        CreateConstruction("Road",new WorldConstruction{kind="road",points=roadPoints.ToArray(),width=roadWidth},Vector3.zero,world);
+        if(roadPoints.Count<2){if(constructionTool=="roadcurve")Status("Add at least two route points.");return;}
+        CreateConstruction(roadPreset,new WorldConstruction{kind="road",points=roadPoints.ToArray(),width=roadWidth,sidewalk=roadSidewalk},Vector3.zero,world);
         roadPoints.Clear();Changed();Status("Editable spline road created with sidewalks and center markings.");
     }
     void BuildFloridaTest()
@@ -405,6 +409,7 @@ public sealed partial class WorldBuilderRuntime
     }
     void RefreshWorldTools()
     {
+        if(finishRouteButton!=null)finishRouteButton.style.display=constructionTool=="roadcurve"?DisplayStyle.Flex:DisplayStyle.None;
         if(modeHeading!=null)modeHeading.text=(workspaceMode=="Lot"&&activeLot!=null?"Lot: "+activeLot.name:workspaceMode=="Asset"?"Asset editor":"World")+"  ›  "+CategoryTitle(toolCategory);
         if(toolButtons.TryGetValue("scale",out var scaleButton))scaleButton.style.display=workspaceMode=="Asset"?DisplayStyle.Flex:DisplayStyle.None;
         foreach(var pair in modeButtons)pair.Value.EnableInClassList("selected",pair.Key==workspaceMode);

@@ -16,36 +16,70 @@ public sealed partial class WorldBuilderRuntime
     void BuildAssetCatalog(VisualElement parent,bool simsOnly=false,bool returnToLibrary=false)
     {
         var host=new VisualElement();host.AddToClassList("asset-catalog");parent.Add(host);
-        var search=new TextField("Search assets");host.Add(search);int page=0;
-        var grid=new VisualElement();grid.AddToClassList("asset-grid");host.Add(grid);
-        var filters=Row(host,"catalog-tabs");var browse=new DropdownField("Browse",new List<string>{"All objects","By room","By type"},0);filters.Add(browse);
-        var filter=new DropdownField("Category",new List<string>{"All"},0);filters.Add(filter);
-        var pageLabel=Label(host,"","hint");
+        int page=0;string browse="By room",filter="All";
+        var top=Row(host,"buy-catalog-header");var search=new TextField("Search"){tooltip="Search object names"};search.AddToClassList("buy-search");top.Add(search);
+        var browseTabs=Row(top,"buy-browse-tabs");var tabButtons=new Dictionary<string,Button>();
+        var content=Row(host,"buy-catalog-content");var categoryRail=new ScrollView();categoryRail.AddToClassList("buy-category-rail");content.Add(categoryRail);
+        var results=new VisualElement();results.AddToClassList("buy-results");content.Add(results);
+        var gridScroll=new ScrollView();gridScroll.AddToClassList("buy-grid-scroll");results.Add(gridScroll);
+        var grid=new VisualElement();grid.AddToClassList("asset-grid");gridScroll.Add(grid);
+        var navigation=Row(results,"buy-pagination");var pageLabel=Label(navigation,"","buy-result-heading");
+        Button previous=null,next=null;
         void Populate() {
             grid.Clear();int matched=0,shown=0;bool more=false;
             if(Directory.Exists(LibraryFolder))foreach(string path in Directory.EnumerateFiles(LibraryFolder,"*.wbworld")) {
                 try {
                     string metaPath=path+".metadata.json";var metadata=File.Exists(metaPath)?JsonUtility.FromJson<LibraryMetadata>(File.ReadAllText(metaPath)):null;
                     string name=metadata?.name??WorkspaceDocument.Open(path).title;
-                    string classification=browse.value=="By room"?(metadata?.room??"Unclassified"):(metadata?.category??"Unclassified");
+                    string classification=browse=="By room"?(metadata?.room??"Unclassified"):(metadata?.category??"Unclassified");
                     if(string.IsNullOrWhiteSpace(classification))classification="Unclassified";
-                    if(browse.value!="All objects"&&filter.value!="All"&&classification!=filter.value&&Array.IndexOf((browse.value=="By room"?metadata?.rooms:metadata?.categories)??new string[0],filter.value)<0)continue;
+                    if(browse!="All objects"&&filter!="All"&&classification!=filter&&Array.IndexOf((browse=="By room"?metadata?.rooms:metadata?.categories)??new string[0],filter)<0)continue;
                     if(simsOnly&&string.IsNullOrEmpty(metadata?.catalogSource)&&!name.StartsWith("The Sims 4 /",StringComparison.OrdinalIgnoreCase))continue;
                     if(name.IndexOf(search.value??"",StringComparison.OrdinalIgnoreCase)<0)continue;
                     if(matched++<page*12)continue;if(shown>=12){more=true;break;}shown++;
-                    string assetPath=path;var tile=new Button(()=>Try(()=>OpenLibraryPreview(assetPath,returnToLibrary)));tile.AddToClassList("asset-tile");grid.Add(tile);
+                    string assetPath=path;var card=new VisualElement();card.AddToClassList("asset-card");grid.Add(card);
+                    var tile=new Button(()=>Try(()=>BeginLibraryPlacement(assetPath)));tile.AddToClassList("asset-tile");card.Add(tile);
                     var image=new Image{scaleMode=ScaleMode.ScaleToFit,pickingMode=PickingMode.Ignore};image.AddToClassList("asset-thumbnail");tile.Add(image);
                     string label=string.IsNullOrEmpty(metadata?.catalogSource)?Path.GetFileNameWithoutExtension(name):name;if(name.StartsWith("The Sims 4 /",StringComparison.OrdinalIgnoreCase)&&label.Length>24&&string.IsNullOrEmpty(metadata?.catalogSource))label="Sims object "+label.Substring(label.Length-12);var caption=new Label(label){pickingMode=PickingMode.Ignore};caption.AddToClassList("asset-caption");tile.Add(caption);
-                    tile.tooltip=name+(string.IsNullOrEmpty(metadata?.warning)?"":"\n"+metadata.warning);RequestThumbnail(path,image);
+                    tile.tooltip=name+"\nClick to place; use ⋯ for preview and details."+(string.IsNullOrEmpty(metadata?.warning)?"":"\n"+metadata.warning);RequestThumbnail(path,image);
+                    var details=new Button(()=>Try(()=>OpenLibraryPreview(assetPath,returnToLibrary))){text="⋯",tooltip="3D preview and asset details"};details.AddToClassList("asset-details");card.Add(details);
                 } catch(Exception error){Label(grid,"Asset unavailable: "+error.Message,"hint");}
             }
-            pageLabel.text="Page "+(page+1)+" • "+shown+" assets"+(more?" • more available":"");
+            pageLabel.text=(filter=="All"?"All objects":filter)+" • Page "+(page+1);previous?.SetEnabled(page>0);next?.SetEnabled(more);
             if(shown==0)Label(grid,simsOnly?"No matching Sims objects. Use Add Sims Assets or adjust search.":"No matching assets. Add Sims assets or save an object to the library.","hint");
         }
-        var navigation=Row(host,"toolbar");Button(navigation,"Previous",()=>{page=Math.Max(0,page-1);Populate();});Button(navigation,"Next",()=>{page++;Populate();});
-        browse.RegisterValueChangedCallback(e=>{var values=new List<string>{"All"};if(e.newValue=="By room")values.AddRange(AssetRooms);else if(e.newValue=="By type")values.AddRange(AssetTypes);filter.choices=values;filter.SetValueWithoutNotify("All");filter.style.display=e.newValue=="All objects"?DisplayStyle.None:DisplayStyle.Flex;page=0;Populate();});
-        filter.style.display=DisplayStyle.None;filter.RegisterValueChangedCallback(e=>{page=0;Populate();});
-        search.RegisterValueChangedCallback(e=>{page=0;Populate();});Populate();
+        previous=Button(navigation,"‹",()=>{page=Math.Max(0,page-1);Populate();});previous.tooltip="Previous objects";
+        next=Button(navigation,"›",()=>{page++;Populate();});next.tooltip="Next objects";
+        void Categories() {
+            categoryRail.Clear();categoryRail.style.display=browse=="All objects"?DisplayStyle.None:DisplayStyle.Flex;
+            var values=new List<string>{"All"};if(browse=="By room")values.AddRange(AssetRooms);else if(browse=="By function")values.AddRange(AssetTypes);
+            foreach(string value in values) {
+                string label=value;var button=new Button(()=>{filter=label;page=0;Categories();Populate();});button.AddToClassList("buy-category-button");
+                if(label==filter)button.AddToClassList("selected");button.Add(new CatalogCategoryIcon(label));button.Add(new Label(label=="All"?"All objects":label){pickingMode=PickingMode.Ignore});categoryRail.Add(button);
+            }
+            foreach(var pair in tabButtons)pair.Value.EnableInClassList("selected",pair.Key==browse);
+        }
+        foreach(string mode in new[]{"By room","By function","All objects"}) {string value=mode;tabButtons[value]=Button(browseTabs,value,()=>{browse=value;filter="All";page=0;Categories();Populate();});}
+        search.RegisterValueChangedCallback(e=>{page=0;Populate();});Categories();Populate();
+    }
+    sealed class CatalogCategoryIcon:VisualElement
+    {
+        readonly string category;
+        public CatalogCategoryIcon(string category){this.category=category;pickingMode=PickingMode.Ignore;AddToClassList("buy-category-icon");generateVisualContent+=Draw;}
+        void Draw(MeshGenerationContext context) {
+            var p=context.painter2D;p.strokeColor=resolvedStyle.color;p.lineWidth=1.6f;
+            void Line(float x,float y,float a,float b){p.BeginPath();p.MoveTo(new Vector2(x,y));p.LineTo(new Vector2(a,b));p.Stroke();}
+            void Box(float x,float y,float w,float h){p.BeginPath();p.MoveTo(new Vector2(x,y));p.LineTo(new Vector2(x+w,y));p.LineTo(new Vector2(x+w,y+h));p.LineTo(new Vector2(x,y+h));p.ClosePath();p.Stroke();}
+            if(category=="Bedroom"||category=="Beds"){Box(3,8,22,14);Box(5,9,7,4);Box(15,9,7,4);Line(3,15,25,15);}
+            else if(category=="Living room"||category=="Seating"){Box(6,9,16,12);Box(3,14,4,8);Box(22,14,4,8);Line(7,17,22,17);}
+            else if(category=="Kitchen"||category=="Appliances"){Box(5,4,18,20);Box(7,7,14,4);Box(8,15,12,7);}
+            else if(category=="Bathroom"||category=="Plumbing"){Box(3,13,22,9);Line(5,9,5,13);Line(5,9,10,9);Line(7,22,7,25);Line(22,22,22,25);}
+            else if(category=="Office"||category=="Tables"||category=="Dining room"){Box(3,13,22,3);Line(6,16,6,25);Line(22,16,22,25);Box(9,3,10,8);Line(14,11,14,13);}
+            else if(category=="Outdoors"||category=="Plants"){Line(14,15,14,25);Line(14,2,3,17);Line(3,17,25,17);Line(25,17,14,2);}
+            else if(category=="Lighting"){Line(14,14,14,25);Line(8,25,20,25);Line(9,4,5,14);Line(5,14,23,14);Line(23,14,19,4);Line(19,4,9,4);}
+            else if(category=="Doors"||category=="Windows"){Box(5,3,18,23);Line(14,3,14,26);if(category=="Windows")Line(5,14,23,14);}
+            else {Box(4,4,8,8);Box(16,4,8,8);Box(4,16,8,8);Box(16,16,8,8);}
+        }
     }
     void RequestThumbnail(string path,Image image)
     {
