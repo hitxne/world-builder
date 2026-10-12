@@ -14,3 +14,11 @@
 - Background catalog scans, real loose-OBJ reference previews and clear package limits.
 - Build in a separate generated startup scene to preserve saved user scenes.
 - Unity/Windows execution pending; direct Sims/Forza asset rendering is not implemented.
+
+## Game preview adapters — unreleased
+- Add bounded read-only Sims DBPF resource indexing and limited MLOD geometry decoder.
+- Add plain Forza Grub directory inspection and limited per-part mesh decoder.
+- Integrate resource selection and neutral geometry previews into the game browser.
+- Export metadata-only game diagnostics without uploading installation resources.
+- Add original synthetic adapter tests and format-source/license documentation.
+- Real game assets, Unity tests and Windows execution remain unverified.

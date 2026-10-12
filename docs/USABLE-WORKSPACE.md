@@ -57,3 +57,9 @@ exported transform round-trip. Existing OBJ/project regression cases remain.
 Remaining: visual transform gizmos, textured OBJ/MTL import, mesh editing, docking,
 terrain sculpting/island generation, water, splines, architectural tools, persistent
 asset library, direct proprietary game previews and validated game export.
+
+### Subsequent adapter update
+The previous game-preview limitation is superseded by the limited readers in
+[GAME-ASSET-ADAPTERS.md](GAME-ASSET-ADAPTERS.md). Full direct-game viewing is still
+unverified and incomplete; the browser can now attempt subset mesh decodes and
+export a metadata-only diagnostic report for local validation.

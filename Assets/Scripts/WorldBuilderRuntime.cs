@@ -25,6 +25,7 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
     Vector3 workCenter, referenceCenter;
     float workDistance = 12, referenceDistance = 8;
     bool quitting;
+    int previewGeneration;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void Bootstrap()
@@ -365,10 +366,10 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
         var box = new VisualElement(); box.AddToClassList("dialog"); modal.Add(box);
         Label(box, titleText, "section"); Label(box, text, "hint"); actions(box);
     }
-    void CloseDialog() { if (modal != null) modal.RemoveFromHierarchy(); modal = null; }
+    void CloseDialog() { previewGeneration++; if (modal != null) modal.RemoveFromHierarchy(); modal = null; }
     void GameBrowser()
     {
-        Dialog("Game Asset Browser", "Supported loose OBJ models can be previewed. Sims .package and Forza resources require external conversion; no proprietary mesh decoder is implemented.", box => {
+        Dialog("Game Asset Browser", "Read-only game preview adapters: Sims MLOD subsets and plain Forza float/SNORM mesh parts. Missing textures, unsupported versions, compression and encrypted archives report their limits.", box => {
             foreach (var game in new[] { "Forza Horizon 5", "The Sims 4" }) {
                 int index = game == "The Sims 4" ? 1 : 0;
                 var field = new TextField(game) { value = PlayerPrefs.GetString("worldbuilder.gamePath." + index, ""), isDelayed = true }; box.Add(field);
@@ -382,6 +383,7 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
 #endif
                 Button(box, "Scan " + game, () => ScanCatalog(field.value, box));
             }
+            Button(box, "Export Game Diagnostic", ExportGameDiagnostic);
             Button(box, "Import authorized OBJ export", () => { CloseDialog(); Import(); });
             Button(box, "Close", CloseDialog);
         });
@@ -398,7 +400,7 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
                     try {
                         foreach (var file in Directory.EnumerateFiles(folder)) {
                             string ext = Path.GetExtension(file).ToLowerInvariant();
-                            if (ext == ".obj" || ext == ".package") result.Add(file);
+                            if (ext == ".obj" || ext == ".package" || ext == ".modelbin" || ext == ".swatchbin" || ext == ".zip" || ext == ".minizip") result.Add(file);
                             if (result.Count >= 250) break;
                         }
                         foreach (var child in Directory.EnumerateDirectories(folder))
@@ -420,11 +422,104 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
                         Destroy(mesh); Preview(data);
                         CloseDialog(); Status("Reference preview only. Use Import OBJ to add it to the editable scene.");
                     }));
-                else Label(list, Path.GetFileName(file) + " — package mesh preview unavailable", "hint");
+                else if (Path.GetExtension(file).Equals(".package", StringComparison.OrdinalIgnoreCase))
+                    Button(list, "Inspect Sims package: " + Path.GetFileName(file), () => InspectSims(selectedFile));
+                else if (Path.GetExtension(file).Equals(".modelbin", StringComparison.OrdinalIgnoreCase))
+                    Button(list, "Inspect Forza model: " + Path.GetFileName(file), () => InspectForza(selectedFile));
+                else Label(list, Path.GetFileName(file) + " — texture/archive adapter pending", "hint");
             }
-            Status("Scan found " + files.Count + " files (limit 250). Packages are listed, not rendered.");
+            Status("Scan found " + files.Count + " files (limit 250). Inspect a package/model to browse its geometry resources.");
         } catch (Exception e) { if (this != null) Status("Scan failed: " + e.Message); }
     }
+    async void ExportGameDiagnostic()
+    {
+        string destination;
+        try { destination = WorkspaceFiles.Pick(true, "Save game metadata diagnostic", "json"); }
+        catch (Exception e) { Status(e.Message); return; }
+        if (string.IsNullOrEmpty(destination)) return;
+        var names = new[] { "Forza Horizon 5", "The Sims 4" };
+        var paths = new[] { PlayerPrefs.GetString("worldbuilder.gamePath.0", ""), PlayerPrefs.GetString("worldbuilder.gamePath.1", "") };
+        Status("Collecting bounded game metadata report…");
+        try {
+            var report = await Task.Run(() => GameAssetDiagnostic.Scan(names, paths));
+            if (this == null) return;
+            WorkspaceAtomicFile.Write(destination, JsonUtility.ToJson(report, true));
+            Status("Diagnostic saved. Review and share the JSON report; no game resource bytes are included.");
+        } catch (Exception e) { if (this != null) Status("Diagnostic failed: " + e.Message); }
+    }
+
+    async void InspectSims(string path)
+    {
+        Status("Reading Sims package resource index…");
+        try {
+            var package = await Task.Run(() => new SimsPackage(path));
+            if (this == null) return;
+            Dialog("Sims package resources", Path.GetFileName(path) + " • " + package.Entries.Count + " resources. MLOD previews are neutral geometry only; cross-package dependencies, textures and unsupported vertex layouts remain pending.", box => {
+                var list = new ScrollView(); list.style.height = 320; box.Add(list);
+                int shown = 0;
+                foreach (var entry in package.Entries) if (entry.Type == SimsPackage.Mlod && shown++ < 250) {
+                    var resource = entry;
+                    Button(list, "Preview MLOD " + resource.Instance.ToString("X16"), () => PreviewSims(package, resource));
+                }
+                if (shown == 0) Label(list, "No object MLOD resources in this package. CAS GEOM is not implemented.", "hint");
+                if (shown > 250) Label(list, "Showing first 250 geometry resources. Search/pagination is pending.", "hint");
+                Button(box, "Back to game folders", GameBrowser); Button(box, "Close", CloseDialog);
+            });
+            Status("Package index loaded. Preview buttons attempt supported geometry decoding; compatibility is checked on selection.");
+        } catch (Exception e) { if (this != null) Status("Package inspection: " + e.Message); }
+    }
+    async void PreviewSims(SimsPackage package, SimsPackage.Entry resource)
+    {
+        int generation = ++previewGeneration;
+        Status("Decoding Sims object geometry…");
+        try {
+            var data = await Task.Run(() => SimsMeshPreview.Decode(package, resource));
+            if (this == null || generation != previewGeneration) return;
+            PreviewModels(data); CloseDialog(); Status("Sims neutral-geometry reference preview. Textures/materials not decoded. Game file remains read-only.");
+        } catch (Exception e) { if (this != null) Status("Sims preview unavailable: " + e.Message); }
+    }
+    async void InspectForza(string path)
+    {
+        Status("Reading Forza model directory…");
+        try {
+            var bundle = await Task.Run(() => new ForzaBundle(path));
+            if (this == null) return;
+            Dialog("Forza model mesh parts", Path.GetFileName(path) + " • " + bundle.Blobs.Count + " blobs. Preview shows supported mesh buffers in local part space, with neutral shading. Bone assembly, other packed layouts, materials and textures are pending.", box => {
+                var list = new ScrollView(); list.style.height = 320; box.Add(list); int shown = 0;
+                foreach (var blob in bundle.Blobs) if (blob.Tag == ForzaBundle.MeshTag && shown++ < 250) {
+                    var resource = blob;
+                    Button(list, "Preview " + (string.IsNullOrEmpty(blob.Name) ? "mesh at " + blob.Offset : blob.Name) + " v" + blob.Major + "." + blob.Minor,
+                        () => PreviewForza(bundle, resource));
+                }
+                if (shown == 0) Label(list, "No mesh blobs in this bundle.", "hint");
+                Button(box, "Back to game folders", GameBrowser); Button(box, "Close", CloseDialog);
+            });
+        } catch (Exception e) { if (this != null) Status("Forza inspection: " + e.Message); }
+    }
+    async void PreviewForza(ForzaBundle bundle, ForzaBundle.Blob resource)
+    {
+        int generation = ++previewGeneration;
+        Status("Decoding Forza mesh buffer…");
+        try {
+            var data = await Task.Run(() => ForzaMeshPreview.Decode(bundle, resource));
+            if (this == null || generation != previewGeneration) return;
+            PreviewModels(new List<WorkspaceProject> { data }); CloseDialog();
+            Status("Forza local-part buffer preview only. Assembly, textures and game materials are not reproduced.");
+        } catch (Exception e) { if (this != null) Status("Forza preview unavailable: " + e.Message); }
+    }
+    void PreviewModels(List<WorkspaceProject> objects)
+    {
+        var stage = new GameObject("Reference preview staging").transform;
+        try { foreach (var data in objects) Model(data, stage, 30); }
+        catch { Clear(stage); Destroy(stage.gameObject); throw; }
+        Clear(reference);
+        while (stage.childCount > 0) stage.GetChild(0).SetParent(reference, false);
+        Destroy(stage.gameObject);
+        var bounds = reference.GetChild(0).GetComponent<Renderer>().bounds;
+        foreach (Transform child in reference) bounds.Encapsulate(child.GetComponent<Renderer>().bounds);
+        referenceCenter = bounds.center; referenceDistance = Mathf.Max(2, bounds.extents.magnitude * 3);
+    }
+
     void ApplyTheme()
     {
         root.RemoveFromClassList("dark"); root.RemoveFromClassList("light"); root.RemoveFromClassList("contrast");
