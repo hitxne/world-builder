@@ -75,35 +75,33 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
     void BuildUI()
     {
         panel = ScriptableObject.CreateInstance<PanelSettings>();
-        panel.scaleMode = PanelScaleMode.ScaleWithScreenSize;
+        panel.scaleMode = PanelScaleMode.ConstantPixelSize;
         panel.referenceResolution = new Vector2Int(1440, 900);
         ui = gameObject.AddComponent<UIDocument>(); ui.panelSettings = panel;
         root = ui.rootVisualElement; root.style.flexGrow = 1;
+        root.style.position = Position.Absolute; root.style.left = 0; root.style.right = 0; root.style.top = 0; root.style.bottom = 0;
         var sheet = Resources.Load<StyleSheet>("Workspace"); if (sheet != null) root.styleSheets.Add(sheet);
         theme = PlayerPrefs.GetInt("worldbuilder.theme", 0); ApplyTheme();
         var top = Row(root, "topbar"); Label(top, "WORLD BUILDER", "brand");
         titleLabel = Label(top, title, "project-title");
-        Button(top, "New", () => ConfirmDiscard(NewProject));
-        Button(top, "Open", () => ConfirmDiscard(OpenProject));
-        Button(top, "Save", () => Save(false)); Button(top, "Save As", () => Save(true));
-        Button(top, "Import OBJ", Import); Button(top,"Reimport Selected",ReimportSelected); Button(top, "Export OBJ", Export);
-        undoButton = Button(top, "Undo", Undo); redoButton = Button(top, "Redo", Redo);
-        Button(top, "Theme", () => { theme = (theme + 1) % 3; ApplyTheme(); PlayerPrefs.SetInt("worldbuilder.theme", theme); PlayerPrefs.Save(); });
+        Button(top, "Project", () => Dialog("Project", "Open, save or export your world.", box => {
+            Button(box,"New",()=>{CloseDialog();ConfirmDiscard(NewProject);});
+            Button(box,"Open",()=>{CloseDialog();ConfirmDiscard(OpenProject);});
+            Button(box,"Save As",()=>{CloseDialog();Save(true);});
+            Button(box,"Export OBJ",()=>{CloseDialog();Export();}); Button(box,"Close",CloseDialog);
+        }));
+        Button(top,"Save",()=>Save(false));
+        undoButton = Button(top,"Undo",Undo); redoButton = Button(top,"Redo",Redo);
+        Button(top,"Theme",()=>{theme=(theme+1)%3;ApplyTheme();PlayerPrefs.SetInt("worldbuilder.theme",theme);PlayerPrefs.Save();});
+        var navigation = Row(root,"mode-navigation"); navigation.name="mode-navigation";
         var body = Row(root, "body");
-        var left = new ScrollView(); left.AddToClassList("sidebar"); body.Add(left);
-        Label(left, "SCENE", "section");
-        var primitives = Row(left);
-        Button(primitives, "+ Cube", () => AddPrimitive(PrimitiveType.Cube, "Cube"));
-        Button(primitives, "+ Plane", () => AddPrimitive(PrimitiveType.Plane, "Plane"));
-        var more = Row(left);
-        Button(more, "+ Sphere", () => AddPrimitive(PrimitiveType.Sphere, "Sphere"));
-        Button(more, "+ Cylinder", () => AddPrimitive(PrimitiveType.Cylinder, "Cylinder"));
-        Button(left, "Local Asset Library", OpenLibrary);
-        Button(left, "Save Selected to Library", SaveLibrary);
-        Button(left, "Game Asset Browser", GameBrowser);
-        hierarchy = new ScrollView(); hierarchy.style.flexGrow = 1; left.Add(hierarchy);
+        var left = new VisualElement(); left.AddToClassList("sidebar"); body.Add(left);
+        Label(left,"SCENE OBJECTS","section");
+        hierarchy = new ScrollView(); hierarchy.AddToClassList("dock-scroll"); left.Add(hierarchy);
         var center = new VisualElement(); center.AddToClassList("center"); body.Add(center);
         var tools = Row(center, "toolbar");
+        Button(tools,"Scene",()=>left.style.display=left.style.display.value==DisplayStyle.None?DisplayStyle.Flex:DisplayStyle.None);
+        Button(tools,"Properties",()=>inspector.style.display=inspector.style.display.value==DisplayStyle.None?DisplayStyle.Flex:DisplayStyle.None);
         Button(tools, "Frame Selected", FrameSelected);
         Button(tools, "Frame All", FrameAll);
         Button(tools, "Duplicate", Duplicate); Button(tools, "Delete", Delete);
@@ -113,6 +111,7 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
         workImage = View(views, "EDITABLE SCENE", workTexture, true);
         Label(center, "Left click: select   •   Right drag: orbit   •   Middle drag: pan   •   Wheel: zoom", "hint");
         inspector = new ScrollView(); inspector.AddToClassList("inspector"); body.Add(inspector);
+        var catalog = new ScrollView(); catalog.name="construction-catalog"; catalog.AddToClassList("catalog"); root.Add(catalog);
         statusLabel = Label(root, "Ready. Create objects or import a Blender OBJ.", "status");
         root.RegisterCallback<KeyDownEvent>(e => {
             if (modal != null || e.target is TextField || e.target is FloatField || e.target is TextElement) return;
@@ -433,7 +432,7 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
     {
         CloseDialog(); modal = new VisualElement(); modal.AddToClassList("modal"); root.Add(modal);
         var box = new VisualElement(); box.AddToClassList("dialog"); modal.Add(box);
-        Label(box, titleText, "section"); Label(box, text, "hint"); actions(box);
+        Label(box, titleText, "section"); var content = new ScrollView(); content.AddToClassList("dialog-scroll"); box.Add(content); Label(content, text, "hint"); actions(content);
     }
     void CloseDialog() { previewGeneration++; if (modal != null) modal.RemoveFromHierarchy(); modal = null; }
     void GameBrowser()
