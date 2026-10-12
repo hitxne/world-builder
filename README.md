@@ -101,3 +101,9 @@ elevated roads. This is surface conformance, not an intersection or cut/fill sol
 See [PC build controls](docs/SIMS-BUILD-CONTROLS.md). The top-bar **Controls**
 button displays the mappings inside the application. Shortcuts act in the focused
 editable viewport; typing in input fields and using dialogs remains separate.
+
+**Local Library > Import Sims export folder** imports an exported OBJ collection
+recursively, with supported MTL/PNG/JPEG references, cancellation, duplicate
+skipping and an import report. The library now pages through matching entries
+instead of stopping after the first 200. This is an external-export import path,
+not complete direct extraction of the installed Sims Build/Buy catalog.

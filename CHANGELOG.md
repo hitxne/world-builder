@@ -110,3 +110,10 @@ Validation: source configuration/GUID/input checks, C# syntax parsing and whites
 - Add large-world architecture as a core priority alongside UI usability.
 - Record existing scene/file/terrain limits and require chunked persistence, local edits, asset sharing, streaming/LOD and precision management.
 - Define reproducible scale validation before advertising huge-map support; this planning update does not implement streaming.
+
+## 2026-10-12 — bulk local Sims export ingestion
+
+- Add recursive export-folder OBJ import into the persistent library, with supported materials/textures, deterministic source IDs, duplicate skipping, cancellation and warnings/failure report.
+- Add small metadata sidecars for imported/saved library entries and paged search beyond the former 200-entry cutoff.
+- Retain original game/export files as read-only inputs; no commercial assets are committed.
+- Source checks pass; Windows/Unity import testing and full Build/Buy extraction remain unverified.

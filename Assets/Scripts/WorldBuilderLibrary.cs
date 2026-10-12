@@ -1,11 +1,19 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
+using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.UIElements;
 
 public sealed partial class WorldBuilderRuntime
 {
+    bool libraryImportRunning, cancelLibraryImport;
+    [Serializable] sealed class LibraryMetadata { public string name,source,warning; }
+    void WriteLibraryMetadata(string path,string name,string source,string warning)
+        =>WorkspaceAtomicFile.Write(path+".metadata.json",JsonUtility.ToJson(new LibraryMetadata{name=name,source=source,warning=warning},true));
     string LibraryFolder=>Path.Combine(Application.persistentDataPath,"Assets");
     void SaveLibrary()
     {
@@ -17,27 +25,83 @@ public sealed partial class WorldBuilderRuntime
             if(string.IsNullOrEmpty(id))id=Guid.NewGuid().ToString("N");
             string rootId=selected.GetComponent<WorkspaceIdentity>().id;
             foreach(var item in document.objects)if(item.id==rootId){item.parentId=null;item.position=Vector3.zero;}
-            document.Save(Path.Combine(LibraryFolder,id+".wbworld"));
+            string path=Path.Combine(LibraryFolder,id+".wbworld");document.Save(path);
+            WriteLibraryMetadata(path,document.title,selected.GetComponent<WorkspaceIdentity>().source,"");
             selected.GetComponent<WorkspaceIdentity>().libraryId=id;Changed();Status("Saved reusable asset/building to the local library.");
         });
     }
     void OpenLibrary()
     {
         Dialog("Local Asset Library","Reusable objects and buildings persist between sessions. Select one, then click the terrain or active lot to place an independent editable copy.",box=>{
-            var search=new TextField("Search");box.Add(search);var list=new ScrollView();list.style.height=300;box.Add(list);
+            Button(box,"Import Sims export folder",OpenSimsExportImport);
+            int page=0;var search=new TextField("Search");box.Add(search);var list=new ScrollView();list.style.height=300;box.Add(list);
             void Populate(string query) {
                 list.Clear();if(!Directory.Exists(LibraryFolder)){Label(list,"Save a selected object or lot to add your first asset.","hint");return;}
-                int count=0;
+                int count=0,matched=0;
                 foreach(string path in Directory.EnumerateFiles(LibraryFolder,"*.wbworld")) {
-                    if(count++>=200)break;
+
                     try {
-                        var document=WorkspaceDocument.Open(path);if(document.title.IndexOf(query??"",StringComparison.OrdinalIgnoreCase)<0)continue;
-                        string assetPath=path;Button(list,document.title,()=>BeginLibraryPlacement(assetPath));
+                        string metadataPath=path+".metadata.json";
+                        var metadata=File.Exists(metadataPath)?JsonUtility.FromJson<LibraryMetadata>(File.ReadAllText(metadataPath)):null;
+                        string name=metadata?.name??WorkspaceDocument.Open(path).title;
+                        if(name.IndexOf(query??"",StringComparison.OrdinalIgnoreCase)<0)continue;
+                        if(matched++<page*50)continue;if(count++>=50){Label(list,"More results — use Next page.","hint");break;}
+                        string assetPath=path;var entry=Button(list,name,()=>BeginLibraryPlacement(assetPath));
+                        entry.tooltip=string.IsNullOrEmpty(metadata?.warning)?name:name+"\nImport warning: "+metadata.warning;
                     } catch {Label(list,"Unreadable asset: "+Path.GetFileName(path),"hint");}
                 }
             }
-            search.RegisterValueChangedCallback(e=>Populate(e.newValue));Populate("");Button(box,"Close",CloseDialog);
+            var pages=Row(box);Button(pages,"Previous page",()=>{page=Math.Max(0,page-1);Populate(search.value);});Button(pages,"Next page",()=>{page++;Populate(search.value);});
+            search.RegisterValueChangedCallback(e=>{page=0;Populate(e.newValue);});Populate("");Button(box,"Close",CloseDialog);
         });
+    }
+    void OpenSimsExportImport()
+    {
+        if(libraryImportRunning){Status("A library import is already running.");return;}
+        Dialog("Import Sims Build/Buy exports","Choose a folder of exported OBJ models with their MTL and PNG/JPEG textures. Subfolders are included. This imports local exports; it does not extract game packages.",box=>{
+            var folder=new TextField("Export folder"){value=PlayerPrefs.GetString("worldbuilder.simsExportFolder","")};box.Add(folder);
+#if UNITY_EDITOR
+            Button(box,"Choose export folder",()=>{string chosen=UnityEditor.EditorUtility.OpenFolderPanel("Sims export folder",folder.value,"");if(!string.IsNullOrEmpty(chosen))folder.value=chosen;});
+#else
+            Button(box,"Choose OBJ inside export folder",()=>{string chosen=WorkspaceFiles.Pick(false,"Choose an OBJ in the export folder","obj");if(!string.IsNullOrEmpty(chosen))folder.value=Path.GetDirectoryName(chosen);});
+#endif
+            var progress=Label(box,"Ready. Existing library entries are skipped.","hint");
+            var start=Button(box,"Import folder",()=>ImportSimsExports(folder.value,progress));
+            Button(box,"Cancel import",()=>{cancelLibraryImport=true;progress.text="Cancellation requested; completed imports are kept.";});
+            Button(box,"Close",()=>{cancelLibraryImport=true;CloseDialog();});
+        });
+    }
+    async void ImportSimsExports(string folder,Label progress)
+    {
+        if(libraryImportRunning)return;
+        libraryImportRunning=true;cancelLibraryImport=false;
+        var report=new StringBuilder();int imported=0,skipped=0,failed=0;
+        try {
+            folder=Path.GetFullPath(folder);if(!Directory.Exists(folder))throw new DirectoryNotFoundException("Export folder does not exist.");
+            PlayerPrefs.SetString("worldbuilder.simsExportFolder",folder);PlayerPrefs.Save();Directory.CreateDirectory(LibraryFolder);
+            progress.text="Scanning exported OBJ files…";
+            // File discovery only runs in the background; Unity mesh parsing stays on its main thread.
+            var files=await Task.Run(()=>Directory.EnumerateFiles(folder,"*.obj",SearchOption.AllDirectories).Take(100001).ToArray());
+            if(files.Length>100000)throw new IOException("Export folder exceeds the 100,000-file scan limit; import smaller subfolders.");
+            foreach(string file in files) {
+                if(cancelLibraryImport||this==null)break;
+                try {
+                    string id;using(var hash=SHA256.Create())id=BitConverter.ToString(hash.ComputeHash(Encoding.UTF8.GetBytes(Path.GetFullPath(file).ToUpperInvariant()))).Replace("-","").ToLowerInvariant();
+                    string target=Path.Combine(LibraryFolder,id+".wbworld");
+                    if(File.Exists(target)){skipped++;progress.text="Imported "+imported+" • skipped "+skipped+" • failed "+failed+" / "+files.Length;await Task.Yield();continue;}
+                    if(new FileInfo(file).Length>32*1024*1024)throw new IOException("OBJ exceeds 32 MB import limit.");
+                    var item=WorkspaceObjMaterials.Import(file,out string warning);item.id=Guid.NewGuid().ToString("N");item.libraryId=id;item.parentId=null;item.position=Vector3.zero;
+                    string name="The Sims 4 / "+Path.GetRelativePath(folder,file);item.name=Path.GetFileNameWithoutExtension(file);
+                    new WorkspaceDocument{title=name,objects=new List<WorkspaceProject>{item}}.Save(target);
+                    WriteLibraryMetadata(target,name,file,warning);imported++;
+                    if(!string.IsNullOrEmpty(warning))report.AppendLine("WARNING: "+file+" — "+warning);
+                } catch(Exception error){failed++;report.AppendLine("FAILED: "+file+" — "+error.Message);}
+                progress.text="Imported "+imported+" • skipped "+skipped+" • failed "+failed+" / "+files.Length;
+                await Task.Yield();
+            }
+            if(this!=null){string summary=(cancelLibraryImport?"Cancelled. ":"Finished. ")+"Imported "+imported+", skipped "+skipped+", failed "+failed+".";progress.text=summary;report.Insert(0,summary+Environment.NewLine);WorkspaceAtomicFile.Write(Path.Combine(LibraryFolder,"Sims-import-report.txt"),report.ToString());Status(summary+" Open Local Library and search The Sims 4.");}
+        } catch(Exception error){if(this!=null){progress.text="Import stopped: "+error.Message;Status(progress.text);}}
+        finally {libraryImportRunning=false;}
     }
     void BeginLibraryPlacement(string path)
     {
