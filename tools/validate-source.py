@@ -6,6 +6,8 @@ root = Path(__file__).resolve().parent.parent
 for p in [root/'Packages/manifest.json', *root.glob('Assets/**/*.asmdef')]:
     json.loads(p.read_text())
 assets = list(root.glob('Assets/**/*.cs')) + list(root.glob('Assets/**/*.asmdef'))
+for p in root.glob("Assets/**/*.cs"):
+    assert "GetInstanceID(" not in p.read_text(), f"Obsolete Unity instance ID API: {p}"
 guids = []
 for p in assets:
     meta = Path(str(p)+'.meta')

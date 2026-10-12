@@ -73,6 +73,10 @@ public sealed partial class WorldBuilderRuntime
         if(feedbackOverlay==null||workImage==null)return;feedbackPaths.Clear();feedbackValid=true;previewBadge.style.display=HasPlacement&&modal==null?DisplayStyle.Flex:DisplayStyle.None;
         if(selected!=feedbackSelection){feedbackSelection=selected;selectedRenderers=selected!=null?selected.GetComponentsInChildren<Renderer>():null;}
         if(modal==null)FeedbackBounds(selectedRenderers);
+        if(modal==null&&constructionTool=="roadnode"&&selected?.GetComponent<WorkspaceIdentity>()?.construction?.kind=="road") {
+            var source=selected.GetComponent<WorkspaceIdentity>().construction;var terrains=world.GetComponentsInChildren<WorkspaceIdentity>();float radius=Mathf.Max(0.15f,workDistance*0.005f);
+            foreach(var point in source.points){var position=RoadNodeDisplay(selected,point,terrains);feedbackPaths.Add(new[]{position-Vector3.right*radius,position+Vector3.right*radius});feedbackPaths.Add(new[]{position-Vector3.forward*radius,position+Vector3.forward*radius});}
+        }
         if(roadDrag&&modal==null){feedbackPaths.Add(new[]{roadDragStart,roadDragEnd});previewBadge.text="ROAD PREVIEW — release to build • Escape cancels";previewBadge.style.display=DisplayStyle.Flex;}else previewBadge.text="PLACEMENT PREVIEW — click to place • Escape cancels";
         if(!HasPlacement&&placementPreview!=null)ClearPlacementPreview();
         if(modal==null&&feedbackHover&&(HasPlacement||IsBrush()||firstCorner.HasValue||constructionTool=="roadcurve")) {

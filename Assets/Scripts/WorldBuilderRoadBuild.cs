@@ -10,22 +10,25 @@ public sealed partial class WorldBuilderRuntime
     string roadPreset="Local street";
     Vector3 roadDragStart,roadDragEnd,roadPreviewEnd;
     GameObject roadDragPreview;
-    Button finishRouteButton;
+    Button finishRouteButton,roadEditButton,junctionEditButton;
     readonly List<Vector3> roadSnapPoints=new List<Vector3>();
     void RoadBuildCatalog(VisualElement choices,VisualElement settings)
     {
         var sections=Row(choices,"road-sections");
-        var draw=Button(sections,"Build roads",()=>{CancelConstruction();roadsideObjects=false;BuildConstructionPanel();});draw.EnableInClassList("selected",!roadsideObjects);
-        var props=Button(sections,"Roadside objects",()=>{CancelConstruction();roadsideObjects=true;BuildConstructionPanel();});props.EnableInClassList("selected",roadsideObjects);
+        var draw=Button(sections,"Build roads",()=>{CancelConstruction();roadsideObjects=false;junctionCatalog=false;BuildConstructionPanel();});draw.EnableInClassList("selected",!roadsideObjects&&!junctionCatalog);
+        var junctions=Button(sections,"Junctions",()=>{CancelConstruction();junctionCatalog=true;roadsideObjects=false;BuildConstructionPanel();});junctions.EnableInClassList("selected",junctionCatalog);
+        var props=Button(sections,"Roadside objects",()=>{CancelConstruction();roadsideObjects=true;junctionCatalog=false;BuildConstructionPanel();});props.EnableInClassList("selected",roadsideObjects);
         if(roadsideObjects){BuildAssetCatalog(choices);return;}
+        if(junctionCatalog){ToolChoice(choices,"Place junction","junction");Button(settings,"New junction settings",()=>OpenJunctionSettings());junctionEditButton=Button(settings,"Edit selected junction",()=>OpenJunctionSettings(selected));junctionEditButton.SetEnabled(selected?.GetComponent<WorkspaceIdentity>()?.construction?.kind=="junction");return;}
         var presets=Row(choices,"road-presets");
-        foreach(string name in new[]{"Local street","Avenue","Country road"}) {
-            string value=name;var tile=Button(presets,value,()=>{roadPreset=value;roadWidth=value=="Avenue"?12:6;roadSidewalk=value=="Country road"?0:value=="Avenue"?1.5f:1.2f;SetTool("road");BuildConstructionPanel();});
+        foreach(string name in new[]{"Local street","Two-lane","Multi-lane","Highway","Dirt road","Parking lane","Service road","Footpath"}) {
+            string value=name;var tile=Button(presets,value,()=>RoadPreset(value));
             tile.EnableInClassList("selected",value==roadPreset);
         }
-        var tools=Row(choices,"road-drawing-tools");ToolChoice(tools,"Straight road","road");ToolChoice(tools,"Curved route","roadcurve");
+        var tools=Row(choices,"road-drawing-tools");ToolChoice(tools,"Straight road","road");ToolChoice(tools,"Curved route","roadcurve");ToolChoice(tools,"Edit nodes","roadnode");
         finishRouteButton=Button(tools,"Finish route",FinishRoad);finishRouteButton.style.display=constructionTool=="roadcurve"?DisplayStyle.Flex:DisplayStyle.None;
-        Number(settings,"Road width (m)",roadWidth,2,20,v=>roadWidth=v);Number(settings,"Sidewalk (m)",roadSidewalk,0,5,v=>roadSidewalk=v);
+        Number(settings,"Next road width (m)",roadWidth,1,40,v=>{roadWidth=v;int lanes=roadStyle.lanes==0?2:roadStyle.lanes;if((v-roadStyle.median)/lanes>8){lanes=Mathf.CeilToInt((v-roadStyle.median)/8);if(!roadStyle.oneWay&&lanes%2!=0)lanes++;roadStyle.lanes=Mathf.Clamp(lanes,1,8);}});Number(settings,"Next sidewalk (m)",roadSidewalk,0,10,v=>roadSidewalk=v);
+        Button(settings,"New road defaults",()=>OpenRoadSettings());roadEditButton=Button(settings,"Edit selected road",()=>OpenRoadSettings(selected));roadEditButton.SetEnabled(selected?.GetComponent<WorkspaceIdentity>()?.construction?.kind=="road");
         var snap=new Toggle("Snap to grid and road ends"){value=gridEnabled};settings.Add(snap);snap.RegisterValueChangedCallback(e=>gridEnabled=e.newValue);
     }
     void CacheRoadEnds()
@@ -64,7 +67,7 @@ public sealed partial class WorldBuilderRuntime
     {
         roadDragEnd=RoadDragPoint(point);if((roadDragEnd-roadPreviewEnd).sqrMagnitude<0.0001f)return;roadPreviewEnd=roadDragEnd;ClearRoadDragPreview();
         if(new Vector2(roadDragEnd.x-roadDragStart.x,roadDragEnd.z-roadDragStart.z).magnitude<0.25f)return;
-        var data=ConstructionData(new WorldConstruction{kind="road",points=new[]{P(roadDragStart),P(roadDragEnd)},width=roadWidth,sidewalk=roadSidewalk});data.name="Road preview — transient";
+        var data=ConstructionData(RoadRecipe(new[]{P(roadDragStart),P(roadDragEnd)}));data.name="Road preview — transient";
         var stage=new GameObject("Road drag preview — transient").transform;
         try {roadDragPreview=Model(data,stage,31);RebuildConstruction(roadDragPreview);roadDragPreview.transform.SetParent(null,false);foreach(var collider in roadDragPreview.GetComponentsInChildren<Collider>())collider.enabled=false;}
         finally {Destroy(stage.gameObject);}
@@ -75,7 +78,7 @@ public sealed partial class WorldBuilderRuntime
         if(!roadDrag)return;roadDrag=false;ClearRoadDragPreview();
         if(cancel)return;
         if(new Vector2(roadDragEnd.x-roadDragStart.x,roadDragEnd.z-roadDragStart.z).magnitude<0.25f){Status("Drag from one road endpoint to another.");return;}
-        CreateConstruction(roadPreset,new WorldConstruction{kind="road",points=new[]{P(roadDragStart),P(roadDragEnd)},width=roadWidth,sidewalk=roadSidewalk},Vector3.zero,world);
+        CreateConstruction(roadPreset,RoadRecipe(new[]{P(roadDragStart),P(roadDragEnd)}),Vector3.zero,world);
         Changed();Status("Road built. Drag the next segment; Escape cancels the tool.");
     }
 }

@@ -84,6 +84,7 @@ public sealed partial class WorldBuilderRuntime
     void BuildConstructionPanel()
     {
         root.Q<ScrollView>("construction-catalog").EnableInClassList("buy-catalog",toolCategory=="Objects"||toolCategory=="Furnish"||toolCategory=="Library"||toolCategory=="Roads"&&roadsideObjects);
+        ApplyLayout();
         constructionPanel.Clear();
         var categories=Row(constructionPanel,"catalog-tabs");
         string[] names=workspaceMode=="World"?new[]{"Terrain","Roads","Lots","Objects"}:workspaceMode=="Lot"?new[]{"Structure","Openings","Floors","Furnish"}:new[]{"Import","Primitives","Library"};
@@ -125,7 +126,7 @@ public sealed partial class WorldBuilderRuntime
     }
     void ToolChoice(VisualElement parent,string label,string tool){toolButtons[tool]=Button(parent,label,()=>SetTool(tool));}
     void SetTool(string tool){CancelConstruction();constructionTool=tool;RefreshWorldTools();Status(ToolInstruction());}
-    void CancelConstruction(){EndRoadDrag(true);ClearPlacementPreview();EndObjectGesture(true);pendingLibraryPath=null;pendingCopySource=null;placementYaw=0;ConstructionPointerUp();firstCorner=null;roadPoints.Clear();constructionTool="select";RefreshWorldTools();}
+    void CancelConstruction(){EndRoadNode(true);EndRoadDrag(true);ClearRoadDragPreview();ClearPlacementPreview();EndObjectGesture(true);pendingLibraryPath=null;pendingCopySource=null;placementYaw=0;ConstructionPointerUp();firstCorner=null;roadPoints.Clear();constructionTool="select";RefreshWorldTools();}
     string ToolInstruction()
     {
         if(HasPlacement)return "Click to place. Comma/period or right-click rotate 45°. Shift repeats placement. Escape cancels.";
@@ -135,6 +136,8 @@ public sealed partial class WorldBuilderRuntime
         if(constructionTool=="rotate")return "Drag an object horizontally to rotate around its local vertical axis. Escape cancels.";
         if(constructionTool=="scale")return "Drag an object horizontally to scale uniformly. Escape cancels.";
         if(constructionTool=="road")return "Drag to preview a road; release to build. Snaps to 45° and road ends. Alt draws freely; Escape cancels.";
+        if(constructionTool=="roadnode")return "Drag road control points. Connected ends slide along the junction side; Escape restores the edit.";
+        if(constructionTool=="junction")return "Click to place a junction. Set its size/radius, then attach roads through Road settings > Connections.";
         if(constructionTool=="roadcurve")return "Click route points, then Finish route or Enter. Escape cancels.";
         if(constructionTool=="room"||constructionTool=="lot"||constructionTool=="floor"||constructionTool=="roof"||constructionTool=="wall")return "Click two grid-snapped corners/endpoints. Escape cancels.";
         if(constructionTool=="door"||constructionTool=="window")return "Click an existing wall to create an opening and frame.";
@@ -237,6 +240,7 @@ public sealed partial class WorldBuilderRuntime
             return true;
         }
         if(constructionTool=="select"||workspaceMode=="Asset")return false;
+        if(constructionTool=="roadnode"){Try(()=>BeginRoadNode(point));return true;}
         Try(()=>{
             if(constructionTool=="door"||constructionTool=="window"){PlaceOpening(point);return;}
             if(!Ground(point,out var hit,out var terrain))return;
@@ -245,6 +249,7 @@ public sealed partial class WorldBuilderRuntime
                 stroke=true;flattenHeight=terrain.transform.InverseTransformPoint(hit).y;ApplyBrush(terrain,hit);return;
             }
             hit=Snap(hit);
+            if(constructionTool=="junction"){CreateConstruction("Junction",CopyRoad(junctionStyle),hit,world);Changed();return;}
             if(constructionTool=="road"){BeginRoadDrag(hit);return;}
             if(constructionTool=="roadcurve"){if(roadPoints.Count==0)CacheRoadEnds();roadPoints.Add(P(RoadEndSnap(hit)));Status("Road points: "+roadPoints.Count+". Finish Road to create it.");return;}
             if(constructionTool=="tree"){CreateConstruction("Palm",new WorldConstruction{kind="tree",size=new WorldPoint(1,6,1)},hit,world);Changed();return;}
@@ -260,11 +265,12 @@ public sealed partial class WorldBuilderRuntime
     }
     void ConstructionPointerMove(Vector2 point)
     {
+        if(roadNodeDrag){Try(()=>{if(Ground(point,out var hit,out var terrain))MoveRoadNode(hit);});return;}
         if(roadDrag){Try(()=>{if(Ground(point,out var hit,out var terrain))UpdateRoadDrag(hit);});return;}
         if(!stroke||!IsBrush())return;
         Try(()=>{if(Ground(point,out var hit,out var terrain)&&terrain!=null)ApplyBrush(terrain,hit);});
     }
-    void ConstructionPointerUp(bool cancelRoad=false){Try(()=>EndRoadDrag(cancelRoad));if(!stroke)return;stroke=false;Changed();}
+    void ConstructionPointerUp(bool cancelRoad=false){Try(()=>{EndRoadNode(cancelRoad);EndRoadDrag(cancelRoad);});if(!stroke)return;stroke=false;Changed();}
     void ApplyBrush(GameObject terrain,Vector3 point)
     {
         var identity=terrain.GetComponent<WorkspaceIdentity>();
@@ -292,7 +298,7 @@ public sealed partial class WorldBuilderRuntime
         float extent=0;
         if(terrain!=null&&center.HasValue){var p=terrain.GetComponent<WorkspaceIdentity>().construction;var scale=terrain.transform.lossyScale;float cell=Mathf.Max(p.size.x,p.size.z)/(p.resolution-1);extent=(radius+2*cell)*Mathf.Max(Mathf.Abs(scale.x),Mathf.Abs(scale.z));}
         foreach(var identity in world.GetComponentsInChildren<WorkspaceIdentity>()) {
-            if(identity.construction?.kind!="road"||!identity.construction.FollowTerrain)continue;
+            if((identity.construction?.kind!="road"&&identity.construction?.kind!="junction")||!identity.construction.FollowTerrain)continue;
             if(center.HasValue){var bounds=identity.GetComponent<Renderer>().bounds;var areaMin=center.Value-new Vector3(extent,0,extent);var areaMax=center.Value+new Vector3(extent,0,extent);if(!WorldGeometry.IntersectsXZ(P(bounds.min),P(bounds.max),P(areaMin),P(areaMax)))continue;}
             RebuildConstruction(identity.gameObject);
         }
@@ -301,7 +307,7 @@ public sealed partial class WorldBuilderRuntime
     GameObject CreateConstruction(string name,WorldConstruction construction,Vector3 position,Transform parent)
     {
         var data=ConstructionData(construction);data.name=name;data.id=Guid.NewGuid().ToString("N");data.position=parent.InverseTransformPoint(position);
-        var go=Model(data,parent,31);if(construction.kind=="road"&&construction.FollowTerrain)RebuildConstruction(go);selected=go;return go;
+        var go=Model(data,parent,31);if((construction.kind=="road"||construction.kind=="junction")&&construction.FollowTerrain)RebuildConstruction(go);selected=go;return go;
     }
     WorkspaceProject ConstructionData(WorldConstruction p)=>WorldGeometryUnity.Project(p);
     void RebuildConstruction(GameObject go)
@@ -312,6 +318,10 @@ public sealed partial class WorldBuilderRuntime
         var old=identity.ownedMesh;identity.ownedMesh=mesh;go.GetComponent<MeshFilter>().sharedMesh=mesh;
         var collider=go.GetComponent<MeshCollider>();collider.sharedMesh=null;collider.sharedMesh=mesh;
         if(old!=null)Destroy(old);
+        if((identity.construction.kind=="road"||identity.construction.kind=="junction")) {
+            var oldMaterials=identity.ownedMaterials;identity.ownedMaterials=Array.ConvertAll(data.materialColors,c=>Material(c));identity.ownedMaterial=identity.ownedMaterials[0];go.GetComponent<MeshRenderer>().sharedMaterials=identity.ownedMaterials;
+            foreach(var material in oldMaterials??new Material[0])if(material!=null)Destroy(material);
+        }
         if(identity.construction.kind=="wall")foreach(Transform child in go.transform) {
             var attachment=child.GetComponent<WorkspaceIdentity>();var recipe=attachment?.construction;
             if(recipe==null||(recipe.kind!="door"&&recipe.kind!="window")||recipe.openingIndex<0||recipe.openingIndex>=identity.construction.openings.Length)continue;
@@ -389,7 +399,7 @@ public sealed partial class WorldBuilderRuntime
     void FinishRoad()
     {
         if(roadPoints.Count<2){if(constructionTool=="roadcurve")Status("Add at least two route points.");return;}
-        CreateConstruction(roadPreset,new WorldConstruction{kind="road",points=roadPoints.ToArray(),width=roadWidth,sidewalk=roadSidewalk},Vector3.zero,world);
+        CreateConstruction(roadPreset,RoadRecipe(roadPoints.ToArray()),Vector3.zero,world);
         roadPoints.Clear();Changed();Status("Editable spline road created with sidewalks and center markings.");
     }
     void BuildFloridaTest()
@@ -409,6 +419,7 @@ public sealed partial class WorldBuilderRuntime
     }
     void RefreshWorldTools()
     {
+        roadEditButton?.SetEnabled(selected?.GetComponent<WorkspaceIdentity>()?.construction?.kind=="road");junctionEditButton?.SetEnabled(selected?.GetComponent<WorkspaceIdentity>()?.construction?.kind=="junction");
         if(finishRouteButton!=null)finishRouteButton.style.display=constructionTool=="roadcurve"?DisplayStyle.Flex:DisplayStyle.None;
         if(modeHeading!=null)modeHeading.text=(workspaceMode=="Lot"&&activeLot!=null?"Lot: "+activeLot.name:workspaceMode=="Asset"?"Asset editor":"World")+"  ›  "+CategoryTitle(toolCategory);
         if(toolButtons.TryGetValue("scale",out var scaleButton))scaleButton.style.display=workspaceMode=="Asset"?DisplayStyle.Flex:DisplayStyle.None;
@@ -430,13 +441,8 @@ public sealed partial class WorldBuilderRuntime
         var p=selected?.GetComponent<WorkspaceIdentity>()?.construction;if(p==null)return;
         Label(inspector,"EDITABLE "+p.kind.ToUpperInvariant(),"section");
         if(p.kind=="lot")Button(inspector,"Enter Lot Build Mode",EnterLot);
-        if(p.kind=="road") {
-            var follow=new Toggle("Follow terrain"){value=p.FollowTerrain};inspector.Add(follow);
-            follow.RegisterValueChangedCallback(e=>{p.independentElevation=!e.newValue;RebuildConstruction(selected);Changed();});
-            Label(inspector,"Follow terrain controls road elevation. Disable it to edit elevated road heights.","hint");
-            Number(inspector,"Width",p.width,1,40,v=>{p.width=v;RebuildConstruction(selected);Changed();});
-            Number(inspector,"Sidewalk",p.sidewalk,0,10,v=>{p.sidewalk=v;RebuildConstruction(selected);Changed();});
-        }
+        if(p.kind=="junction"){Button(inspector,"Junction size and radius",()=>OpenJunctionSettings(selected));return;}
+        if(p.kind=="road"){Button(inspector,"Road settings",()=>OpenRoadSettings(selected));Button(inspector,"Drag road nodes",()=>SetTool("roadnode"));Button(inspector,"Grade terrain to road",()=>GradeRoadTerrain(selected));return;}
         if(p.kind=="road"||p.kind=="wall") {
             for(int i=0;i<p.points.Length;i++) {
                 int at=i;Label(inspector,"CONTROL POINT "+(i+1),"section");
@@ -457,10 +463,11 @@ public sealed partial class WorldBuilderRuntime
             float bounded=Mathf.Clamp(e.newValue,min,max);slider.SetValueWithoutNotify(bounded);apply(bounded);
         });return slider;
     }
-    void Number(VisualElement parent,string label,float value,float min,float max,Action<float> apply)
+    FloatField Number(VisualElement parent,string label,float value,float min,float max,Action<float> apply)
     {
         var field=new FloatField(label){value=value,isDelayed=true};parent.Add(field);
         field.RegisterValueChangedCallback(e=>Try(()=>{if(float.IsNaN(e.newValue)||float.IsInfinity(e.newValue)||e.newValue<min||e.newValue>max)throw new ArgumentException(label+" must be between "+min+" and "+max);apply(e.newValue);}));
+        return field;
     }
     void WorldUpdate()
     {

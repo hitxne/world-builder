@@ -77,6 +77,7 @@ public static class WorkspaceObjExport
         }
         if (number == 0) throw new InvalidOperationException("Add at least one object before exporting.");
         WorkspaceAtomicFile.Write(Path.Combine(Path.GetDirectoryName(path), materialFile), mtl.ToString());
+        WorkspaceRoadExport.Write(root,path);
         WorkspaceAtomicFile.Write(path, obj.ToString());
     }
 }

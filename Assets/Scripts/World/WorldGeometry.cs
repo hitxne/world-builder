@@ -77,7 +77,7 @@ public static class WorldGeometry
     public static WorldGeometryMesh Build(WorldConstruction p)
     {
         if(p==null||p.kind==null)throw new ArgumentException("Missing construction source.");
-        var b=new Builder(3);
+        var b=new Builder(p.kind=="road"||p.kind=="junction"?5:3);
         if(p.kind=="terrain") {
             CheckTerrain(p); int n=p.resolution;
             for(int z=0;z<n;z++)for(int x=0;x<n;x++)b.Vertex(new WorldPoint((x/(float)(n-1)-0.5f)*p.size.x,p.heights[z*n+x],(z/(float)(n-1)-0.5f)*p.size.z),x/(float)(n-1)*20,z/(float)(n-1)*20);
@@ -86,6 +86,7 @@ public static class WorldGeometry
                 b.Triangle(a,a+n,a+1,group);b.Triangle(a+1,a+n,a+n+1,group);
             }
         } else if(p.kind=="road") Road(p,b);
+        else if(p.kind=="junction") Junction(p,b);
         else if(p.kind=="wall") Wall(p,b);
         else if(p.kind=="roof") Roof(p,b);
         else if(p.kind=="door"||p.kind=="window") Frame(p,b);
@@ -120,28 +121,99 @@ public static class WorldGeometry
             float clearance=group==1?0.15f:group==2?0.07f:0.05f;
             var visited=new HashSet<int>();
             foreach(int index in mesh.groups[group])if(visited.Add(index)) {
-                var result=project(original[index],clearance);
+                float offset=mesh.roadClearance!=null&&index<mesh.roadClearance.Length&&!float.IsNaN(mesh.roadClearance[index])?mesh.roadClearance[index]:clearance;
+                var result=project(original[index],offset);
                 if(result.HasValue)mesh.vertices[index]=result.Value;
             }
         }
     }
+    static void CheckJunction(WorldConstruction p)
+    {
+        foreach(float value in new[]{p.size.x,p.size.z,p.junctionRadius,p.elevationOffset})if(float.IsNaN(value)||float.IsInfinity(value))throw new ArgumentException("Invalid junction value");
+        if(p.size.x<4||p.size.z<4||p.size.x>100||p.size.z>100||p.junctionRadius<0||p.junctionRadius>Math.Min(p.size.x,p.size.z)/2)throw new ArgumentException("Invalid junction size or radius");
+    }
+    public static WorldPoint JunctionPort(WorldConstruction p,int port,float offset,float roadWidth)
+    {
+        CheckJunction(p);if(float.IsNaN(offset)||float.IsInfinity(offset)||float.IsNaN(roadWidth)||float.IsInfinity(roadWidth)||port<0||port>3||roadWidth<=0)throw new ArgumentException("Invalid junction connection");
+        float limit=(port%2==0?p.size.x:p.size.z)/2-p.junctionRadius-roadWidth/2;
+        if(limit<0)throw new ArgumentException("Widen the junction or reduce its radius to fit this road");
+        offset=Math.Max(-limit,Math.Min(limit,offset));
+        return port==0?new WorldPoint(offset,p.elevationOffset,p.size.z/2):port==1?new WorldPoint(p.size.x/2,p.elevationOffset,offset):port==2?new WorldPoint(offset,p.elevationOffset,-p.size.z/2):new WorldPoint(-p.size.x/2,p.elevationOffset,offset);
+    }
+    static void Junction(WorldConstruction p,Builder b)
+    {
+        CheckJunction(p);var outline=new List<WorldPoint>();float x=p.size.x/2,z=p.size.z/2,r=p.junctionRadius,y=p.elevationOffset+0.05f;
+        if(r==0){outline.Add(new WorldPoint(x,y,z));outline.Add(new WorldPoint(-x,y,z));outline.Add(new WorldPoint(-x,y,-z));outline.Add(new WorldPoint(x,y,-z));}
+        else for(int corner=0;corner<4;corner++)for(int step=0;step<=12;step++) {
+            float angle=(corner*90+step*90f/12)*(float)Math.PI/180,cx=corner==0||corner==3?x-r:-x+r,cz=corner<2?z-r:-z+r;
+            outline.Add(new WorldPoint(cx+r*(float)Math.Cos(angle),y,cz+r*(float)Math.Sin(angle)));
+        }
+        var center=new WorldPoint(0,y,0);for(int i=0;i<outline.Count;i++)b.Face(center,outline[(i+1)%outline.Count],outline[i],0,y);
+    }
+    public static List<WorldPoint> RoadSamples(WorldConstruction p)
+    {
+        foreach(float value in new[]{p.width,p.sidewalk,p.shoulderLeft,p.shoulderRight,p.median,p.banking,p.elevationOffset,p.friction,p.speedLimitMph})if(float.IsNaN(value)||float.IsInfinity(value))throw new ArgumentException("Invalid road value");
+        if(p.points==null||p.points.Length<2||p.points.Length>256||p.width<1||p.width>40||p.sidewalk<0||p.sidewalk>10
+            ||p.lanes<0||p.lanes>8||p.markings<0||p.markings>3||p.subdivisions<0||p.subdivisions>64||p.curveMode<0||p.curveMode>1
+            ||p.shoulderLeft<0||p.shoulderLeft>10||p.shoulderRight<0||p.shoulderRight>10||p.median<0||p.median>=p.width
+            ||p.banking<-30||p.banking>30||p.elevationOffset<-100||p.elevationOffset>200)throw new ArgumentException("Invalid road cross-section or spline");
+        foreach(var point in p.points)if(float.IsNaN(point.x)||float.IsNaN(point.y)||float.IsNaN(point.z)||float.IsInfinity(point.x)||float.IsInfinity(point.y)||float.IsInfinity(point.z))throw new ArgumentException("Invalid road point");
+        var samples=new List<WorldPoint>();int steps=p.subdivisions==0?12:p.subdivisions;
+        for(int i=0;i<p.points.Length-1;i++)for(int s=0;s<steps;s++)samples.Add(p.curveMode==1?p.points[i]+(p.points[i+1]-p.points[i])*(s/(float)steps):Catmull(p.points[Math.Max(0,i-1)],p.points[i],p.points[i+1],p.points[Math.Min(p.points.Length-1,i+2)],s/(float)steps));
+        samples.Add(p.points[p.points.Length-1]);float length=0;for(int i=0;i<samples.Count-1;i++){var delta=samples[i+1]-samples[i];length+=(float)Math.Sqrt(delta.x*delta.x+delta.z*delta.z);}
+        if(length<0.1f)throw new ArgumentException("Road points must span at least 0.1 m");return samples;
+    }
     static void Road(WorldConstruction p,Builder b)
     {
-        if(p.points==null||p.points.Length<2||p.points.Length>256||p.width<1||p.width>40||p.sidewalk<0||p.sidewalk>10)throw new ArgumentException("Invalid road spline.");
-        var samples=new List<WorldPoint>();
-        for(int i=0;i<p.points.Length-1;i++)for(int s=0;s<12;s++)samples.Add(Catmull(p.points[Math.Max(0,i-1)],p.points[i],p.points[i+1],p.points[Math.Min(p.points.Length-1,i+2)],s/12f));
-        samples.Add(p.points[p.points.Length-1]);
+        var samples=RoadSamples(p);int lanes=p.lanes==0?2:p.lanes;if(p.lanes>0&&((p.width-p.median)/lanes<0.5f||(p.width-p.median)/lanes>8))throw new ArgumentException("Lane width must be between 0.5 and 8 m");float bank=(float)Math.Tan(p.banking*Math.PI/180),distance=0;
+        if(!p.oneWay&&lanes%2!=0)throw new ArgumentException("Two-way roads need an even lane count; enable one-way for odd counts");
+        if(p.median>0&&(lanes%2!=0||p.oneWay))throw new ArgumentException("A median requires an even number of two-way lanes");
         for(int i=0;i<samples.Count-1;i++) {
-            WorldPoint a=samples[i],c=samples[i+1],direction=(c-a).Unit;
-            if((c-a).Length<0.0001f)continue; var right=new WorldPoint(direction.z,0,-direction.x).Unit;
-            Strip(b,a,c,right,-p.width/2,p.width/2,0,0.05f);
-            if(p.sidewalk>0){Strip(b,a,c,right,-p.width/2-p.sidewalk,-p.width/2,1,0.15f);Strip(b,a,c,right,p.width/2,p.width/2+p.sidewalk,1,0.15f);}
-            if(i%4<2)Strip(b,a,c,right,-0.05f,0.05f,2,0.07f);
+            WorldPoint a=samples[i],c=samples[i+1],direction=c-a;direction.y=0;float length=direction.Length;
+            if(length<0.0001f)continue;var right=new WorldPoint(direction.z,0,-direction.x).Unit;
+            void Surface(float left,float rightEdge,int group,float up)=>RoadStrip(b,a,c,right,left,rightEdge,group,up+p.elevationOffset,bank);
+            if(p.median==0)Surface(-p.width/2,p.width/2,0,0.05f);
+            else {Surface(-p.width/2,-p.median/2,0,0.05f);Surface(p.median/2,p.width/2,0,0.05f);Surface(-p.median/2,p.median/2,4,0.2f);}
+            if(p.shoulderLeft>0)Surface(-p.width/2-p.shoulderLeft,-p.width/2,0,0.05f);
+            if(p.shoulderRight>0)Surface(p.width/2,p.width/2+p.shoulderRight,0,0.05f);
+            if(p.sidewalk>0){Surface(-p.width/2-p.shoulderLeft-p.sidewalk,-p.width/2-p.shoulderLeft,1,0.15f);Surface(p.width/2+p.shoulderRight,p.width/2+p.shoulderRight+p.sidewalk,1,0.15f);}
+            void Line(float at,int group,bool dashed) {
+                if(!dashed){Surface(at-0.05f,at+0.05f,group,0.07f);return;}
+                float cursor=0;
+                while(cursor<length){float phase=(distance+cursor)%12,run=Math.Min(length-cursor,phase<6?6-phase:12-phase);if(run<0.00001f)run=Math.Min(0.0001f,length-cursor);
+                    if(phase<6)RoadStrip(b,a+(c-a)*(cursor/length),a+(c-a)*((cursor+run)/length),right,at-0.05f,at+0.05f,group,0.07f+p.elevationOffset,bank);cursor+=run;}
+            }
+            if(p.markings!=1) {
+                if(!p.oneWay&&p.median==0){if(p.markings==3){Line(-0.12f,2,false);Line(0.12f,2,false);}else Line(0,2,p.markings==0);}
+                if(lanes>2||p.oneWay)for(int lane=1;lane<lanes;lane++) {
+                    float laneWidth=(p.width-p.median)/lanes;float at=p.median>0&&lane>lanes/2?p.median/2+laneWidth*(lane-lanes/2):-p.width/2+laneWidth*lane;
+                    if(!p.oneWay&&lane==lanes/2)continue;if(Math.Abs(at)<p.median/2)continue;Line(at,3,true);
+                }
+                if(p.edgeLines){Line(-p.width/2+0.12f,3,false);Line(p.width/2-0.12f,3,false);}
+            }distance+=length;
         }
     }
-    static void Strip(Builder b,WorldPoint a,WorldPoint c,WorldPoint r,float left,float right,int group,float up)
+    static void RoadStrip(Builder b,WorldPoint a,WorldPoint c,WorldPoint r,float left,float right,int group,float up,float bank)
     {
-        var y=new WorldPoint(0,up,0);b.Quad(a+r*left+y,c+r*left+y,c+r*right+y,a+r*right+y,group);
+        float low=up+bank*left,high=up+bank*right;
+        b.Quad(a+r*left+new WorldPoint(0,low,0),c+r*left+new WorldPoint(0,low,0),c+r*right+new WorldPoint(0,high,0),a+r*right+new WorldPoint(0,high,0),group,new[]{low,low,high,high});
+    }
+    public static void GradeRoadTerrain(WorldConstruction terrain,WorldConstruction road,float feather)
+    {
+        CheckTerrain(terrain);if(feather<0||feather>20)throw new ArgumentException("Invalid grading feather");var samples=RoadSamples(road);
+        float left=road.width/2+road.shoulderLeft+road.sidewalk,right=road.width/2+road.shoulderRight+road.sidewalk,extent=Math.Max(left,right)+feather;
+        float minX=float.MaxValue,maxX=float.MinValue,minZ=float.MaxValue,maxZ=float.MinValue;
+        foreach(var point in samples){minX=Math.Min(minX,point.x);maxX=Math.Max(maxX,point.x);minZ=Math.Min(minZ,point.z);maxZ=Math.Max(maxZ,point.z);}
+        float bank=(float)Math.Tan(road.banking*Math.PI/180);int n=terrain.resolution;
+        for(int z=0;z<n;z++)for(int x=0;x<n;x++) {
+            float px=(x/(float)(n-1)-0.5f)*terrain.size.x,pz=(z/(float)(n-1)-0.5f)*terrain.size.z;
+            if(px<minX-extent||px>maxX+extent||pz<minZ-extent||pz>maxZ+extent)continue;
+            float closest=float.MaxValue,target=0,signed=0;
+            for(int i=0;i<samples.Count-1;i++){var a=samples[i];var d=samples[i+1]-a;float squared=d.x*d.x+d.z*d.z;if(squared<0.000001f)continue;float t=Math.Max(0,Math.Min(1,((px-a.x)*d.x+(pz-a.z)*d.z)/squared));float dx=px-a.x-d.x*t,dz=pz-a.z-d.z*t,dist=(float)Math.Sqrt(dx*dx+dz*dz);
+                if(dist<closest){closest=dist;signed=(dx*d.z-dz*d.x)/(float)Math.Sqrt(squared);target=a.y+d.y*t+road.elevationOffset+signed*bank;}}
+            float boundary=signed<0?left:right;if(closest>boundary+feather)continue;
+            float weight=closest<=boundary?1:feather>0?1-(closest-boundary)/feather:0;int at=z*n+x;terrain.heights[at]+=(target-terrain.heights[at])*weight;
+        }
     }
     static void Wall(WorldConstruction p,Builder b)
     {
@@ -202,12 +274,12 @@ public static class WorldGeometry
     }
     sealed class Builder
     {
-        readonly List<WorldPoint> vertices=new List<WorldPoint>();readonly List<float> uv=new List<float>();readonly List<int>[] groups;
+        readonly List<WorldPoint> vertices=new List<WorldPoint>();readonly List<float> uv=new List<float>();readonly List<float> offsets=new List<float>();readonly List<int>[] groups;
         public Builder(int count){groups=new List<int>[count];for(int i=0;i<count;i++)groups[i]=new List<int>();}
-        public int Vertex(WorldPoint p,float u=0,float v=0){int at=vertices.Count;vertices.Add(p);uv.Add(u);uv.Add(v);return at;}
+        public int Vertex(WorldPoint p,float u=0,float v=0){int at=vertices.Count;vertices.Add(p);uv.Add(u);uv.Add(v);offsets.Add(float.NaN);return at;}
         public void Triangle(int a,int b,int c,int group){groups[group].Add(a);groups[group].Add(b);groups[group].Add(c);}
-        public void Face(WorldPoint a,WorldPoint b,WorldPoint c,int group){int at=Vertex(a,0,0);Vertex(b,0,1);Vertex(c,1,0);Triangle(at,at+1,at+2,group);}
-        public void Quad(WorldPoint a,WorldPoint b,WorldPoint c,WorldPoint d,int group){int at=Vertex(a,0,0);Vertex(b,0,1);Vertex(c,1,1);Vertex(d,1,0);Triangle(at,at+1,at+2,group);Triangle(at,at+2,at+3,group);}
-        public WorldGeometryMesh Result(){var arrays=new int[groups.Length][];for(int i=0;i<groups.Length;i++)arrays[i]=groups[i].ToArray();return new WorldGeometryMesh{vertices=vertices.ToArray(),uv=uv.ToArray(),groups=arrays};}
+        public void Face(WorldPoint a,WorldPoint b,WorldPoint c,int group,float clearance=float.NaN){int at=Vertex(a,0,0);Vertex(b,0,1);Vertex(c,1,0);if(!float.IsNaN(clearance))for(int i=0;i<3;i++)offsets[at+i]=clearance;Triangle(at,at+1,at+2,group);}
+        public void Quad(WorldPoint a,WorldPoint b,WorldPoint c,WorldPoint d,int group,float[] clearance=null){int at=Vertex(a,0,0);Vertex(b,0,1);Vertex(c,1,1);Vertex(d,1,0);if(clearance!=null)for(int i=0;i<4;i++)offsets[at+i]=clearance[i];Triangle(at,at+1,at+2,group);Triangle(at,at+2,at+3,group);}
+        public WorldGeometryMesh Result(){var arrays=new int[groups.Length][];for(int i=0;i<groups.Length;i++)arrays[i]=groups[i].ToArray();return new WorldGeometryMesh{vertices=vertices.ToArray(),uv=uv.ToArray(),groups=arrays,roadClearance=offsets.ToArray()};}
     }
 }

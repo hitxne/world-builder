@@ -168,3 +168,11 @@ Validation: source configuration/GUID/input checks, C# syntax parsing and whites
 - Replace Buy dropdown navigation with a persistent room/function rail; place directly from cards with a separate preview/details action.
 - Add road presets, drag/release road construction with terrain-conforming preview, angle/endpoint snapping, curved routes and Roadside objects.
 - Shared exporter compile/integration checks pass. Unity compilation, native rendering/gesture validation and game-format coverage remain unverified.
+
+## Deeper road systems and directive audit — unreleased
+- Add eight road presets and grouped cross-section, marking, elevation, shape, connection and surface controls.
+- Generate lanes, shoulders, medians and physically spaced markings; retain banking/height offsets during terrain projection and add source-driven grading.
+- Add rounded junctions with editable radius and independently sliding side connections; update linked endpoints when junctions change.
+- Add road-node dragging and recipe/network metadata export alongside OBJ.
+- Fix obsolete GetInstanceID cache usage, saved-world road conformance and canonical Buy dock sizing.
+- Actual pure geometry/container harness passes 43,879 assertions; Unity compilation/gestures, source-asset coverage and Windows acceptance remain unverified. Overall audit grade C−; see docs/PROGRESS-AUDIT-2026-10-12.md.

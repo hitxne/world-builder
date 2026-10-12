@@ -31,6 +31,11 @@ public sealed class WorldConstruction
     public float width = 6, sidewalk = 1.2f, waterLevel = 1;
     public string surface = "asphalt";
     public float friction = 1;
+    public string startJunction,endJunction;
+    public int startPort,endPort;public float startConnectionOffset,endConnectionOffset,junctionRadius;
+    public int lanes,markings,subdivisions,curveMode;
+    public float shoulderLeft,shoulderRight,median,banking,elevationOffset,speedLimitMph;
+    public bool oneWay,edgeLines;
     public bool independentElevation;
     public bool FollowTerrain => !independentElevation;
 }
@@ -39,4 +44,5 @@ public sealed class WorldGeometryMesh
     public WorldPoint[] vertices;
     public float[] uv;
     public int[][] groups;
+    public float[] roadClearance;
 }

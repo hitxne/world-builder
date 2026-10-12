@@ -36,3 +36,13 @@ Format references (independent implementation; no s4pi code/library included):
 - https://github.com/s4ptacle/Sims4Tools/tree/fff19365a12711879bad26481a393a6fbc62c465/s4pi%20Wrappers/s4piRCOLChunks
 - https://github.com/s4ptacle/Sims4Tools/blob/fff19365a12711879bad26481a393a6fbc62c465/s4pi%20Wrappers/ImageResource/DSTResource.cs
 - https://github.com/s4ptacle/Sims4Tools/tree/fff19365a12711879bad26481a393a6fbc62c465/s4pi%20Wrappers/MeshChunks
+
+## Deeper road control and junctions
+
+Road settings separate Cross-section, Markings, Elevation, Shape, Connections and Surface. Eight presets cover local streets, two-lane/multi-lane roads, highway, dirt, parking, service and footpath layouts. Width/lane controls are synchronized; shoulders, sidewalks and medians affect real geometry. Banking/elevation offsets survive terrain conformance. Markings use physical dash spacing, separate yellow center/white lane and edge groups. Surface/friction/speed metadata persists.
+
+Edit nodes drags control points; Shape supports numeric positions, insertion/removal, reverse and smooth-vs-straight segments. Grade terrain cuts/fills beneath the profile with a feathered margin, preserves paint and locks road elevation. Grading currently requires upright, uniformly scaled road/terrain transforms.
+
+Junctions have width/depth and corner radius. Road settings > Connections assigns start/end to an existing junction's North/East/South/West side, with separate slide offsets. The usable range accounts for the radius and road width. Opposing roads need not share an alignment or central point. Dragging connected endpoint nodes slides their offset along the corresponding side; moving/resizing a junction updates linked endpoints. Source graph/road metadata is also emitted alongside OBJ as .roads.json.
+
+This provides rounded junction surfaces and independent editable ports, not seamless intersection lane merging, automatic road flares, crosswalks, sidewalk corner transitions, traffic routing or bridge geometry. Native interaction/persistence verification remains pending; pure junction bounds, corner rounding and independent side offsets are tested.

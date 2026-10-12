@@ -23,6 +23,11 @@ public static class WorldMaterials
             default:return new Color(0.8f,0.75f,0.64f);
         }
     }
+    public static Color[] Road(WorldConstruction p)
+    {
+        string surface=p.surface=="concrete"?"Concrete":p.surface=="dirt"?"Soil":p.surface=="gravel"?"Stone":"Asphalt";
+        return new[]{Color(surface),Color("Concrete"),p.oneWay?UnityEngine.Color.white:new Color(0.94f,0.84f,0.35f),UnityEngine.Color.white,Color("Concrete")};
+    }
     public static Color[] Construction(string kind)
     {
         if(kind=="terrain")return new[]{Color("Grass"),Color("Sand"),Color("Grass")};

@@ -147,3 +147,9 @@ Buy cards place directly; ⋯ opens preview/details. World > Roads offers road
 presets and drag/release straight-road building, plus curved routes and roadside
 objects. See [appearance and road workflow](docs/SIMS-APPEARANCE-AND-ROAD-WORKFLOW.md)
 for supported formats, native validation and remaining renderer/junction limits.
+
+Road settings now group cross-section, markings, elevation, shape, junction
+connections and surface metadata. Junctions have a corner radius and separate
+side offsets for each connected road; connected endpoint drags slide along the
+junction side. Detailed limitations and current grade are in the
+[progress audit](docs/PROGRESS-AUDIT-2026-10-12.md).

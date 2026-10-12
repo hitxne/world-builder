@@ -207,7 +207,7 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
         sceneDock.style.display=showScene?DisplayStyle.Flex:DisplayStyle.None;
         inspector.style.display=showProperties?DisplayStyle.Flex:DisplayStyle.None;
         sceneDock.style.width=Mathf.Clamp(sceneWidth,180,320);inspector.style.width=Mathf.Clamp(propertiesWidth,220,360);
-        catalogDock.style.height=height>0?Mathf.Min(catalogHeight,Mathf.Max(120,height*0.32f)):catalogHeight;
+        float desired=catalogDock.ClassListContains("buy-catalog")?Mathf.Max(catalogHeight,340):catalogHeight;float fraction=catalogDock.ClassListContains("buy-catalog")?0.44f:0.32f;catalogDock.style.height=height>0?Mathf.Min(desired,Mathf.Max(120,height*fraction)):desired;
         sceneToggle.EnableInClassList("selected",showScene);propertiesToggle.EnableInClassList("selected",showProperties);
         sceneToggle.SetEnabled(true);propertiesToggle.SetEnabled(true);
         sceneToggle.tooltip="Show or hide scene hierarchy. Opens a temporary drawer in narrow windows.";
@@ -301,7 +301,7 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
         if(data.HasConstruction) {
             var derived=ConstructionData(data.construction);
             data.vertices=derived.vertices;data.uv=derived.uv;data.triangles=derived.triangles;data.submeshes=derived.submeshes;data.normals=null;
-            if(data.materialColors==null)data.materialColors=derived.materialColors;
+            if(data.materialColors==null||(data.construction.kind=="road"||data.construction.kind=="junction"))data.materialColors=derived.materialColors;
         }
         SyncSimsLibraryAppearance(data);
         Mesh mesh = data.CreateMesh();
@@ -412,7 +412,7 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
         workCamera.orthographicSize = workDistance * 0.4f;
     }
     string State() => JsonUtility.ToJson(WorkspaceDocument.Capture(world, title));
-    void Changed() { history.Record(State()); Refresh(); }
+    void Changed() { UpdateRoadConnections();history.Record(State()); Refresh(); }
     void Undo() { CancelConstruction(); string state = history.Undo(); if (state != null) Restore(JsonUtility.FromJson<WorkspaceDocument>(state)); }
     void Redo() { CancelConstruction(); string state = history.Redo(); if (state != null) Restore(JsonUtility.FromJson<WorkspaceDocument>(state)); }
     void Restore(WorkspaceDocument document)
@@ -435,7 +435,7 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
         } catch { Clear(stage); Destroy(stage.gameObject); throw; }
         Clear(world);
         while (stage.childCount > 0) stage.GetChild(0).SetParent(world, false);
-        Destroy(stage.gameObject); title = document.title; selected = null; ReconnectWorldTools(); Refresh();
+        Destroy(stage.gameObject); title = document.title; selected = null; UpdateRoadConnections();RefreshTerrainRoads();ReconnectWorldTools(); Refresh();
     }
     void NewProject()
     {
