@@ -12,10 +12,11 @@ using UnityEngine.UIElements;
 public sealed partial class WorldBuilderRuntime
 {
     volatile bool libraryImportRunning, cancelLibraryImport;
-    [Serializable] sealed class LibraryMetadata { public string name,source,warning; }
+    [Serializable] sealed class LibraryMetadata { public string name,source,warning,room,category; }
     void WriteLibraryMetadata(string path,string name,string source,string warning)
     {
-        WorkspaceAtomicFile.Write(path+".metadata.json",JsonUtility.ToJson(new LibraryMetadata{name=name,source=source,warning=warning},true));
+        var metadata=ReadAssetMetadata(path)??new LibraryMetadata();metadata.name=name;metadata.source=source;metadata.warning=warning;
+        WorkspaceAtomicFile.Write(path+".metadata.json",JsonUtility.ToJson(metadata,true));
         if(File.Exists(path+".preview.png"))File.Delete(path+".preview.png");
     }
     string LibraryFolder=>Path.Combine(Application.persistentDataPath,"Assets");
@@ -39,7 +40,7 @@ public sealed partial class WorldBuilderRuntime
         Dialog("Local Asset Library","Browse visual asset cards. Select one to inspect its 3D preview, then choose Place to use it in the world or active lot.",box=>{
             Button(box,"Add Sims assets — select game EXE",SelectSimsExecutable);
             Button(box,"Import existing OBJ export folder",OpenSimsExportImport);
-            BuildAssetCatalog(box);Button(box,"Close",CloseDialog);
+            BuildAssetCatalog(box,false,true);Button(box,"Close",CloseDialog);
         });
     }
     void SelectSimsExecutable()
@@ -150,6 +151,7 @@ public sealed partial class WorldBuilderRuntime
                 }
                 if(rootObject==null)throw new FormatException("Asset has no root");
                 while(stage.childCount>0)stage.GetChild(0).SetParent(PlacementParent(),false);
+                var metadata=ReadAssetMetadata(path);if(!string.IsNullOrEmpty(metadata?.name))rootObject.name=metadata.name;
                 rootObject.transform.position=position;rootObject.transform.Rotate(Vector3.up,placementYaw,Space.Self);selected=rootObject;Changed();Status("Placed editable library asset. Move, Rotate and Scale are available in the catalog.");
             } catch {Clear(stage);throw;}finally{Destroy(stage.gameObject);}
     }

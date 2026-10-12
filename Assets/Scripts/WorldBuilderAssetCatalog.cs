@@ -13,11 +13,13 @@ public sealed partial class WorldBuilderRuntime
     Camera thumbnailCamera;
     RenderTexture thumbnailTexture;
     Transform thumbnailRoot;
-    void BuildAssetCatalog(VisualElement parent,bool simsOnly=false)
+    void BuildAssetCatalog(VisualElement parent,bool simsOnly=false,bool returnToLibrary=false)
     {
         var host=new VisualElement();host.AddToClassList("asset-catalog");parent.Add(host);
         var search=new TextField("Search assets");host.Add(search);int page=0;
         var grid=new VisualElement();grid.AddToClassList("asset-grid");host.Add(grid);
+        var filters=Row(host,"catalog-tabs");var browse=new DropdownField("Browse",new List<string>{"All objects","By room","By type"},0);filters.Add(browse);
+        var filter=new DropdownField("Category",new List<string>{"All"},0);filters.Add(filter);
         var pageLabel=Label(host,"","hint");
         void Populate() {
             grid.Clear();int matched=0,shown=0;bool more=false;
@@ -25,10 +27,13 @@ public sealed partial class WorldBuilderRuntime
                 try {
                     string metaPath=path+".metadata.json";var metadata=File.Exists(metaPath)?JsonUtility.FromJson<LibraryMetadata>(File.ReadAllText(metaPath)):null;
                     string name=metadata?.name??WorkspaceDocument.Open(path).title;
+                    string classification=browse.value=="By room"?(metadata?.room??"Unclassified"):(metadata?.category??"Unclassified");
+                    if(string.IsNullOrWhiteSpace(classification))classification="Unclassified";
+                    if(browse.value!="All objects"&&filter.value!="All"&&classification!=filter.value)continue;
                     if(simsOnly&&!name.StartsWith("The Sims 4 /",StringComparison.OrdinalIgnoreCase))continue;
                     if(name.IndexOf(search.value??"",StringComparison.OrdinalIgnoreCase)<0)continue;
                     if(matched++<page*12)continue;if(shown>=12){more=true;break;}shown++;
-                    string assetPath=path;var tile=new Button(()=>Try(()=>OpenLibraryPreview(assetPath)));tile.AddToClassList("asset-tile");grid.Add(tile);
+                    string assetPath=path;var tile=new Button(()=>Try(()=>OpenLibraryPreview(assetPath,returnToLibrary)));tile.AddToClassList("asset-tile");grid.Add(tile);
                     var image=new Image{scaleMode=ScaleMode.ScaleToFit,pickingMode=PickingMode.Ignore};image.AddToClassList("asset-thumbnail");tile.Add(image);
                     string label=Path.GetFileNameWithoutExtension(name);if(name.StartsWith("The Sims 4 /",StringComparison.OrdinalIgnoreCase)&&label.Length>24)label="Sims object "+label.Substring(label.Length-12);var caption=new Label(label){pickingMode=PickingMode.Ignore};caption.AddToClassList("asset-caption");tile.Add(caption);
                     tile.tooltip=name+(string.IsNullOrEmpty(metadata?.warning)?"":"\n"+metadata.warning);RequestThumbnail(path,image);
@@ -38,6 +43,8 @@ public sealed partial class WorldBuilderRuntime
             if(shown==0)Label(grid,simsOnly?"No matching Sims objects. Use Add Sims Assets or adjust search.":"No matching assets. Add Sims assets or save an object to the library.","hint");
         }
         var navigation=Row(host,"toolbar");Button(navigation,"Previous",()=>{page=Math.Max(0,page-1);Populate();});Button(navigation,"Next",()=>{page++;Populate();});
+        browse.RegisterValueChangedCallback(e=>{var values=new List<string>{"All"};if(e.newValue=="By room")values.AddRange(AssetRooms);else if(e.newValue=="By type")values.AddRange(AssetTypes);filter.choices=values;filter.SetValueWithoutNotify("All");filter.style.display=e.newValue=="All objects"?DisplayStyle.None:DisplayStyle.Flex;page=0;Populate();});
+        filter.style.display=DisplayStyle.None;filter.RegisterValueChangedCallback(e=>{page=0;Populate();});
         search.RegisterValueChangedCallback(e=>{page=0;Populate();});Populate();
     }
     void RequestThumbnail(string path,Image image)

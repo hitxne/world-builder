@@ -10,8 +10,9 @@ public sealed partial class WorldBuilderRuntime
 {
     string workspaceMode="World", constructionTool="select", activeLotId;
     GameObject activeLot;
-    VisualElement constructionPanel, referencePane;
-    Label toolStatus;
+    VisualElement constructionPanel, referencePane,toolSettings;
+    Label toolStatus,modeHeading;
+    Button cancelToolButton;
     string toolCategory="Terrain";
     readonly Dictionary<string,Button> modeButtons=new Dictionary<string,Button>();
     readonly Dictionary<string,Button> toolButtons=new Dictionary<string,Button>();
@@ -42,15 +43,13 @@ public sealed partial class WorldBuilderRuntime
     {
         var sidebar=root.Q<VisualElement>(className:"sidebar");
         var navigation=root.Q<VisualElement>("mode-navigation");
-        modeButtons["World"]=Button(navigation,"World Build",()=>SetMode("World"));
-        modeButtons["Lot"]=Button(navigation,"Lot Build",EnterLot);
-        modeButtons["Asset"]=Button(navigation,"Asset Studio",()=>SetMode("Asset"));
-        Button(navigation,"Catalog / Library",OpenLibrary);
-        Button(navigation,"Game Assets",GameBrowser);
-        Button(navigation,"Add Sims Assets",SelectSimsExecutable);
+        modeButtons["World"]=Button(navigation,"World",()=>SetMode("World"));
+        modeButtons["Lot"]=Button(navigation,"Lot",EnterLot);
+        modeButtons["Asset"]=Button(navigation,"Assets",()=>SetMode("Asset"));
         constructionPanel=root.Q<ScrollView>("construction-catalog").contentContainer;
+        modeHeading=Label(navigation,"","mode-heading");
         var editing=root.Q<VisualElement>("editing-tools");
-        ToolChoice(editing,"Select","select");ToolChoice(editing,"Hand (H)","move");ToolChoice(editing,"Rotate","rotate");ToolChoice(editing,"Scale","scale");ToolChoice(editing,"Copy (E)","eyedropper");ToolChoice(editing,"Delete (K)","delete");
+        ToolChoice(editing,"Select","select");ToolChoice(editing,"Move","move");ToolChoice(editing,"Rotate","rotate");ToolChoice(editing,"Scale","scale");ToolChoice(editing,"Copy","eyedropper");ToolChoice(editing,"Delete","delete");
         referencePane=referenceImage.parent;
         SetMode("World");
         Status("Start with Generate Island or Florida Island Test, then draw roads and lots.");
@@ -64,19 +63,21 @@ public sealed partial class WorldBuilderRuntime
     }
     void SetMode(string mode)
     {
-        CancelConstruction();workspaceMode=mode;toolCategory=mode=="World"?(world.childCount==0?"Create World":"Terrain"):mode=="Lot"?"Structure":"Models";
+        CancelConstruction();workspaceMode=mode;toolCategory=mode=="World"?"Terrain":mode=="Lot"?"Structure":"Import";
         referencePane.style.display=mode=="Asset"?DisplayStyle.Flex:DisplayStyle.None;
         referenceCamera.enabled=mode=="Asset";
         if(mode=="Lot"&&activeLot!=null){selected=activeLot;FrameSelected();}
         BuildConstructionPanel();Refresh();
     }
+    GameObject SelectedLot()
+    {
+        for(var ancestor=selected!=null?selected.transform:null;ancestor!=null&&ancestor!=world;ancestor=ancestor.parent)
+            if(ancestor.GetComponent<WorkspaceIdentity>()?.construction?.kind=="lot")return ancestor.gameObject;
+        return null;
+    }
     void EnterLot()
     {
-        if(selected!=null) {
-            var identity=selected.GetComponent<WorkspaceIdentity>();
-            if(identity.construction?.kind=="lot")activeLot=selected;
-            else {var parent=selected.transform.parent; if(parent!=null&&parent.GetComponent<WorkspaceIdentity>()?.construction?.kind=="lot")activeLot=parent.gameObject;}
-        }
+        var selectedLot=SelectedLot();if(selectedLot!=null)activeLot=selectedLot;
         if(activeLot==null){Status("Select a lot or use Draw Lot in World Mode first.");return;}
         activeLotId=activeLot.GetComponent<WorkspaceIdentity>().id;SetMode("Lot");
     }
@@ -84,11 +85,11 @@ public sealed partial class WorldBuilderRuntime
     {
         constructionPanel.Clear();
         var categories=Row(constructionPanel,"catalog-tabs");
-        string[] names=workspaceMode=="World"?new[]{"Terrain","Roads","Lots","Scenery","Sims Assets","Create World"}:workspaceMode=="Lot"?new[]{"Structure","Openings","Floors","Furnish"}:new[]{"Models"};
-        foreach(var category in names){var c=category;var button=Button(categories,c,()=>{CancelConstruction();toolCategory=c;BuildConstructionPanel();});if(c==toolCategory)button.AddToClassList("selected");}
+        string[] names=workspaceMode=="World"?new[]{"Terrain","Roads","Lots","Objects"}:workspaceMode=="Lot"?new[]{"Structure","Openings","Floors","Furnish"}:new[]{"Import","Primitives","Library"};
+        foreach(var category in names){var c=category;var button=Button(categories,CategoryTitle(c),()=>{CancelConstruction();toolCategory=c;BuildConstructionPanel();});if(c==toolCategory)button.AddToClassList("selected");}
         var content=Row(constructionPanel,"catalog-content");
         var choices=new VisualElement();choices.AddToClassList("catalog-choices");content.Add(choices);
-        var settings=new VisualElement();settings.AddToClassList("catalog-settings");content.Add(settings);
+        var settings=new VisualElement();toolSettings=settings;settings.AddToClassList("catalog-settings");content.Add(settings);
 
         if(workspaceMode=="World") {
             if(toolCategory=="Terrain") {
@@ -97,25 +98,29 @@ public sealed partial class WorldBuilderRuntime
             } else if(toolCategory=="Roads") {
                 ToolChoice(choices,"Draw Road","road");Button(choices,"Finish Road",FinishRoad);Number(settings,"Road width",roadWidth,2,20,v=>roadWidth=v);
             } else if(toolCategory=="Lots") {ToolChoice(choices,"Draw Lot","lot");Button(choices,"Build Selected Lot",EnterLot);}
-            else if(toolCategory=="Scenery") {ToolChoice(choices,"Place Palm","tree");Button(choices,"Local Library",OpenLibrary);Button(choices,"Game Assets",GameBrowser);}
-            else if(toolCategory=="Sims Assets"){BuildAssetCatalog(choices,true);}
+            else if(toolCategory=="Objects"){BuildAssetCatalog(choices);}
             else {
                 Button(choices,"Generate Island",()=>ConfirmDiscard(GenerateIsland));Button(choices,"Florida Island Test",()=>ConfirmDiscard(BuildFloridaTest));
                 Number(settings,"Island width",islandWidth,32,512,v=>islandWidth=v);Number(settings,"Island depth",islandDepth,32,512,v=>islandDepth=v);Number(settings,"Seed",islandSeed,0,100000,v=>islandSeed=(int)v);
             }
         } else if(workspaceMode=="Lot") {
             Label(settings,activeLot==null?"No active lot":activeLot.name,"hint");
-            if(toolCategory=="Structure"){ToolChoice(choices,"Room","room");ToolChoice(choices,"Wall","wall");ToolChoice(choices,"Floor","floor");ToolChoice(choices,"Roof","roof");Number(settings,"Wall height",wallHeight,2,6,v=>wallHeight=v);}
+            if(toolCategory=="Structure"){ToolChoice(choices,"Room","room");ToolChoice(choices,"Wall","wall");ToolChoice(choices,"Floor","floor");ToolChoice(choices,"Roof","roof");}
             else if(toolCategory=="Openings"){ToolChoice(choices,"Door","door");ToolChoice(choices,"Window","window");}
             else if(toolCategory=="Floors"){ToolChoice(choices,"Stairs","stairs");Button(choices,"Floor Down",()=>{floorLevel=Math.Max(0,floorLevel-1);RefreshWorldTools();});Button(choices,"Floor Up",()=>{floorLevel=Math.Min(5,floorLevel+1);RefreshWorldTools();});}
             else {BuildAssetCatalog(choices);Button(settings,"Save Selection",SaveLibrary);}
         } else {
-            Button(choices,"Import OBJ",Import);Button(choices,"Reimport Selected",ReimportSelected);Button(choices,"Local Library",OpenLibrary);Button(choices,"Save Selection",SaveLibrary);
-            Button(choices,"Cube",()=>AddPrimitive(PrimitiveType.Cube,"Cube"));Button(choices,"Plane",()=>AddPrimitive(PrimitiveType.Plane,"Plane"));Button(choices,"Sphere",()=>AddPrimitive(PrimitiveType.Sphere,"Sphere"));Button(choices,"Cylinder",()=>AddPrimitive(PrimitiveType.Cylinder,"Cylinder"));
+            if(toolCategory=="Import"){Button(choices,"Import model",Import);Button(choices,"Reimport selected",ReimportSelected);Label(settings,"OBJ + MTL + supported textures. Imported sources stay untouched.","hint");}
+            else if(toolCategory=="Primitives"){
+                Button(choices,"Cube",()=>AddPrimitive(PrimitiveType.Cube,"Cube"));Button(choices,"Plane",()=>AddPrimitive(PrimitiveType.Plane,"Plane"));Button(choices,"Sphere",()=>AddPrimitive(PrimitiveType.Sphere,"Sphere"));Button(choices,"Cylinder",()=>AddPrimitive(PrimitiveType.Cylinder,"Cylinder"));
+            } else {BuildAssetCatalog(choices);Button(settings,"Save selected to library",SaveLibrary);}
         }
-        Number(settings,"Grid (meters)",gridSize,0.25f,5,v=>gridSize=v);
-        Button(settings,"Cancel Tool",()=>{CancelConstruction();Status("Tool cancelled.");});
-        toolStatus=Label(constructionPanel,"","hint");RefreshWorldTools();
+        cancelToolButton=Button(settings,"Cancel",()=>{CancelConstruction();Status("Cancelled. Select an object or choose a tool.");});
+        toolStatus=statusLabel;RefreshWorldTools();
+    }
+    static string CategoryTitle(string category)
+    {
+        if(category=="Furnish")return "Buy objects";if(category=="Structure")return "Build";if(category=="Openings")return "Doors & Windows";if(category=="Floors")return "Floors & Stairs";return category;
     }
     void ToolChoice(VisualElement parent,string label,string tool){toolButtons[tool]=Button(parent,label,()=>SetTool(tool));}
     void SetTool(string tool){CancelConstruction();constructionTool=tool;RefreshWorldTools();Status(ToolInstruction());}
@@ -400,9 +405,14 @@ public sealed partial class WorldBuilderRuntime
     }
     void RefreshWorldTools()
     {
+        if(modeHeading!=null)modeHeading.text=(workspaceMode=="Lot"&&activeLot!=null?"Lot: "+activeLot.name:workspaceMode=="Asset"?"Asset editor":"World")+"  ›  "+CategoryTitle(toolCategory);
+        if(toolButtons.TryGetValue("scale",out var scaleButton))scaleButton.style.display=workspaceMode=="Asset"?DisplayStyle.Flex:DisplayStyle.None;
         foreach(var pair in modeButtons)pair.Value.EnableInClassList("selected",pair.Key==workspaceMode);
         foreach(var pair in toolButtons)pair.Value.EnableInClassList("selected",!HasPlacement&&pair.Key==constructionTool);
-        if(toolStatus!=null)toolStatus.text="Active: "+(HasPlacement?"Place Object ("+placementYaw+"°)":constructionTool)+" • Floor "+floorLevel+" • Snap "+(gridEnabled&&!offGrid?"on":"off")+" — "+ToolInstruction();
+        if(cancelToolButton!=null)cancelToolButton.style.display=HasPlacement||constructionTool!="select"?DisplayStyle.Flex:DisplayStyle.None;
+        if(toolSettings!=null){toolSettings.EnableInClassList("compact-settings",toolSettings.childCount<=1);toolSettings.style.display=toolSettings.childCount>1||HasPlacement||constructionTool!="select"?DisplayStyle.Flex:DisplayStyle.None;}
+        if(modeButtons.TryGetValue("Lot",out var lotButton)){bool available=activeLot!=null||SelectedLot()!=null;lotButton.SetEnabled(available);lotButton.tooltip=available?"Build on the selected or active lot":"Draw a lot in World mode first";}
+        if(toolStatus!=null)toolStatus.text=(workspaceMode=="Lot"?"Floor "+floorLevel+" • ":"")+(HasPlacement?"Place object":constructionTool)+" — "+ToolInstruction();
     }
     void ResetWorldTools(){activeLot=null;activeLotId=null;floorLevel=0;CancelConstruction();if(constructionPanel!=null)SetMode("World");}
     void ReconnectWorldTools()

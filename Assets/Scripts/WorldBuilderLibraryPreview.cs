@@ -23,13 +23,13 @@ public sealed partial class WorldBuilderRuntime
         if(libraryPreviewTexture!=null){libraryPreviewTexture.Release();Destroy(libraryPreviewTexture);}
         libraryPreviewCamera=null;libraryPreviewRoot=null;libraryPreviewTexture=null;
     }
-    void OpenLibraryPreview(string path)
+    void OpenLibraryPreview(string path,bool returnToLibrary=false)
     {
         Try(()=>{
             var document=WorkspaceDocument.Open(path);
             string metadataPath=path+".metadata.json";
             var metadata=File.Exists(metadataPath)?JsonUtility.FromJson<LibraryMetadata>(File.ReadAllText(metadataPath)):null;
-            Dialog(document.title,"Read-only asset preview. Right-drag to orbit, middle-drag to pan and wheel to zoom. Choose Place when ready.",box=>{
+            Dialog(metadata?.name??document.title,"Read-only asset preview. Right-drag to orbit, middle-drag to pan and wheel to zoom. Choose Place when ready.",box=>{
                 try {
                     libraryPreviewRoot=new GameObject("Library preview — read only").transform;
                     var objects=new Dictionary<string,GameObject>();int roots=0;
@@ -56,7 +56,8 @@ public sealed partial class WorldBuilderRuntime
                     if(!string.IsNullOrEmpty(metadata?.warning))Label(box,"Import warning: "+metadata.warning,"hint");
                     Button(box,"Place in world / active lot",()=>BeginLibraryPlacement(path));
                 } catch(Exception error){DisposeLibraryPreview();Label(box,"Preview unavailable: "+error.Message,"hint");}
-                Button(box,"Back to Library",OpenLibrary);Button(box,"Close",CloseDialog);
+                Button(box,"Organize asset",()=>OpenAssetOrganization(path,returnToLibrary));
+                Button(box,"Back to catalog",()=>{if(returnToLibrary)OpenLibrary();else CloseDialog();});Button(box,"Close",CloseDialog);
             });
         });
     }

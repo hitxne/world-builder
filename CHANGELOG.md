@@ -145,3 +145,11 @@ Validation: source configuration/GUID/input checks, C# syntax parsing and whites
 - Add actual-mesh thumbnail cards, search/pages, World Sims Assets and Lot Furnish catalogs, plus read-only 3D inspection with orbit/pan/zoom before placement.
 - Cache thumbnails on demand, release detached-card textures and keep preview cameras/objects outside saved/exported scene data.
 - Add legacy imported-mesh roundtrip and unknown-kind regression tests. Source checks passed; Unity tests/rendering remain pending.
+
+## 2026-10-12 — minimal Sims-inspired mode organization
+
+- Simplify the visible shell to Menu/Save/Undo/Redo, World/Lot/Assets, a compact editing toolbar and a mode-specific catalog.
+- Add a guided empty-world start card, active mode/category breadcrumb, sensible Lot availability and ancestor selection, and one-time collapsed-panel defaults.
+- Organize project/import/advanced actions behind the menu; use categorized Settings with actual appearance/UI-scale/layout/editing/quality controls and persisted preferences.
+- Add Buy-object room/type filters and user-assigned names/categories while retaining real thumbnails and provenance; do not guess missing Sims catalog metadata.
+- Preserve read-only asset inspection and return to the appropriate catalog before placement. Source checks pass; Unity compilation/usability tests remain pending.

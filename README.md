@@ -19,7 +19,7 @@ The current small-scene prototype is not yet suitable for a huge production map.
 ## Use the world/lot workflow
 
 1. Open this project in Unity 6000.6.5f1 and press Play.
-2. Choose **World Build > Create World > Florida Island Test** to create an original island, ocean,
+2. Choose **Menu > Project > Create island > Create sample neighborhood** to create an original island, ocean,
    neighborhood road, editable lot, house and palms. Or Generate Island with your
    own dimensions/seed and build from an empty world.
 3. Sculpt terrain with Raise/Lower/Smooth/Flatten, and paint Sand/Grass.
@@ -127,3 +127,11 @@ and **Lot Build > Furnish**, as well as Local Library. Thumbnails are rendered
 from actual meshes on demand and cached locally. Select a card to orbit/pan/zoom
 its read-only 3D preview, then choose **Place in world / active lot**. Existing
 imports with empty construction records are handled as ordinary meshes.
+
+The simplified shell uses **World / Lot / Assets** modes. World catalogs contain
+Terrain, Roads, Lots and Objects; Lot catalogs contain Build, Doors & Windows,
+Floors & Stairs and Buy objects; Assets contains Import, Primitives and Library.
+The active mode/category is shown as a breadcrumb. **Menu > Settings** groups
+Appearance, Workspace, Editing, Graphics and Controls. Buy objects can be browsed
+by room/type using user-assigned library metadata; imported Sims categories are
+initially unclassified. Select a card > Organize asset to assign a name/category.

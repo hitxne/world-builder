@@ -41,6 +41,8 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
     }
     void Start()
     {
+        if(PlayerPrefs.HasKey("worldbuilder.quality")&&QualitySettings.names.Length>0)QualitySettings.SetQualityLevel(Mathf.Clamp(PlayerPrefs.GetInt("worldbuilder.quality"),0,QualitySettings.names.Length-1),true);
+        gridSize=Mathf.Clamp(PlayerPrefs.GetFloat("worldbuilder.gridSize",1),0.25f,5);wallHeight=Mathf.Clamp(PlayerPrefs.GetFloat("worldbuilder.wallHeight",3),2,6);gridEnabled=PlayerPrefs.GetInt("worldbuilder.gridEnabled",1)!=0;
         world = new GameObject("World Builder Editable Scene").transform;
         reference = new GameObject("World Builder Reference").transform;
         workCamera = CameraFor("Editable Camera", 31, out workTexture);
@@ -84,6 +86,7 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
         panel.themeStyleSheet = Resources.Load<ThemeStyleSheet>("WorldBuilderRuntimeTheme");
         if(panel.themeStyleSheet==null)throw new InvalidOperationException("World Builder runtime theme is missing. Let Unity finish importing the project, then restart Play. The Windows build must include WorldBuilderRuntimeTheme.tss.");
         panel.scaleMode = PanelScaleMode.ConstantPixelSize;
+        panel.scale=Mathf.Clamp(PlayerPrefs.GetFloat("worldbuilder.uiScale",1),0.8f,1.5f);
         panel.referenceResolution = new Vector2Int(1440, 900);
         ui = gameObject.AddComponent<UIDocument>(); ui.panelSettings = panel;
         root = ui.rootVisualElement; root.style.flexGrow = 1;
@@ -92,16 +95,9 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
         theme = PlayerPrefs.GetInt("worldbuilder.theme", 0); ApplyTheme();
         var top = Row(root, "topbar"); Label(top, "WORLD BUILDER", "brand");
         titleLabel = Label(top, title, "project-title");
-        Button(top, "Project", () => Dialog("Project", "Open, save or export your world.", box => {
-            Button(box,"New",()=>{CloseDialog();ConfirmDiscard(NewProject);});
-            Button(box,"Open",()=>{CloseDialog();ConfirmDiscard(OpenProject);});
-            Button(box,"Save As",()=>{CloseDialog();Save(true);});
-            Button(box,"Export OBJ",()=>{CloseDialog();Export();}); Button(box,"Close",CloseDialog);
-        }));
+        Button(top,"Menu",OpenWorkspaceMenu);
         Button(top,"Save",()=>Save(false));
-        undoButton = Button(top,"Undo",Undo); redoButton = Button(top,"Redo",Redo);
-        Button(top,"Theme",()=>{theme=(theme+1)%3;ApplyTheme();PlayerPrefs.SetInt("worldbuilder.theme",theme);PlayerPrefs.Save();});
-        Button(top,"Layout",OpenLayoutSettings);
+        undoButton=Button(top,"Undo",Undo);redoButton=Button(top,"Redo",Redo);
         var navigation = Row(root,"mode-navigation"); navigation.name="mode-navigation";
         var body = Row(root, "body");
         var left = new VisualElement(); left.AddToClassList("sidebar"); body.Add(left); sceneDock=left;
@@ -111,36 +107,27 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
         hierarchy = new ScrollView(); hierarchy.AddToClassList("dock-scroll"); left.Add(hierarchy);
         var center = new VisualElement(); center.AddToClassList("center"); body.Add(center);
         var tools = Row(center, "toolbar");
-        sceneToggle=Button(tools,"Scene",()=>{if(root.contentRect.width<760){sceneDrawer=!sceneDrawer;propertiesDrawer=false;}else{sceneVisible=!sceneVisible;SaveLayout();}ApplyLayout();});
-        propertiesToggle=Button(tools,"Properties",()=>{if(root.contentRect.width<1060){propertiesDrawer=!propertiesDrawer;sceneDrawer=false;}else{propertiesVisible=!propertiesVisible;SaveLayout();}ApplyLayout();});
-        Button(tools, "Frame Selected", FrameSelected);
-        Button(tools, "Frame All", FrameAll);
         var editing=Row(tools,"editing-tools");editing.name="editing-tools";
-        Button(tools, "Duplicate", Duplicate);
-        Button(tools,"Camera",()=>Dialog("Camera views","Choose the editable viewport orientation.",box=>{
-            Button(box,"Perspective",()=>{workCamera.orthographic=false;CloseDialog();});
-            Button(box,"Top",()=>SetCameraView(new Vector2(89,0)));
-            Button(box,"Front",()=>SetCameraView(new Vector2(0,0)));
-            Button(box,"Side",()=>SetCameraView(new Vector2(0,90)));Button(box,"Close",CloseDialog);
-        }));
+        propertiesToggle=Button(tools,"Properties",()=>{if(root.contentRect.width<1060){propertiesDrawer=!propertiesDrawer;sceneDrawer=false;}else{propertiesVisible=!propertiesVisible;SaveLayout();}ApplyLayout();});
+        sceneToggle=new Button();
+        Button(tools,"Focus",FrameSelected);Button(tools,"View",OpenCameraMenu);
         var views = Row(center, "views");
         referenceImage = View(views, "REFERENCE — read only", referenceTexture, false);
         workImage = View(views, "EDITABLE SCENE", workTexture, true);InitializeFeedback(workImage);
-        Label(center, "Left click: select/build   •   Right drag: pan   •   Middle drag: orbit   •   Wheel: zoom   •   Controls: top bar", "hint");
+        InitializeStartCard(workImage);
         inspector = new ScrollView(); inspector.AddToClassList("inspector"); body.Add(inspector);
         var catalog = new ScrollView(); catalog.name="construction-catalog"; catalog.AddToClassList("catalog"); root.Add(catalog); catalogDock=catalog;
         statusLabel = Label(root, "Ready. Create objects or import a Blender OBJ.", "status");
         sceneVisible=PlayerPrefs.GetInt("worldbuilder.layout.scene",0)!=0;
         propertiesVisible=PlayerPrefs.GetInt("worldbuilder.layout.properties",0)!=0;
+        if(PlayerPrefs.GetInt("worldbuilder.minimalLayout",0)==0){sceneVisible=propertiesVisible=false;PlayerPrefs.SetInt("worldbuilder.layout.scene",0);PlayerPrefs.SetInt("worldbuilder.layout.properties",0);PlayerPrefs.SetInt("worldbuilder.minimalLayout",1);PlayerPrefs.Save();}
         sceneWidth=PlayerPrefs.GetFloat("worldbuilder.layout.sceneWidth",220);
         propertiesWidth=PlayerPrefs.GetFloat("worldbuilder.layout.propertiesWidth",255);
         catalogHeight=PlayerPrefs.GetFloat("worldbuilder.layout.catalogHeight",240);
         root.RegisterCallback<GeometryChangedEvent>(e=>ApplyLayout());ApplyLayout();
         root.RegisterCallback<KeyDownEvent>(HandleBuildKey);
-        Button(top,"Controls",()=>Dialog("Build controls","World Builder uses Sims-inspired PC editing controls. Mouse: left select/build, right-drag pan, middle-drag orbit, wheel zoom. Right-click rotates a pending object or cancels a construction tool.",box=>{
-            Label(box,"H Hand/move • E Copy • K Delete • R Properties • B Wall\nG Snap • F5 Half/quarter grid • Alt Free placement/rotation • , / . Rotate 45°\nShift Repeat placement • [ / ] Brush radius • PageUp/PageDown Floor • T Top view\nW/A/S/D or arrows Camera pan • F Frame • F2 Furnish • F3 Build • F4 Library\nCtrl+S Save • Ctrl+Z Undo • Ctrl+Y Redo • Escape Cancel","hint");Button(box,"Close",CloseDialog);
-        }));
     }
+
     void RotateBuildObject(float degrees)
     {
         if(HasPlacement){placementYaw=Mathf.Repeat(placementYaw+degrees,360);RefreshWorldTools();return;}
@@ -202,6 +189,7 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
     {
         if(sceneDock==null||inspector==null||catalogDock==null)return;
         float width=root.contentRect.width,height=root.contentRect.height;
+        root.EnableInClassList("narrow-layout",width>0&&width<700);
         bool narrowScene=width>0&&width<760,narrowProperties=width>0&&width<1060;
         bool showScene=narrowScene?sceneDrawer:sceneVisible,showProperties=narrowProperties?propertiesDrawer:propertiesVisible;
         sceneDock.style.position=narrowScene?Position.Absolute:Position.Relative;
@@ -481,6 +469,7 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
     void Refresh()
     {
         if (hierarchy == null) return;
+        if(startCard!=null)startCard.style.display=world.childCount==0?DisplayStyle.Flex:DisplayStyle.None;
         titleLabel.text = title + (State() != savedState ? " • unsaved" : "");
         undoButton.SetEnabled(history.CanUndo); redoButton.SetEnabled(history.CanRedo);
         hierarchy.Clear();
