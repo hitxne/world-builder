@@ -70,7 +70,7 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
     {
         PositionCamera(workCamera, workAngles, workCenter, workDistance);
         PositionCamera(referenceCamera, referenceAngles, referenceCenter, referenceDistance);
-        WorldUpdate();
+        WorldUpdate();UpdateFeedback();
     }
     static void PositionCamera(Camera camera, Vector2 angles, Vector3 center, float distance)
     {
@@ -115,7 +115,8 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
         propertiesToggle=Button(tools,"Properties",()=>{if(root.contentRect.width<1060){propertiesDrawer=!propertiesDrawer;sceneDrawer=false;}else{propertiesVisible=!propertiesVisible;SaveLayout();}ApplyLayout();});
         Button(tools, "Frame Selected", FrameSelected);
         Button(tools, "Frame All", FrameAll);
-        Button(tools, "Duplicate", Duplicate); Button(tools, "Delete", Delete);
+        var editing=Row(tools,"editing-tools");editing.name="editing-tools";
+        Button(tools, "Duplicate", Duplicate);
         Button(tools,"Camera",()=>Dialog("Camera views","Choose the editable viewport orientation.",box=>{
             Button(box,"Perspective",()=>{workCamera.orthographic=false;CloseDialog();});
             Button(box,"Top",()=>SetCameraView(new Vector2(89,0)));
@@ -124,13 +125,13 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
         }));
         var views = Row(center, "views");
         referenceImage = View(views, "REFERENCE — read only", referenceTexture, false);
-        workImage = View(views, "EDITABLE SCENE", workTexture, true);
+        workImage = View(views, "EDITABLE SCENE", workTexture, true);InitializeFeedback(workImage);
         Label(center, "Left click: select/build   •   Right drag: pan   •   Middle drag: orbit   •   Wheel: zoom   •   Controls: top bar", "hint");
         inspector = new ScrollView(); inspector.AddToClassList("inspector"); body.Add(inspector);
         var catalog = new ScrollView(); catalog.name="construction-catalog"; catalog.AddToClassList("catalog"); root.Add(catalog); catalogDock=catalog;
         statusLabel = Label(root, "Ready. Create objects or import a Blender OBJ.", "status");
-        sceneVisible=PlayerPrefs.GetInt("worldbuilder.layout.scene",1)!=0;
-        propertiesVisible=PlayerPrefs.GetInt("worldbuilder.layout.properties",1)!=0;
+        sceneVisible=PlayerPrefs.GetInt("worldbuilder.layout.scene",0)!=0;
+        propertiesVisible=PlayerPrefs.GetInt("worldbuilder.layout.properties",0)!=0;
         sceneWidth=PlayerPrefs.GetFloat("worldbuilder.layout.sceneWidth",220);
         propertiesWidth=PlayerPrefs.GetFloat("worldbuilder.layout.propertiesWidth",255);
         catalogHeight=PlayerPrefs.GetFloat("worldbuilder.layout.catalogHeight",240);
@@ -229,7 +230,7 @@ public sealed partial class WorldBuilderRuntime : MonoBehaviour
             Number(box,"Scene width",sceneWidth,180,320,v=>{sceneWidth=v;SaveLayout();ApplyLayout();});
             Number(box,"Properties width",propertiesWidth,220,360,v=>{propertiesWidth=v;SaveLayout();ApplyLayout();});
             Number(box,"Catalog height",catalogHeight,120,320,v=>{catalogHeight=v;SaveLayout();ApplyLayout();});
-            Button(box,"Restore Default Layout",()=>{sceneVisible=propertiesVisible=true;sceneDrawer=propertiesDrawer=false;sceneWidth=220;propertiesWidth=255;catalogHeight=240;SaveLayout();ApplyLayout();CloseDialog();});
+            Button(box,"Restore Default Layout",()=>{sceneVisible=propertiesVisible=false;sceneDrawer=propertiesDrawer=false;sceneWidth=220;propertiesWidth=255;catalogHeight=240;SaveLayout();ApplyLayout();CloseDialog();});
             Button(box,"Close",CloseDialog);
         });
     }

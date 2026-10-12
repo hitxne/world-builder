@@ -19,6 +19,9 @@ class Program
     }
     static void Main()
     {
+        Check(WorldGeometry.IntersectsXZ(new WorldPoint(0,-100,0),new WorldPoint(10,-50,10),new WorldPoint(9,100,9),new WorldPoint(20,200,20)),"dependency footprint ignores elevation");
+        Check(!WorldGeometry.IntersectsXZ(new WorldPoint(0,0,0),new WorldPoint(10,0,10),new WorldPoint(11,0,0),new WorldPoint(20,0,10)),"unrelated road footprint excluded");
+        Check(WorldGeometry.IntersectsXZ(new WorldPoint(0,0,0),new WorldPoint(10,0,10),new WorldPoint(10,0,0),new WorldPoint(20,0,10)),"chunk boundary footprint included");
         var p=WorldGeometry.Island(160,160,1337);
         var second=WorldGeometry.Island(160,160,1337);
         Check(p.heights.SequenceEqual(second.heights),"deterministic seed");

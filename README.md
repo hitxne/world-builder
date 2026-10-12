@@ -116,3 +116,8 @@ coverage. It does not yet export every Build/Buy item or reproduce game material
 World Builder finds the installation and runs supported extraction/library import
 automatically. This flow and real game coverage still need Unity/Windows testing;
 textures and complete catalog support remain incomplete.
+
+The [major feedback update](docs/MAJOR-USABILITY-UPDATE.md) adds selection
+outlines, brush footprints, construction guides, actual-model placement previews
+and an active-lot grid. Tools are separated from construction choices, and terrain
+brushes rebuild only intersecting roads. Native Unity/Windows validation is pending.

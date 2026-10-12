@@ -49,6 +49,8 @@ public sealed partial class WorldBuilderRuntime
         Button(navigation,"Game Assets",GameBrowser);
         Button(navigation,"Add Sims Assets",SelectSimsExecutable);
         constructionPanel=root.Q<ScrollView>("construction-catalog").contentContainer;
+        var editing=root.Q<VisualElement>("editing-tools");
+        ToolChoice(editing,"Select","select");ToolChoice(editing,"Hand (H)","move");ToolChoice(editing,"Rotate","rotate");ToolChoice(editing,"Scale","scale");ToolChoice(editing,"Copy (E)","eyedropper");ToolChoice(editing,"Delete (K)","delete");
         referencePane=referenceImage.parent;
         SetMode("World");
         Status("Start with Generate Island or Florida Island Test, then draw roads and lots.");
@@ -80,15 +82,14 @@ public sealed partial class WorldBuilderRuntime
     }
     void BuildConstructionPanel()
     {
-        constructionPanel.Clear();toolButtons.Clear();
+        constructionPanel.Clear();
         var categories=Row(constructionPanel,"catalog-tabs");
         string[] names=workspaceMode=="World"?new[]{"Terrain","Roads","Lots","Scenery","Create World"}:workspaceMode=="Lot"?new[]{"Structure","Openings","Floors","Furnish"}:new[]{"Models"};
         foreach(var category in names){var c=category;var button=Button(categories,c,()=>{CancelConstruction();toolCategory=c;BuildConstructionPanel();});if(c==toolCategory)button.AddToClassList("selected");}
         var content=Row(constructionPanel,"catalog-content");
         var choices=new VisualElement();choices.AddToClassList("catalog-choices");content.Add(choices);
         var settings=new VisualElement();settings.AddToClassList("catalog-settings");content.Add(settings);
-        ToolChoice(choices,"Select","select");
-        ToolChoice(choices,"Hand (H)","move");ToolChoice(choices,"Copy (E)","eyedropper");ToolChoice(choices,"Delete (K)","delete");ToolChoice(choices,"Rotate","rotate");ToolChoice(choices,"Scale","scale");
+
         if(workspaceMode=="World") {
             if(toolCategory=="Terrain") {
                 ToolChoice(choices,"Raise","raise");ToolChoice(choices,"Lower","lower");ToolChoice(choices,"Smooth","smooth");ToolChoice(choices,"Flatten","flatten");ToolChoice(choices,"Paint Sand","sand");ToolChoice(choices,"Paint Grass","grass");
@@ -117,7 +118,7 @@ public sealed partial class WorldBuilderRuntime
     }
     void ToolChoice(VisualElement parent,string label,string tool){toolButtons[tool]=Button(parent,label,()=>SetTool(tool));}
     void SetTool(string tool){CancelConstruction();constructionTool=tool;RefreshWorldTools();Status(ToolInstruction());}
-    void CancelConstruction(){EndObjectGesture(true);pendingLibraryPath=null;pendingCopySource=null;placementYaw=0;ConstructionPointerUp();firstCorner=null;roadPoints.Clear();constructionTool="select";RefreshWorldTools();}
+    void CancelConstruction(){ClearPlacementPreview();EndObjectGesture(true);pendingLibraryPath=null;pendingCopySource=null;placementYaw=0;ConstructionPointerUp();firstCorner=null;roadPoints.Clear();constructionTool="select";RefreshWorldTools();}
     string ToolInstruction()
     {
         if(HasPlacement)return "Click to place. Comma/period or right-click rotate 45°. Shift repeats placement. Escape cancels.";
@@ -259,7 +260,7 @@ public sealed partial class WorldBuilderRuntime
         var identity=terrain.GetComponent<WorkspaceIdentity>();
         WorldGeometry.Brush(identity.construction,P(terrain.transform.InverseTransformPoint(point)),brushRadius,brushStrength,constructionTool,flattenHeight);
         RebuildConstruction(terrain);
-        if(constructionTool!="sand"&&constructionTool!="grass")RefreshTerrainRoads();
+        if(constructionTool!="sand"&&constructionTool!="grass")RefreshTerrainRoads(terrain,point,brushRadius);
         Status("Terrain "+constructionTool+" • radius "+brushRadius+" m");
     }
     WorldPoint? ProjectRoadVertex(Transform road,WorkspaceIdentity[] terrains,WorldPoint vertex,float clearance)
@@ -276,10 +277,15 @@ public sealed partial class WorldBuilderRuntime
         if(!found)return null;
         point.y=height+clearance;return P(road.InverseTransformPoint(point));
     }
-    void RefreshTerrainRoads()
+    void RefreshTerrainRoads(GameObject terrain=null,Vector3? center=null,float radius=0)
     {
-        foreach(var identity in world.GetComponentsInChildren<WorkspaceIdentity>())
-            if(identity.construction?.kind=="road"&&identity.construction.FollowTerrain)RebuildConstruction(identity.gameObject);
+        float extent=0;
+        if(terrain!=null&&center.HasValue){var p=terrain.GetComponent<WorkspaceIdentity>().construction;var scale=terrain.transform.lossyScale;float cell=Mathf.Max(p.size.x,p.size.z)/(p.resolution-1);extent=(radius+2*cell)*Mathf.Max(Mathf.Abs(scale.x),Mathf.Abs(scale.z));}
+        foreach(var identity in world.GetComponentsInChildren<WorkspaceIdentity>()) {
+            if(identity.construction?.kind!="road"||!identity.construction.FollowTerrain)continue;
+            if(center.HasValue){var bounds=identity.GetComponent<Renderer>().bounds;var areaMin=center.Value-new Vector3(extent,0,extent);var areaMax=center.Value+new Vector3(extent,0,extent);if(!WorldGeometry.IntersectsXZ(P(bounds.min),P(bounds.max),P(areaMin),P(areaMax)))continue;}
+            RebuildConstruction(identity.gameObject);
+        }
         Physics.SyncTransforms();
     }
     GameObject CreateConstruction(string name,WorldConstruction construction,Vector3 position,Transform parent)
@@ -446,5 +452,5 @@ public sealed partial class WorldBuilderRuntime
         if(State()==savedState)return;
         Try(()=>{Directory.CreateDirectory(Application.persistentDataPath);WorkspaceDocument.Capture(world,title).Save(RecoveryPath);Status("Recovery autosave written. Save your project normally to keep a named copy.");});
     }
-    void DisposeWorldTools(){stroke=false;}
+    void DisposeWorldTools(){stroke=false;ClearPlacementPreview();}
 }

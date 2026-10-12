@@ -6,6 +6,8 @@ public static class WorldGeometry
 {
     const float Pi = (float)Math.PI;
     static float Clamp(float x, float lo, float hi) => Math.Max(lo, Math.Min(hi,x));
+    public static bool IntersectsXZ(WorldPoint minA,WorldPoint maxA,WorldPoint minB,WorldPoint maxB)
+        =>minA.x<=maxB.x&&maxA.x>=minB.x&&minA.z<=maxB.z&&maxA.z>=minB.z;
     public static WorldConstruction Island(float width, float depth, int seed, int resolution = 65)
     {
         if (width < 10 || depth < 10 || width > 2000 || depth > 2000 || resolution < 9 || resolution > 129)

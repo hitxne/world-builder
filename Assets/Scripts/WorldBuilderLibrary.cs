@@ -123,7 +123,9 @@ public sealed partial class WorldBuilderRuntime
                     string target=Path.Combine(LibraryFolder,id+".wbworld");
                     if(File.Exists(target)){skipped++;progress.text="Imported "+imported+" • skipped "+skipped+" • failed "+failed+" / "+files.Length;await Task.Yield();continue;}
                     if(new FileInfo(file).Length>32*1024*1024)throw new IOException("OBJ exceeds 32 MB import limit.");
-                    var item=WorkspaceObjMaterials.Import(file,out string warning);item.id=Guid.NewGuid().ToString("N");item.libraryId=id;item.parentId=null;item.position=Vector3.zero;
+                    var item=WorkspaceObjMaterials.Import(file,out string warning);
+                    using(var header=new StreamReader(file))if((header.ReadLine()??"").StartsWith("# Sims object MLOD geometry only:",StringComparison.Ordinal))warning="Geometry only: Sims UVs, materials and textures were not decoded. "+warning;
+                    item.id=Guid.NewGuid().ToString("N");item.libraryId=id;item.parentId=null;item.position=Vector3.zero;
                     string name="The Sims 4 / "+Path.GetRelativePath(folder,file);item.name=Path.GetFileNameWithoutExtension(file);
                     new WorkspaceDocument{title=name,objects=new List<WorkspaceProject>{item}}.Save(target);
                     WriteLibraryMetadata(target,name,file,warning);imported++;

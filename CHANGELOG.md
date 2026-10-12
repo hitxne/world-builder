@@ -131,3 +131,10 @@ Validation: source configuration/GUID/input checks, C# syntax parsing and whites
 - Keep package extraction off the Unity thread, expose progress/cancel, stop jobs on runtime teardown and store exports outside installed game files.
 - The optional .NET CLI remains available; the normal in-app route needs no external SDK.
 - Synthetic executable exporter/cross-package tests pass; full Build/Buy/texture support and Unity/Windows execution remain unverified.
+
+## 2026-10-12 — major editing feedback and goal audit
+
+- Add transient actual-model placement previews, selection bounds, brush footprints, construction guides and bounded lot grids through one shared theme-driven feedback layer.
+- Separate editing toolbar from catalog; favor the viewport in default layouts.
+- Restrict sculpt-induced road rebuilds to affected footprints and carry geometry-only warnings into extracted Sims library entries.
+- Geometry/container harness passed 41,544 assertions; synthetic exporter integration passed. Unity visual/input/type checks and Windows acceptance remain pending.
