@@ -47,6 +47,7 @@ public sealed partial class WorldBuilderRuntime
         modeButtons["Asset"]=Button(navigation,"Asset Studio",()=>SetMode("Asset"));
         Button(navigation,"Catalog / Library",OpenLibrary);
         Button(navigation,"Game Assets",GameBrowser);
+        Button(navigation,"Add Sims Assets",SelectSimsExecutable);
         constructionPanel=root.Q<ScrollView>("construction-catalog").contentContainer;
         referencePane=referenceImage.parent;
         SetMode("World");
