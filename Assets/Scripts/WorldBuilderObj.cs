@@ -19,6 +19,8 @@ public static class WorldBuilderObj
         var unique = new Dictionary<string, int>();
         foreach (var raw in File.ReadLines(path))
         {
+            if(raw.Length>65536)throw new FormatException("OBJ line exceeds safety limit");
+            if(positions.Count>1000000||uvs.Count>1000000||normals.Count>1000000||outPos.Count>1000000||triangles.Count>3000000)throw new FormatException("OBJ geometry exceeds editing limit");
             string line = raw.Split('#')[0].Trim();
             if (line.Length == 0 || line.StartsWith("#")) continue;
             var tokens = line.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
@@ -31,6 +33,7 @@ public static class WorldBuilderObj
                 normals.Add(new Vector3(Parse(tokens[1]), Parse(tokens[2]), Parse(tokens[3])));
             else if (tokens[0] == "f" && tokens.Length >= 4)
             {
+                if(tokens.Length>4097)throw new FormatException("OBJ face exceeds 4096-corner limit");
                 var corners = new List<int>();
                 for (int i = 1; i < tokens.Length; i++)
                 {

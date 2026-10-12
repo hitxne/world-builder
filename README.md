@@ -1,42 +1,70 @@
 # World Builder
 
-A Windows-first, game-feeling, standalone map and asset creation tool. The first milestone is **Asset Creator**: a dual-viewport reference / editable-workspace application with Blender OBJ importing. Longer term: Sims-inspired parametric Building Mode; Forza-inspired roads, terrain, water, and foliage; portable export targeting original Assetto Corsa (2014) first, GTA V second, and CarX Street as research.
+Independent Windows-first world and lot construction application in Unity.
+Target editor: **6000.6.5f1**. Work is on `development/world-builder-operational`;
+[PR #1](https://github.com/hitxne/world-builder/pull/1) remains draft while native
+Unity/Windows validation is incomplete.
 
-## Status
+## Use the world/lot workflow
 
-**Early source prototype — not a downloadable Windows build.** Unity 6 project skeleton; no game-engine port, no Sims/Forza asset extraction, no finished map exporter.
+1. Open this project in Unity 6000.6.5f1 and press Play.
+2. Click **Florida Island Test** in World Mode to create an original island, ocean,
+   neighborhood road, editable lot, house and palms. Or Generate Island with your
+   own dimensions/seed and build from an empty world.
+3. Sculpt terrain with Raise/Lower/Smooth/Flatten, and paint Sand/Grass.
+4. Draw Road: click control points on terrain, then Finish Road or Enter. Width,
+   sidewalks and control points remain editable in Properties.
+5. Draw Lot: click two corners. Select the lot and enter Lot Mode.
+6. Draw Room/Wall/Floor/Roof with two clicks. Door/Window tools cut real openings
+   in existing walls. Place Stairs, choose floor level and edit dimensions/transforms.
+7. Save `.wbworld` inside the app **before stopping Play**. Reopen it to continue;
+   Unity's saved editor scene does not contain runtime edits.
+8. Save a selected object or whole lot to Local Asset Library for reuse in another
+   project. Import/Reimport OBJ with supported MTL/PNG/JPEG textures; export the
+   world or edited assets as OBJ/MTL with texture files.
 
-## Quick start (developer)
+World, Lot and Asset modes use the same authoritative scene, hierarchy, materials,
+selection, snapshot history and project serialization. Lots actually parent their
+walls/floors/frames, so moving a lot moves its building. Construction source data
+(heightfield, paint layers, splines and openings) persists alongside generated meshes.
 
-1. Install Unity Hub and **Unity 6** with Windows build support. Open this folder as a project in Unity.
-2. Install the High Definition Render Pipeline package if Unity prompts you to resolve packages.
-3. Open any empty scene and choose **World Builder > Create Starter Scene** from the Unity editor menu.
-4. Press Play. The runtime Asset Creator UI should open.
-5. Use **Import OBJ** to select a local Blender-exported `.obj` file (geometry, UVs, and normals only in this first prototype; MTL/textures are next). The Unity Editor has an OBJ file picker. Windows standalone builds now include a native OBJ file picker (implementation pending Windows verification).
-6. Save/Open Project writes a one-mesh `.wbasset` snapshot (geometry and transforms; no materials yet).
-7. Orbit either viewport with left-drag, zoom with the scroll wheel.
-7. Native Windows builds must be built and tested on a Windows machine with Unity installed.
+## Windows application build
 
-See [implementation status and exact validation commands](docs/IMPLEMENTATION.md). Automatic runtime bootstrap no longer requires scene generation to enter Play Mode; Windows builds use **World Builder > Build Windows Release**. UI modernization and full world persistence remain pending.
+Use **World Builder > Build Windows Release** in Unity with Windows x64 Build
+Support installed. Output: `Builds/Windows/WorldBuilder.exe` and required companion
+files. The build also packages the whole directory in a timestamped ZIP under Builds. A Development build menu is available for debugging. The build creates a separate bootstrap
+scene and generated shader resources; it does not overwrite the saved user scene.
+A Windows build has not been produced or smoke-tested in this cloud environment.
 
-## Key design requirements
+## Verification
 
-- The custom World Builder project is the authoritative editable data source, not a Forza or Sims engine file.
-- Asset Creator is permanent; Blender OBJ/MTL import → adjust → library → reimport/export is a central workflow.
-- Reference pane and edit pane are visually separate. Installed Forza/Sims resources are only indexed through supported, read-only adapters and are **not automatically extractable or reusable**.
-- Preserve original user-supplied mesh source and asset IDs; optimize generated runtime geometry separately.
-- Allow categorized materials, surface painting, assembly, LODs, and OBJ/MTL or glTF exports in subsequent iterations.
-- Target games: original Assetto Corsa first, GTA V second, CarX Street experimental. OBJ alone is not a complete drivable-map export.
+The engine-independent C# geometry/container code compiled and its executable tests
+passed in cloud (.NET 8). Tested: deterministic islands, raise/flatten/paint, source
+round-trip, road width/sidewalks/markings, real wall apertures, nondegenerate geometry,
+zlib resources and bounded ZIP read/CRC/encryption rejection. Configuration/GUID,
+C# grammar and whitespace checks also passed. Unity EditMode tests are included but
+have not run here; UI, physics, materials and the Windows player need local testing.
 
-## Current implementation boundaries
+```powershell
+dotnet run --project tools/world-geometry-tests/WorldGeometryTests.csproj
+```
 
-The prototype includes a two-camera viewport, camera orbit, a runtime OBJ geometry reader and persistence of the last selected local source path, plus directory-probe foundations. The full procedural 3D building systems, original game-resource decoders, texture-brush painting, high-quality baking, production asset library, signed updates, and game exporters are **planned but not yet implemented**.
+In Unity, run **Window > General > Test Runner > EditMode > Run All**. See
+[world/lot acceptance and release status](docs/WORLD-LOT-MILESTONE.md).
 
-Do not commit copyrighted game assets, extracted packages, or imported commercial models to this repository. It currently contains only project source and documentation.
+## Current limits
 
-## Editing workspace update
+This is a functional source increment, not a verified World Builder 1.0 release.
+Water is an independent flat surface, not a validated ocean/connected canal simulator.
+Roads have mesh collisions and editable splines, but automatic cut/fill, intersections
+and driving-game validation are pending. Windows execution, advanced modeling/gizmos,
+large-world streaming, full PBR material editing and game-native export remain pending.
 
-The development branch now implements a UI Toolkit editing workspace. See
-[usage and current game-preview limits](docs/USABLE-WORKSPACE.md). Use `.wbworld`
-Save/Open inside the application to preserve runtime edits before stopping Play.
-The prior foundation audit describes the earlier increment, not the current UI.
+Game adapters are read-only subsets: plain Forza mesh parts/ordinary ZIP entries and
+some Sims MLOD layouts. Full textured environment-asset browsing/import, MiniZip,
+cross-package Sims dependencies and unsupported game encodings remain incomplete.
+No game renderer, proprietary assets, encrypted-archive decryption or game source
+files are included. See [game adapter status](docs/GAME-ASSET-ADAPTERS.md).
+
+Primary eventual game export: original Assetto Corsa (2014); GTA V second;
+CarX Street experimental. Generic OBJ export is not a complete Assetto Corsa track.

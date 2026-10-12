@@ -13,3 +13,6 @@
 
 Assets/WorldBuilderGenerated/
 Assets/WorldBuilderGenerated.meta
+!tools/world-geometry-tests/WorldGeometryTests.csproj
+tools/world-geometry-tests/bin/
+tools/world-geometry-tests/obj/

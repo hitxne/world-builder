@@ -24,3 +24,7 @@ Button:disabled { opacity: 0.4; }
 .unity-text-element { color: var(--text); }
 .modal { position: absolute; left: 0; right: 0; top: 0; bottom: 0; background-color: rgba(0,0,0,0.7); align-items: center; justify-content: center; }
 .dialog { width: 620px; max-height: 85%; background-color: var(--surface); padding: 24px; border-top-left-radius: 12px; border-top-right-radius: 12px; border-bottom-left-radius: 12px; border-bottom-right-radius: 12px; }
+.sidebar { width: 250px; }
+.unity-popup-field__input { background-color: var(--raised); color: var(--text); padding: 6px; }
+.unity-base-popup-field__text { color: var(--text); }
+.unity-base-field__label { min-width: 95px; }

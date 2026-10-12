@@ -15,14 +15,14 @@ public static class WorkspaceObjExport
         string materialFile = Path.GetFileNameWithoutExtension(path) + ".mtl";
         obj.Append("mtllib ").Append(materialFile).Append('\n');
         int offset = 1, number = 0;
-        foreach (Transform child in root)
+        foreach (var filter in root.GetComponentsInChildren<MeshFilter>())
         {
-            if (!child.gameObject.activeSelf) continue;
-            var filter = child.GetComponent<MeshFilter>();
+            Transform child=filter.transform;
+            if (!child.gameObject.activeInHierarchy) continue;
             if (filter == null) continue;
             var mesh = filter.sharedMesh;
             string name = "object_" + number++ + "_" + System.Text.RegularExpressions.Regex.Replace(child.name, "[^A-Za-z0-9_-]", "_"), material = name + "_material";
-            obj.Append("o ").Append(name).Append('\n').Append("usemtl ").Append(material).Append('\n');
+            obj.Append("o ").Append(name).Append('\n');
             var vertices = mesh.vertices; var uv = mesh.uv; var normals = mesh.normals;
             var normalMatrix = child.localToWorldMatrix.inverse.transpose;
             for (int i = 0; i < vertices.Length; i++) obj.Append("v ").Append(V(child.TransformPoint(vertices[i]))).Append('\n');
@@ -35,18 +35,34 @@ public static class WorkspaceObjExport
                 obj.Append("vn ").Append(V(normalMatrix.MultiplyVector(n).normalized)).Append('\n');
             }
             bool mirrored = child.localToWorldMatrix.determinant < 0;
-            var triangles = mesh.triangles;
-            for (int i = 0; i < triangles.Length; i += 3) {
-                obj.Append("f");
-                for (int c = 0; c < 3; c++) {
-                    int corner = mirrored && c > 0 ? 3 - c : c;
-                    int id = offset + triangles[i + corner];
-                    obj.Append(' ').Append(id).Append('/').Append(id).Append('/').Append(id);
+            var materials=child.GetComponent<Renderer>().sharedMaterials;
+            for(int group=0;group<mesh.subMeshCount;group++) {
+                string matName=material+"_"+group;
+                obj.Append("usemtl ").Append(matName).Append('\n');
+                var triangles = mesh.GetTriangles(group);
+                for (int i = 0; i < triangles.Length; i += 3) {
+                    obj.Append("f");
+                    for (int c = 0; c < 3; c++) {
+                        int corner = mirrored && c > 0 ? 3 - c : c;
+                        int id = offset + triangles[i + corner];
+                        obj.Append(' ').Append(id).Append('/').Append(id).Append('/').Append(id);
+                    }
+                    obj.Append('\n');
                 }
-                obj.Append('\n');
+                Color color = WorkspaceProject.ReadColor(materials[Mathf.Min(group,materials.Length-1)]);
+                mtl.Append("newmtl ").Append(matName).Append("\nKd ").Append(V(new Vector3(color.r, color.g, color.b))).Append("\nd 1\n");
+                var textures=child.GetComponent<WorkspaceIdentity>()?.albedo;
+                if(textures!=null&&group<textures.Length&&textures[group]!=null) {
+                    string extension=Path.GetExtension(textures[group].name).ToLowerInvariant();
+                    if(extension!=".png"&&extension!=".jpg"&&extension!=".jpeg")throw new FormatException("Unsupported export texture extension");
+                    string filename="WorldBuilder_"+matName+extension;
+                    string destination=Path.Combine(Path.GetDirectoryName(path),filename);
+                    if(!string.IsNullOrEmpty(textures[group].sourcePath)&&string.Equals(Path.GetFullPath(destination),Path.GetFullPath(textures[group].sourcePath),StringComparison.OrdinalIgnoreCase))
+                        throw new IOException("Choose another export folder to preserve the imported texture source.");
+                    WorkspaceAtomicFile.WriteBytes(destination,Convert.FromBase64String(textures[group].base64));
+                    mtl.Append("map_Kd ").Append(filename).Append('\n');
+                }
             }
-            Color color = WorkspaceProject.ReadColor(child.GetComponent<Renderer>().sharedMaterial);
-            mtl.Append("newmtl ").Append(material).Append("\nKd ").Append(V(new Vector3(color.r, color.g, color.b))).Append("\nd 1\n");
             offset += vertices.Length;
         }
         if (number == 0) throw new InvalidOperationException("Add at least one object before exporting.");

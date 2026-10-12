@@ -37,3 +37,12 @@
 - Preserve valid Sims resource indexes while reporting/refusing invalid payloads.
 - Diagnostic v3 records exact invalid payload metadata and zero-size placeholders.
 - Cloud source checks passed; Unity tests and actual game previews still pending.
+
+## Integrated world/lot workflow — unreleased
+- Editable island sculpting/painting, independent water and original palms.
+- Spline roads with sidewalks/markings and editable control points.
+- Lots, rooms, walls, floors, roofs, door/window apertures and stairs.
+- Persistent parametric source, scene parenting, opening attachments and shared undo.
+- Reusable local objects/buildings; textured OBJ/MTL import/reimport/export.
+- Recovery autosave, last-project opening and standalone shader retention.
+- Actual .NET geometry/container execution passed; Unity/Windows validation pending.

@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-public sealed class WorldBuilderRuntime : MonoBehaviour
+public sealed partial class WorldBuilderRuntime : MonoBehaviour
 {
     Transform world, reference;
     Camera workCamera, referenceCamera, displayCamera;
@@ -46,7 +46,7 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
         var light = sun.AddComponent<Light>(); light.type = LightType.Directional; light.intensity = 1.4f;
         sun.transform.rotation = Quaternion.Euler(45, -35, 0);
         BuildUI();
-        AddPrimitive(PrimitiveType.Cube, "Cube", false);
+        InitializeWorldTools();
         history.Reset(State()); savedState = State(); Refresh();
         Application.wantsToQuit += WantsToQuit;
     }
@@ -64,6 +64,7 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
     {
         Position(workCamera, workAngles, workCenter, workDistance);
         Position(referenceCamera, referenceAngles, referenceCenter, referenceDistance);
+        WorldUpdate();
     }
     static void Position(Camera camera, Vector2 angles, Vector3 center, float distance)
     {
@@ -85,11 +86,11 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
         Button(top, "New", () => ConfirmDiscard(NewProject));
         Button(top, "Open", () => ConfirmDiscard(OpenProject));
         Button(top, "Save", () => Save(false)); Button(top, "Save As", () => Save(true));
-        Button(top, "Import OBJ", Import); Button(top, "Export OBJ", Export);
+        Button(top, "Import OBJ", Import); Button(top,"Reimport Selected",ReimportSelected); Button(top, "Export OBJ", Export);
         undoButton = Button(top, "Undo", Undo); redoButton = Button(top, "Redo", Redo);
         Button(top, "Theme", () => { theme = (theme + 1) % 3; ApplyTheme(); PlayerPrefs.SetInt("worldbuilder.theme", theme); PlayerPrefs.Save(); });
         var body = Row(root, "body");
-        var left = new VisualElement(); left.AddToClassList("sidebar"); body.Add(left);
+        var left = new ScrollView(); left.AddToClassList("sidebar"); body.Add(left);
         Label(left, "SCENE", "section");
         var primitives = Row(left);
         Button(primitives, "+ Cube", () => AddPrimitive(PrimitiveType.Cube, "Cube"));
@@ -97,6 +98,8 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
         var more = Row(left);
         Button(more, "+ Sphere", () => AddPrimitive(PrimitiveType.Sphere, "Sphere"));
         Button(more, "+ Cylinder", () => AddPrimitive(PrimitiveType.Cylinder, "Cylinder"));
+        Button(left, "Local Asset Library", OpenLibrary);
+        Button(left, "Save Selected to Library", SaveLibrary);
         Button(left, "Game Asset Browser", GameBrowser);
         hierarchy = new ScrollView(); hierarchy.style.flexGrow = 1; left.Add(hierarchy);
         var center = new VisualElement(); center.AddToClassList("center"); body.Add(center);
@@ -117,6 +120,8 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
             if (e.ctrlKey && e.keyCode == KeyCode.Z) { Undo(); e.StopPropagation(); }
             if (e.ctrlKey && e.keyCode == KeyCode.Y) { Redo(); e.StopPropagation(); }
             if (e.keyCode == KeyCode.F) FrameSelected();
+            if(e.keyCode==KeyCode.Return) FinishRoad();
+            if(e.keyCode==KeyCode.Escape) CancelConstruction();
         });
     }
     Image View(VisualElement parent, string titleText, RenderTexture texture, bool editable)
@@ -128,11 +133,15 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
         image.RegisterCallback<PointerDownEvent>(e => {
             if (modal != null) return;
             image.Focus();
-            if (e.button == 0 && editable) Pick(e.localPosition);
+            if (e.button == 0 && editable) {
+                if (ConstructionPointerDown(e.localPosition)) { image.CapturePointer(e.pointerId); }
+                else Pick(e.localPosition);
+            }
             if (e.button == 1 || e.button == 2) { drag = e.button; previous = e.position; image.CapturePointer(e.pointerId); }
             e.StopPropagation();
         });
         image.RegisterCallback<PointerMoveEvent>(e => {
+            if (editable && modal == null) ConstructionPointerMove(e.localPosition);
             if (drag < 0 || modal != null) return;
             Vector2 point = e.position, delta = point - previous; previous = point;
             if (drag == 1) {
@@ -145,8 +154,8 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
             }
             workAngles.x = Mathf.Clamp(workAngles.x, -89, 89); referenceAngles.x = Mathf.Clamp(referenceAngles.x, -89, 89);
         });
-        image.RegisterCallback<PointerUpEvent>(e => { drag = -1; image.ReleasePointer(e.pointerId); });
-        image.RegisterCallback<PointerCaptureOutEvent>(e => drag = -1);
+        image.RegisterCallback<PointerUpEvent>(e => { if (editable) ConstructionPointerUp(); drag = -1; image.ReleasePointer(e.pointerId); });
+        image.RegisterCallback<PointerCaptureOutEvent>(e => { drag = -1; if(editable) ConstructionPointerUp(); });
         image.RegisterCallback<WheelEvent>(e => {
             if (modal != null) return;
             if (editable) { workDistance = Mathf.Clamp(workDistance * Mathf.Exp(e.delta.y * 0.08f), 0.25f, 10000); workCamera.orthographicSize = workDistance * 0.4f; }
@@ -173,21 +182,50 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
     }
     Material Material(Color color)
     {
-        var shader = Shader.Find("HDRP/Lit") ?? Shader.Find("Standard") ?? Shader.Find("Unlit/Color");
+        var pipeline=UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline;
+        var template=Resources.Load<Material>(pipeline==null?"WorldBuilderDefault":pipeline.GetType().Name.Contains("HDRender")?"WorldBuilderHDRP":"WorldBuilderURP");
+        var shader = template!=null?template.shader:pipeline==null?Shader.Find("Standard"):Shader.Find("HDRP/Lit") ?? Shader.Find("Universal Render Pipeline/Lit");
+        shader=shader??Shader.Find("Unlit/Color");
         if (shader == null) throw new InvalidOperationException("No compatible material shader is available.");
         var material = new Material(shader);
         if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", color); else material.color = color;
+        if(material.HasProperty("_Smoothness"))material.SetFloat("_Smoothness",0.25f);
         return material;
     }
     GameObject Model(WorkspaceProject data, Transform parent, int layer)
     {
+        if(data.construction!=null) {
+            var derived=ConstructionData(data.construction);
+            data.vertices=derived.vertices;data.uv=derived.uv;data.triangles=derived.triangles;data.submeshes=derived.submeshes;data.normals=null;
+            if(data.materialColors==null)data.materialColors=derived.materialColors;
+        }
         Mesh mesh = data.CreateMesh();
         var go = new GameObject(data.name); go.transform.SetParent(parent, false); go.layer = layer;
         var identity = go.AddComponent<WorkspaceIdentity>(); identity.ownedMesh = mesh;
         go.AddComponent<MeshFilter>().sharedMesh = mesh;
-        identity.ownedMaterial = Material(data.color);
-        go.AddComponent<MeshRenderer>().sharedMaterial = identity.ownedMaterial;
-        go.AddComponent<MeshCollider>().sharedMesh = mesh;
+        var colors = data.materialColors ?? new[] { data.color };
+        if(colors.Length == 0) colors=new[] { data.color };
+        identity.ownedMaterials = new Material[colors.Length];
+        for(int i=0;i<colors.Length;i++) {
+            var material=identity.ownedMaterials[i]=Material(colors[i]);
+            if(data.metallic!=null&&i<data.metallic.Length&&material.HasProperty("_Metallic"))material.SetFloat("_Metallic",Mathf.Clamp01(data.metallic[i]));
+            if(data.smoothness!=null&&i<data.smoothness.Length&&material.HasProperty("_Smoothness"))material.SetFloat("_Smoothness",Mathf.Clamp01(data.smoothness[i]));
+        }
+        identity.ownedMaterial=identity.ownedMaterials[0];
+        identity.construction=data.construction; identity.libraryId=data.libraryId; identity.albedo=data.albedo;
+        if(data.albedo!=null) {
+            identity.ownedTextures=new Texture2D[data.albedo.Length];
+            for(int i=0;i<data.albedo.Length&&i<identity.ownedMaterials.Length;i++)if(data.albedo[i]!=null) {
+                if(string.IsNullOrEmpty(data.albedo[i].base64)||data.albedo[i].base64.Length>12*1024*1024)throw new FormatException("Invalid texture payload.");
+                byte[] bytes=Convert.FromBase64String(data.albedo[i].base64);var texture=new Texture2D(2,2);identity.ownedTextures[i]=texture;
+                if(!texture.LoadImage(bytes)||texture.width>8192||texture.height>8192)throw new FormatException("Unsupported or oversized texture image.");
+                var material=identity.ownedMaterials[i];
+                if(material.HasProperty("_BaseColorMap"))material.SetTexture("_BaseColorMap",texture);else material.mainTexture=texture;
+            }
+        }
+        go.AddComponent<MeshRenderer>().sharedMaterials = identity.ownedMaterials;
+        var collider=go.AddComponent<MeshCollider>(); collider.sharedMesh=mesh;
+        if(data.construction?.kind=="water") collider.enabled=false;
         identity.id = data.id ?? Guid.NewGuid().ToString("N"); identity.source = data.source;
         go.transform.localPosition = data.position; go.transform.localEulerAngles = data.rotation; go.transform.localScale = data.scale;
         return go;
@@ -209,16 +247,14 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
         Try(() => {
             string path = WorkspaceFiles.Pick(false, "Import OBJ geometry", "obj"); if (string.IsNullOrEmpty(path)) return;
             if (new FileInfo(path).Length > 32 * 1024 * 1024) throw new IOException("OBJ exceeds the 32 MB import limit.");
-            var mesh = WorldBuilderObj.Load(path);
-            var data = new WorkspaceProject { name = Path.GetFileNameWithoutExtension(path), source = path,
-                id = Guid.NewGuid().ToString("N"), vertices = mesh.vertices, normals = mesh.normals, uv = mesh.uv, triangles = mesh.triangles };
-            Destroy(mesh);
-            selected = Model(data, world, 31); Preview(data); FrameSelected(); Changed();
-            Status("Imported geometry, UVs and normals. Source MTL/textures are not imported yet.");
+            var data = WorkspaceObjMaterials.Import(path,out string warning);
+            selected = Model(data, PlacementParent(), 31); Preview(data); FrameSelected(); Changed();
+            Status(string.IsNullOrEmpty(warning)?"Imported OBJ; supplied supported material and texture references are preserved.":"Imported with warnings: "+warning);
         });
     }
     void Preview(WorkspaceProject data)
     {
+        SetMode("Asset");
         Clear(reference); var model = Model(data, reference, 30);
         model.transform.localPosition = Vector3.zero; model.transform.localRotation = Quaternion.identity; model.transform.localScale = Vector3.one;
         var bounds = model.GetComponent<Renderer>().bounds;
@@ -227,10 +263,20 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
     void Duplicate()
     {
         if (selected == null) return;
-        var data = WorkspaceProject.Capture(selected, selected.GetComponent<WorkspaceIdentity>().source);
-        data.id = Guid.NewGuid().ToString("N"); data.name += " copy"; data.position += Vector3.right;
-        selected = Model(data, world, 31); Changed();
+        var original=selected;
+        GameObject CloneObject(GameObject source,Transform parent)
+        {
+            var data=JsonUtility.FromJson<WorkspaceProject>(JsonUtility.ToJson(WorkspaceProject.Capture(source,source.GetComponent<WorkspaceIdentity>().source)));
+            data.id=Guid.NewGuid().ToString("N");data.name+=" copy";
+            var copy=Model(data,parent,31);
+            foreach(Transform child in source.transform)if(child.GetComponent<MeshFilter>()!=null)CloneObject(child.gameObject,copy.transform);
+            return copy;
+        }
+        selected=CloneObject(original,original.transform.parent);
+        selected.transform.localPosition+=Vector3.right;
+        Changed();
     }
+
     void Delete()
     {
         if (selected == null) return;
@@ -240,14 +286,15 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
     {
         if (selected == null) { FrameAll(); return; }
         var bounds = selected.GetComponent<Renderer>().bounds;
+        foreach(var renderer in selected.GetComponentsInChildren<Renderer>())bounds.Encapsulate(renderer.bounds);
         workCenter = bounds.center; workDistance = Mathf.Max(2, bounds.extents.magnitude * 3);
         workCamera.orthographicSize = workDistance * 0.4f;
     }
     void FrameAll()
     {
         bool found = false; var bounds = new Bounds();
-        foreach (Transform child in world) if (child.gameObject.activeSelf) {
-            var b = child.GetComponent<Renderer>().bounds; if (!found) bounds = b; else bounds.Encapsulate(b); found = true;
+        foreach (var renderer in world.GetComponentsInChildren<Renderer>()) {
+            var b = renderer.bounds; if (!found) bounds = b; else bounds.Encapsulate(b); found = true;
         }
         workCenter = found ? bounds.center : Vector3.zero; workDistance = found ? Mathf.Max(2, bounds.extents.magnitude * 3) : 12;
         workCamera.orthographicSize = workDistance * 0.4f;
@@ -261,16 +308,27 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
         // Construct everything in a staging root first: invalid files leave the scene intact.
         var stage = new GameObject("Project staging").transform;
         try {
-            foreach (var data in document.objects) Model(data, stage, 31);
+            var ids=new Dictionary<string,GameObject>();
+            foreach (var data in document.objects) {
+                var model=Model(data, stage, 31);
+                string id=model.GetComponent<WorkspaceIdentity>().id;
+                if(ids.ContainsKey(id))throw new FormatException("Duplicate object ID"); ids[id]=model;
+            }
+            foreach(var data in document.objects) if(!string.IsNullOrEmpty(data.parentId)) {
+                if(!ids.TryGetValue(data.parentId,out var parent))throw new FormatException("Missing parent object");
+                var child=ids[data.id];
+                if(parent==child || parent.transform.IsChildOf(child.transform))throw new FormatException("Cyclic object parenting");
+                child.transform.SetParent(parent.transform,false);
+            }
         } catch { Clear(stage); Destroy(stage.gameObject); throw; }
         Clear(world);
         while (stage.childCount > 0) stage.GetChild(0).SetParent(world, false);
-        Destroy(stage.gameObject); title = document.title; selected = null; Refresh();
+        Destroy(stage.gameObject); title = document.title; selected = null; ReconnectWorldTools(); Refresh();
     }
     void NewProject()
     {
         Clear(world); Clear(reference); selected = null; projectPath = ""; title = "Untitled world";
-        history.Reset(State()); savedState = State(); Refresh(); Status("New empty world. Add a plane and start placing objects.");
+        ResetWorldTools(); history.Reset(State()); savedState = State(); Refresh(); Status("New world. Generate an island or use Florida Island Test.");
     }
     void OpenProject()
     {
@@ -290,15 +348,15 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
             string path = saveAs || string.IsNullOrEmpty(projectPath) ? WorkspaceFiles.Pick(true, "Save world project", "wbworld") : projectPath;
             if (string.IsNullOrEmpty(path)) return;
             var document = WorkspaceDocument.Capture(world, Path.GetFileNameWithoutExtension(path)); document.Save(path);
-            projectPath = path; title = document.title; history.Record(State()); savedState = State(); Refresh(); Status("Saved " + Path.GetFileName(path));
+            projectPath = path; title = document.title; PlayerPrefs.SetString("worldbuilder.lastProject",path);PlayerPrefs.Save(); history.Record(State()); savedState = State(); Refresh(); Status("Saved " + Path.GetFileName(path));
         });
     }
     void Export()
     {
         Try(() => {
             string path = WorkspaceFiles.Pick(true, "Export scene OBJ + MTL", "obj"); if (string.IsNullOrEmpty(path)) return;
-            foreach (Transform child in world) {
-                var source = child.GetComponent<WorkspaceIdentity>()?.source;
+            foreach (var identity in world.GetComponentsInChildren<WorkspaceIdentity>()) {
+                var source = identity.source;
                 if (!string.IsNullOrEmpty(source) && string.Equals(Path.GetFullPath(source), Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase))
                     throw new IOException("Choose a different filename to preserve the imported source model.");
             }
@@ -311,17 +369,28 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
         titleLabel.text = title + (State() != savedState ? " • unsaved" : "");
         undoButton.SetEnabled(history.CanUndo); redoButton.SetEnabled(history.CanRedo);
         hierarchy.Clear();
-        foreach (Transform child in world) if (child.gameObject.activeSelf) {
-            var go = child.gameObject; var button = Button(hierarchy, go.name, () => { selected = go; Refresh(); });
+        foreach (var identity in world.GetComponentsInChildren<WorkspaceIdentity>()) {
+            var go = identity.gameObject; var button = Button(hierarchy, go.name, () => { selected = go; Refresh(); });
             if (go == selected) button.AddToClassList("selected");
         }
         inspector.Clear(); Label(inspector, "PROPERTIES", "section");
+        RefreshWorldTools();
         if (selected == null) { Label(inspector, "Select an object in the scene or hierarchy.", "hint"); return; }
         var name = new TextField("Name") { value = selected.name, isDelayed = true }; inspector.Add(name);
         name.RegisterValueChangedCallback(e => { if (selected != null && !string.IsNullOrWhiteSpace(e.newValue)) { selected.name = e.newValue; Changed(); } });
+        AddConstructionInspector();
         VectorFields("Position", selected.transform.localPosition, v => selected.transform.localPosition = v);
         VectorFields("Rotation", selected.transform.localEulerAngles, v => selected.transform.localEulerAngles = v);
         VectorFields("Scale", selected.transform.localScale, v => { if (Mathf.Abs(v.x * v.y * v.z) < 0.000001f) throw new ArgumentException("Scale must be non-zero."); selected.transform.localScale = v; });
+        Label(inspector, "MATERIAL", "section");
+        var materialPicker=new DropdownField("Preset",new List<string>(WorldMaterials.Names),0);inspector.Add(materialPicker);
+        materialPicker.RegisterValueChangedCallback(e=>{
+            var material=selected.GetComponent<Renderer>().sharedMaterial;var color=WorldMaterials.Color(e.newValue);
+            if(material.HasProperty("_BaseColor"))material.SetColor("_BaseColor",color);else material.color=color;
+            if(material.HasProperty("_Metallic"))material.SetFloat("_Metallic",e.newValue=="Metal"?0.85f:0);
+            if(material.HasProperty("_Smoothness"))material.SetFloat("_Smoothness",e.newValue=="Metal"||e.newValue=="Glass"?0.7f:0.2f);
+            Changed();
+        });
         Label(inspector, "BASE COLOR", "section");
         var colors = Row(inspector);
         foreach (var color in new[] { Color.gray, new Color(0.15f, 0.45f, 0.25f), new Color(0.7f, 0.55f, 0.33f), new Color(0.2f, 0.45f, 0.8f) }) {
@@ -545,6 +614,7 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
     }
     void PreviewModels(List<WorkspaceProject> objects)
     {
+        SetMode("Asset");
         var stage = new GameObject("Reference preview staging").transform;
         try { foreach (var data in objects) Model(data, stage, 30); }
         catch { Clear(stage); Destroy(stage.gameObject); throw; }
@@ -583,6 +653,7 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
     void OnDestroy()
     {
         Application.wantsToQuit -= WantsToQuit;
+        DisposeWorldTools();
         if (world != null) Destroy(world.gameObject); if (reference != null) Destroy(reference.gameObject);
         if (sun != null) Destroy(sun);
         if (workCamera != null) Destroy(workCamera.gameObject); if (referenceCamera != null) Destroy(referenceCamera.gameObject);

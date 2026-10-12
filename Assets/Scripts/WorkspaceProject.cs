@@ -8,7 +8,13 @@ public sealed class WorkspaceProject
 {
     public int version = 1;
     public string name = "Untitled", source = "";
-    public string id;
+    public string id, parentId;
+    public WorldConstruction construction;
+    public Color[] materialColors;
+    public float[] metallic, smoothness;
+    public WorkspaceTriangles[] submeshes;
+    public WorkspaceTexture[] albedo;
+    public string libraryId;
     public Color color = new Color(0.65f, 0.72f, 0.78f, 1);
     public Vector3 position, rotation, scale = Vector3.one;
     public Vector3[] vertices, normals;
@@ -19,12 +25,36 @@ public sealed class WorkspaceProject
     {
         var mesh = model.GetComponent<MeshFilter>().sharedMesh;
         return new WorkspaceProject {
+            construction = model.GetComponent<WorkspaceIdentity>()?.construction,
+            libraryId = model.GetComponent<WorkspaceIdentity>()?.libraryId,
+            albedo = model.GetComponent<WorkspaceIdentity>()?.albedo,
+            parentId = model.transform.parent?.GetComponent<WorkspaceIdentity>()?.id,
+            submeshes = CaptureSubmeshes(mesh), materialColors = CaptureColors(model.GetComponent<Renderer>()),
+            metallic=CaptureProperty(model.GetComponent<Renderer>(),"_Metallic"),smoothness=CaptureProperty(model.GetComponent<Renderer>(),"_Smoothness"),
             id = model.GetComponent<WorkspaceIdentity>()?.id ?? Guid.NewGuid().ToString("N"),
             color = ReadColor(model.GetComponent<Renderer>().sharedMaterial),
             name = model.name, source = source, position = model.transform.localPosition,
             rotation = model.transform.localEulerAngles, scale = model.transform.localScale,
             vertices = mesh.vertices, normals = mesh.normals, uv = mesh.uv, triangles = mesh.triangles
         };
+    }
+    static WorkspaceTriangles[] CaptureSubmeshes(Mesh mesh)
+    {
+        var result = new WorkspaceTriangles[mesh.subMeshCount];
+        for(int i=0;i<result.Length;i++)result[i]=new WorkspaceTriangles{indices=mesh.GetTriangles(i)};
+        return result;
+    }
+    static float[] CaptureProperty(Renderer renderer,string name)
+    {
+        var materials=renderer.sharedMaterials;var values=new float[materials.Length];
+        for(int i=0;i<values.Length;i++)values[i]=materials[i]!=null&&materials[i].HasProperty(name)?materials[i].GetFloat(name):0;
+        return values;
+    }
+    static Color[] CaptureColors(Renderer renderer)
+    {
+        var materials=renderer.sharedMaterials; var colors=new Color[materials.Length];
+        for(int i=0;i<materials.Length;i++)colors[i]=ReadColor(materials[i]);
+        return colors;
     }
     public static Color ReadColor(Material material)
     {
@@ -43,7 +73,14 @@ public sealed class WorkspaceProject
             if (index < 0 || index >= vertices.Length) throw new FormatException("Invalid triangle index");
         var mesh = new Mesh { indexFormat = UnityEngine.Rendering.IndexFormat.UInt32, name = name };
         mesh.vertices = vertices;
-        mesh.triangles = triangles;
+        if (submeshes != null && submeshes.Length > 0) {
+            mesh.subMeshCount = submeshes.Length;
+            for (int i=0;i<submeshes.Length;i++) {
+                if (submeshes[i] == null || submeshes[i].indices == null || submeshes[i].indices.Length % 3 != 0) throw new FormatException("Invalid submesh triangles");
+                foreach (int index in submeshes[i].indices) if(index<0||index>=vertices.Length)throw new FormatException("Invalid submesh index");
+                mesh.SetTriangles(submeshes[i].indices, i);
+            }
+        } else mesh.triangles = triangles;
         if (uv != null && uv.Length == vertices.Length) mesh.uv = uv;
         if (normals != null && normals.Length == vertices.Length) mesh.normals = normals;
         else mesh.RecalculateNormals();
@@ -68,3 +105,9 @@ public sealed class WorkspaceProject
         return project;
     }
 }
+
+[Serializable]
+public sealed class WorkspaceTriangles { public int[] indices; }
+
+[Serializable]
+public sealed class WorkspaceTexture { public string name, base64, sourcePath; }

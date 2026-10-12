@@ -12,9 +12,9 @@ public sealed class WorkspaceDocument
     public static WorkspaceDocument Capture(Transform root, string title)
     {
         var document = new WorkspaceDocument { title = title };
-        foreach (Transform child in root)
-            if (child.gameObject.activeSelf && child.GetComponent<MeshFilter>() != null)
-                document.objects.Add(WorkspaceProject.Capture(child.gameObject, child.GetComponent<WorkspaceIdentity>()?.source ?? ""));
+        foreach (var identity in root.GetComponentsInChildren<WorkspaceIdentity>())
+            if (identity.gameObject.activeInHierarchy && identity.GetComponent<MeshFilter>() != null)
+                document.objects.Add(WorkspaceProject.Capture(identity.gameObject, identity.source ?? ""));
         return document;
     }
     public void Save(string path) => WorkspaceAtomicFile.Write(path, JsonUtility.ToJson(this, true));
@@ -31,12 +31,13 @@ public sealed class WorkspaceDocument
 
 public static class WorkspaceAtomicFile
 {
-    public static void Write(string path, string content)
+    public static void Write(string path, string content)=>WriteBytes(path,System.Text.Encoding.UTF8.GetBytes(content));
+    public static void WriteBytes(string path,byte[] content)
     {
         string temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try {
             using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-            using (var writer = new StreamWriter(stream)) { writer.Write(content); writer.Flush(); stream.Flush(true); }
+            { stream.Write(content,0,content.Length); stream.Flush(true); }
             if (File.Exists(path)) File.Replace(temporary, path, path + ".bak");
             else File.Move(temporary, path);
         } finally { if (File.Exists(temporary)) File.Delete(temporary); }
