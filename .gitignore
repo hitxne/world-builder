@@ -10,3 +10,6 @@
 *.sln
 *.unitypackage
 .DS_Store
+
+Assets/WorldBuilderGenerated/
+Assets/WorldBuilderGenerated.meta

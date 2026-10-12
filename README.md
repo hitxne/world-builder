@@ -33,3 +33,10 @@ See [implementation status and exact validation commands](docs/IMPLEMENTATION.md
 The prototype includes a two-camera viewport, camera orbit, a runtime OBJ geometry reader and persistence of the last selected local source path, plus directory-probe foundations. The full procedural 3D building systems, original game-resource decoders, texture-brush painting, high-quality baking, production asset library, signed updates, and game exporters are **planned but not yet implemented**.
 
 Do not commit copyrighted game assets, extracted packages, or imported commercial models to this repository. It currently contains only project source and documentation.
+
+## Editing workspace update
+
+The development branch now implements a UI Toolkit editing workspace. See
+[usage and current game-preview limits](docs/USABLE-WORKSPACE.md). Use `.wbworld`
+Save/Open inside the application to preserve runtime edits before stopping Play.
+The prior foundation audit describes the earlier increment, not the current UI.

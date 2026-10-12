@@ -14,6 +14,6 @@ for p in assets:
 assert len(guids) == len(set(guids)), 'Duplicate GUIDs'
 source = (root/'Assets/Scripts/WorldBuilderRuntime.cs').read_text()
 assert not re.search(r'\bInput\.(GetAxis|GetMouseButton|mouseScrollDelta)', source)
-assert 'cullingMask = 1 << 30' in source and 'cullingMask = 1 << 31' in source
+assert 'CameraFor("Editable Camera", 31' in source and 'CameraFor("Reference Camera", 30' in source
 assert 'RuntimeInitializeOnLoadMethod' in source
 print(f'PASS: JSON configuration, {len(assets)} asset GUIDs, input migration and bootstrap source checks')
