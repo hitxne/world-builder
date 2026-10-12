@@ -1,333 +1,784 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
+using System.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.UIElements;
 
-// An intentionally small, self-contained first runnable slice: dual preview cameras,
-// OBJ import (triangles, groups, normals, UVs) and a persistent local source reference.
-public sealed class WorldBuilderRuntime : MonoBehaviour
+public sealed partial class WorldBuilderRuntime : MonoBehaviour
 {
-    Camera referenceCamera, workCamera;
-    RenderTexture referenceTexture, workTexture;
-    GameObject referenceRoot, workRoot;
-    string modelPath = "", status = "Import a Blender OBJ to begin.";
-    string installationStatus = "Not scanned";
-    string[] gameNames = { "Forza Horizon 5", "The Sims 4" };
-    string[] gamePaths = new string[2];
-    List<string> catalog = new List<string>();
-    Vector2 catalogScroll;
-    bool showBrowser = false;
-    int selectedGame = 0;
-    Vector2 referenceAngles = new Vector2(25, -25), workAngles = new Vector2(25, -25);
-    float referenceDistance = 8f, workDistance = 8f;
-    Vector3 referenceCenter, workCenter;
-    int activeView = -1;
-    static readonly CultureInfo C = CultureInfo.InvariantCulture;
+    Transform world, reference;
+    Camera workCamera, referenceCamera, displayCamera;
+    RenderTexture workTexture, referenceTexture;
+    GameObject sun, selected;
+    UIDocument ui;
+    PanelSettings panel;
+    VisualElement root, inspector, modal;
+    ScrollView hierarchy;
+    Image workImage, referenceImage;
+    Label statusLabel, titleLabel;
+    Button undoButton, redoButton;
+    VisualElement sceneDock;
+    ScrollView catalogDock;
+    string hierarchyQuery="";
+    bool sceneVisible=true, propertiesVisible=true, sceneDrawer, propertiesDrawer;
+    float sceneWidth=220, propertiesWidth=255, catalogHeight=240;
+    Button sceneToggle, propertiesToggle;
+    readonly WorkspaceHistory history = new WorkspaceHistory();
+    string projectPath = "", title = "Untitled world", savedState = "";
+    int theme;
+    Vector2 workAngles = new Vector2(25, -25), referenceAngles = new Vector2(25, -25);
+    Vector3 workCenter, referenceCenter;
+    float workDistance = 12, referenceDistance = 8;
+    bool quitting;
+    int previewGeneration;
 
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+    static void Bootstrap()
+    {
+        if (FindAnyObjectByType<WorldBuilderRuntime>() == null)
+            new GameObject("World Builder Runtime").AddComponent<WorldBuilderRuntime>();
+    }
     void Start()
     {
-        referenceRoot = new GameObject("Reference Model");
-        workRoot = new GameObject("Editable Model");
-        referenceCamera = CreateCamera("Reference Camera", out referenceTexture);
-        workCamera = CreateCamera("Work Camera", out workTexture);
-        MakePrimitive(referenceRoot.transform, PrimitiveType.Cube, new Vector3(0, 0.5f, 0));
-        MakePrimitive(workRoot.transform, PrimitiveType.Cube, new Vector3(0, 0.5f, 0));
-        for (int i = 0; i < gamePaths.Length; i++) gamePaths[i] = PlayerPrefs.GetString("worldbuilder.gamePath." + i, "");
-        LocateInstallations();
+        if(PlayerPrefs.HasKey("worldbuilder.quality")&&QualitySettings.names.Length>0)QualitySettings.SetQualityLevel(Mathf.Clamp(PlayerPrefs.GetInt("worldbuilder.quality"),0,QualitySettings.names.Length-1),true);
+        gridSize=Mathf.Clamp(PlayerPrefs.GetFloat("worldbuilder.gridSize",1),0.25f,5);wallHeight=Mathf.Clamp(PlayerPrefs.GetFloat("worldbuilder.wallHeight",3),2,6);gridEnabled=PlayerPrefs.GetInt("worldbuilder.gridEnabled",1)!=0;
+        world = new GameObject("World Builder Editable Scene").transform;
+        reference = new GameObject("World Builder Reference").transform;
+        workCamera = CameraFor("Editable Camera", 31, out workTexture);
+        referenceCamera = CameraFor("Reference Camera", 30, out referenceTexture);
+        displayCamera = new GameObject("Workspace Display").AddComponent<Camera>();
+        displayCamera.cullingMask = 0;
+        displayCamera.clearFlags = CameraClearFlags.SolidColor;
+        sun = new GameObject("Workspace Sun");
+        var light = sun.AddComponent<Light>(); light.type = LightType.Directional; light.intensity = 1.4f;
+        sun.transform.rotation = Quaternion.Euler(45, -35, 0);
+        BuildUI();
+        InitializeWorldTools();
+        history.Reset(State()); savedState = State(); Refresh();
+        Application.wantsToQuit += WantsToQuit;
+        _ = UpgradeSavedSimsLibrary();
     }
-
-    static Camera CreateCamera(string name, out RenderTexture target)
+    Camera CameraFor(string name, int layer, out RenderTexture texture)
     {
-        var obj = new GameObject(name);
-        var camera = obj.AddComponent<Camera>();
+        var camera = new GameObject(name).AddComponent<Camera>();
+        camera.cullingMask = 1 << layer; camera.fieldOfView = 48;
+        camera.nearClipPlane = 0.02f; camera.farClipPlane = 10000;
+        camera.backgroundColor = new Color(0.065f, 0.08f, 0.105f);
         camera.clearFlags = CameraClearFlags.SolidColor;
-        camera.backgroundColor = new Color(0.075f, 0.095f, 0.12f);
-        camera.fieldOfView = 48f;
-        camera.nearClipPlane = 0.02f;
-        camera.farClipPlane = 10000;
-        target = new RenderTexture(960, 600, 24);
-        target.Create();
-        camera.targetTexture = target;
-        var key = new GameObject(name + " Light").AddComponent<Light>();
-        key.type = LightType.Directional;
-        key.intensity = 1.4f;
-        key.transform.rotation = Quaternion.Euler(45, -35, 0);
+        texture = new RenderTexture(960, 600, 24); texture.Create(); camera.targetTexture = texture;
         return camera;
     }
-
-    static void MakePrimitive(Transform parent, PrimitiveType type, Vector3 pos)
-    {
-        var go = GameObject.CreatePrimitive(type);
-        go.transform.SetParent(parent, false);
-        go.transform.position = pos;
-        go.name = "Sample geometry (replace by importing OBJ)";
-    }
-
     void Update()
     {
-        if (Input.GetMouseButton(0) && activeView >= 0)
-        {
-            var delta = new Vector2(Input.GetAxis("Mouse X"), Input.GetAxis("Mouse Y")) * 3f;
-            if (activeView == 0) referenceAngles += new Vector2(-delta.y, delta.x);
-            else workAngles += new Vector2(-delta.y, delta.x);
+        PositionCamera(workCamera, workAngles, workCenter, workDistance);
+        PositionCamera(referenceCamera, referenceAngles, referenceCenter, referenceDistance);
+        WorldUpdate();UpdateFeedback();UpdateLibraryPreviewCamera();
+    }
+    static void PositionCamera(Camera camera, Vector2 angles, Vector3 center, float distance)
+    {
+        var orbit = Quaternion.Euler(Mathf.Clamp(angles.x, -89, 89), angles.y, 0);
+        camera.transform.position = center + orbit * Vector3.back * distance;
+        camera.transform.LookAt(center);
+    }
+    void BuildUI()
+    {
+        panel = ScriptableObject.CreateInstance<PanelSettings>();
+        panel.themeStyleSheet = Resources.Load<ThemeStyleSheet>("WorldBuilderRuntimeTheme");
+        if(panel.themeStyleSheet==null)throw new InvalidOperationException("World Builder runtime theme is missing. Let Unity finish importing the project, then restart Play. The Windows build must include WorldBuilderRuntimeTheme.tss.");
+        panel.scaleMode = PanelScaleMode.ConstantPixelSize;
+        panel.scale=Mathf.Clamp(PlayerPrefs.GetFloat("worldbuilder.uiScale",1),0.8f,1.5f);
+        panel.referenceResolution = new Vector2Int(1440, 900);
+        ui = gameObject.AddComponent<UIDocument>(); ui.panelSettings = panel;
+        root = ui.rootVisualElement; root.style.flexGrow = 1;
+        root.style.position = Position.Absolute; root.style.left = 0; root.style.right = 0; root.style.top = 0; root.style.bottom = 0;
+        var sheet = Resources.Load<StyleSheet>("Workspace"); if (sheet != null) root.styleSheets.Add(sheet);
+        theme = PlayerPrefs.GetInt("worldbuilder.theme", 0); ApplyTheme();
+        var top = Row(root, "topbar"); Label(top, "WORLD BUILDER", "brand");
+        titleLabel = Label(top, title, "project-title");
+        Button(top,"Menu",OpenWorkspaceMenu);
+        Button(top,"Save",()=>Save(false));
+        undoButton=Button(top,"Undo",Undo);redoButton=Button(top,"Redo",Redo);
+        var navigation = Row(root,"mode-navigation"); navigation.name="mode-navigation";
+        var body = Row(root, "body");
+        var left = new VisualElement(); left.AddToClassList("sidebar"); body.Add(left); sceneDock=left;
+        Label(left,"SCENE OBJECTS","section");
+        var search=new TextField("Search"); left.Add(search);
+        search.RegisterValueChangedCallback(e=>{hierarchyQuery=e.newValue??"";Refresh();});
+        hierarchy = new ScrollView(); hierarchy.AddToClassList("dock-scroll"); left.Add(hierarchy);
+        var center = new VisualElement(); center.AddToClassList("center"); body.Add(center);
+        var tools = Row(center, "toolbar");
+        var editing=Row(tools,"editing-tools");editing.name="editing-tools";
+        propertiesToggle=Button(tools,"Properties",()=>{if(root.contentRect.width<1060){propertiesDrawer=!propertiesDrawer;sceneDrawer=false;}else{propertiesVisible=!propertiesVisible;SaveLayout();}ApplyLayout();});
+        sceneToggle=new Button();
+        Button(tools,"Focus",FrameSelected);Button(tools,"View",OpenCameraMenu);
+        var views = Row(center, "views");
+        referenceImage = View(views, "REFERENCE — read only", referenceTexture, false);
+        workImage = View(views, "EDITABLE SCENE", workTexture, true);InitializeFeedback(workImage);
+        InitializeStartCard(workImage);
+        inspector = new ScrollView(); inspector.AddToClassList("inspector"); body.Add(inspector);
+        var catalog = new ScrollView(); catalog.name="construction-catalog"; catalog.AddToClassList("catalog"); root.Add(catalog); catalogDock=catalog;
+        statusLabel = Label(root, "Ready. Create objects or import a Blender OBJ.", "status");
+        sceneVisible=PlayerPrefs.GetInt("worldbuilder.layout.scene",0)!=0;
+        propertiesVisible=PlayerPrefs.GetInt("worldbuilder.layout.properties",0)!=0;
+        if(PlayerPrefs.GetInt("worldbuilder.minimalLayout",0)==0){sceneVisible=propertiesVisible=false;PlayerPrefs.SetInt("worldbuilder.layout.scene",0);PlayerPrefs.SetInt("worldbuilder.layout.properties",0);PlayerPrefs.SetInt("worldbuilder.minimalLayout",1);PlayerPrefs.Save();}
+        sceneWidth=PlayerPrefs.GetFloat("worldbuilder.layout.sceneWidth",220);
+        propertiesWidth=PlayerPrefs.GetFloat("worldbuilder.layout.propertiesWidth",255);
+        catalogHeight=PlayerPrefs.GetFloat("worldbuilder.layout.catalogHeight",240);
+        root.RegisterCallback<GeometryChangedEvent>(e=>ApplyLayout());ApplyLayout();
+        root.RegisterCallback<KeyDownEvent>(HandleBuildKey);
+    }
+
+    void RotateBuildObject(float degrees)
+    {
+        if(HasPlacement){placementYaw=Mathf.Repeat(placementYaw+degrees,360);RefreshWorldTools();return;}
+        EndObjectGesture(false);
+        if(selected==null){Status("Select an object first.");return;}
+        selected.transform.Rotate(Vector3.up,degrees,Space.Self);Physics.SyncTransforms();Changed();
+    }
+    void HandleBuildKey(KeyDownEvent e)
+    {
+        if(modal!=null||e.target is TextField||e.target is FloatField||e.target is TextElement)return;
+        bool handled=true;
+        if(e.ctrlKey) {
+            if(e.keyCode==KeyCode.S){EndObjectGesture(false);Save(false);}
+            else if(e.keyCode==KeyCode.Z)Undo();else if(e.keyCode==KeyCode.Y)Redo();else handled=false;
+        } else if(e.keyCode==KeyCode.Escape){CancelConstruction();Status("Tool cancelled.");}
+        else if(e.keyCode==KeyCode.F4)OpenLibrary();
+        else if(e.keyCode==KeyCode.F2||e.keyCode==KeyCode.F3){EnterLot();if(workspaceMode=="Lot"){CancelConstruction();toolCategory=e.keyCode==KeyCode.F2?"Furnish":"Structure";BuildConstructionPanel();}}
+        else if(e.target==workImage) {
+            switch(e.keyCode) {
+                case KeyCode.H:SetTool("move");break;
+                case KeyCode.E:SetTool(constructionTool=="eyedropper"?"select":"eyedropper");break;
+                case KeyCode.K:SetTool(constructionTool=="delete"?"select":"delete");break;
+                case KeyCode.R:propertiesDrawer=true;propertiesVisible=true;ApplyLayout();SaveLayout();break;
+                case KeyCode.B:EnterLot();if(workspaceMode=="Lot")SetTool("wall");break;
+                case KeyCode.G:gridEnabled=!gridEnabled;RefreshWorldTools();break;
+                case KeyCode.F5:gridSize=Mathf.Abs(gridSize-0.5f)<0.001f?0.25f:0.5f;BuildConstructionPanel();break;
+                case KeyCode.Comma:RotateBuildObject(-45);break;
+                case KeyCode.Period:RotateBuildObject(45);break;
+                case KeyCode.Delete:EndObjectGesture(true);Delete();break;
+                case KeyCode.PageUp:case KeyCode.PageDown:
+                    if(workspaceMode=="Lot"){CancelConstruction();floorLevel=Mathf.Clamp(floorLevel+(e.keyCode==KeyCode.PageUp?1:-1),0,5);RefreshWorldTools();}break;
+                case KeyCode.LeftBracket:case KeyCode.RightBracket:
+                    brushRadius=Mathf.Clamp(brushRadius+(e.keyCode==KeyCode.RightBracket?1:-1),1,40);brushRadiusSlider?.SetValueWithoutNotify(brushRadius);RefreshWorldTools();break;
+                case KeyCode.T:SetCameraView(new Vector2(89,0));break;
+                case KeyCode.F:FrameSelected();break;
+                case KeyCode.Return:FinishRoad();break;
+                case KeyCode.W:case KeyCode.UpArrow:case KeyCode.S:case KeyCode.DownArrow:case KeyCode.A:case KeyCode.LeftArrow:case KeyCode.D:case KeyCode.RightArrow:
+                    var forward=Vector3.ProjectOnPlane(workCamera.transform.forward,Vector3.up).normalized;
+                    if(forward.sqrMagnitude<0.01f)forward=Vector3.forward;
+                    var right=Vector3.ProjectOnPlane(workCamera.transform.right,Vector3.up).normalized;
+                    bool back=e.keyCode==KeyCode.S||e.keyCode==KeyCode.DownArrow,left=e.keyCode==KeyCode.A||e.keyCode==KeyCode.LeftArrow,horizontal=left||e.keyCode==KeyCode.D||e.keyCode==KeyCode.RightArrow;
+                    workCenter+=(horizontal?right*(left?-1:1):forward*(back?-1:1))*workDistance*0.04f;break;
+                default:handled=false;break;
+            }
+        } else handled=false;
+        if(handled)e.StopPropagation();
+    }
+    void SetCameraView(Vector2 angles)
+    {
+        workAngles=angles;workCamera.orthographic=true;workCamera.orthographicSize=workDistance*0.4f;CloseDialog();
+    }
+    void SaveLayout()
+    {
+        PlayerPrefs.SetInt("worldbuilder.layout.scene",sceneVisible?1:0);PlayerPrefs.SetInt("worldbuilder.layout.properties",propertiesVisible?1:0);
+        PlayerPrefs.SetFloat("worldbuilder.layout.sceneWidth",sceneWidth);PlayerPrefs.SetFloat("worldbuilder.layout.propertiesWidth",propertiesWidth);
+        PlayerPrefs.SetFloat("worldbuilder.layout.catalogHeight",catalogHeight);PlayerPrefs.Save();
+    }
+    void ApplyLayout()
+    {
+        if(sceneDock==null||inspector==null||catalogDock==null)return;
+        float width=root.contentRect.width,height=root.contentRect.height;
+        root.EnableInClassList("narrow-layout",width>0&&width<700);
+        bool narrowScene=width>0&&width<760,narrowProperties=width>0&&width<1060;
+        bool showScene=narrowScene?sceneDrawer:sceneVisible,showProperties=narrowProperties?propertiesDrawer:propertiesVisible;
+        sceneDock.style.position=narrowScene?Position.Absolute:Position.Relative;
+        sceneDock.style.left=narrowScene?new StyleLength(0f):new StyleLength(StyleKeyword.Auto);
+        sceneDock.style.top=narrowScene?new StyleLength(0f):new StyleLength(StyleKeyword.Auto);
+        sceneDock.style.bottom=narrowScene?new StyleLength(0f):new StyleLength(StyleKeyword.Auto);
+        inspector.style.position=narrowProperties?Position.Absolute:Position.Relative;
+        inspector.style.right=narrowProperties?new StyleLength(0f):new StyleLength(StyleKeyword.Auto);
+        inspector.style.top=narrowProperties?new StyleLength(0f):new StyleLength(StyleKeyword.Auto);
+        inspector.style.bottom=narrowProperties?new StyleLength(0f):new StyleLength(StyleKeyword.Auto);
+        if(narrowScene&&showScene&&sceneDock.parent.IndexOf(sceneDock)!=sceneDock.parent.childCount-1)sceneDock.BringToFront();
+        else if(!narrowScene&&sceneDock.parent.IndexOf(sceneDock)!=0)sceneDock.parent.Insert(0,sceneDock);
+        if(showProperties&&inspector.parent.IndexOf(inspector)!=inspector.parent.childCount-1)inspector.BringToFront();
+        sceneDock.style.display=showScene?DisplayStyle.Flex:DisplayStyle.None;
+        inspector.style.display=showProperties?DisplayStyle.Flex:DisplayStyle.None;
+        sceneDock.style.width=Mathf.Clamp(sceneWidth,180,320);inspector.style.width=Mathf.Clamp(propertiesWidth,220,360);
+        float desired=catalogDock.ClassListContains("buy-catalog")?Mathf.Max(catalogHeight,340):catalogHeight;float fraction=catalogDock.ClassListContains("buy-catalog")?0.44f:0.32f;catalogDock.style.height=height>0?Mathf.Min(desired,Mathf.Max(120,height*fraction)):desired;
+        sceneToggle.EnableInClassList("selected",showScene);propertiesToggle.EnableInClassList("selected",showProperties);
+        sceneToggle.SetEnabled(true);propertiesToggle.SetEnabled(true);
+        sceneToggle.tooltip="Show or hide scene hierarchy. Opens a temporary drawer in narrow windows.";
+        propertiesToggle.tooltip="Show or hide properties. Opens a temporary drawer in narrow windows.";
+    }
+    void OpenLayoutSettings()
+    {
+        Dialog("Workspace layout","Sizes and panel visibility are remembered between launches. Narrow windows temporarily collapse side panels.",box=>{
+            Number(box,"Scene width",sceneWidth,180,320,v=>{sceneWidth=v;SaveLayout();ApplyLayout();});
+            Number(box,"Properties width",propertiesWidth,220,360,v=>{propertiesWidth=v;SaveLayout();ApplyLayout();});
+            Number(box,"Catalog height",catalogHeight,120,320,v=>{catalogHeight=v;SaveLayout();ApplyLayout();});
+            Button(box,"Restore Default Layout",()=>{sceneVisible=propertiesVisible=false;sceneDrawer=propertiesDrawer=false;sceneWidth=220;propertiesWidth=255;catalogHeight=240;SaveLayout();ApplyLayout();CloseDialog();});
+            Button(box,"Close",CloseDialog);
+        });
+    }
+    Image View(VisualElement parent, string titleText, RenderTexture texture, bool editable)
+    {
+        var box = new VisualElement(); box.AddToClassList("view"); parent.Add(box); Label(box, titleText, "section");
+        var image = new Image { image = texture, scaleMode = ScaleMode.StretchToFill, focusable = true };
+        image.style.flexGrow = 1; image.style.minHeight = 100; box.Add(image);
+        int drag = -1; Vector2 previous = Vector2.zero;
+        image.RegisterCallback<PointerDownEvent>(e => {
+            if (modal != null) return;
+            image.Focus();offGrid=e.altKey;repeatPlacement=e.shiftKey;
+            if(editable&&e.button==1&&(HasPlacement||constructionTool!="select"&&constructionTool!="move")) {
+                if(HasPlacement)RotateBuildObject(45);else CancelConstruction();e.StopPropagation();return;
+            }
+            if (e.button == 0 && editable) {
+                if (BeginObjectGesture(e.localPosition) || ConstructionPointerDown(e.localPosition)) { image.CapturePointer(e.pointerId); }
+                else Pick(e.localPosition);
+            }
+            if (e.button == 1 || e.button == 2) { drag = e.button; previous = e.position; image.CapturePointer(e.pointerId); }
+            e.StopPropagation();
+        });
+        image.RegisterCallback<PointerMoveEvent>(e => {
+            offGrid=e.altKey;
+            if (editable && modal == null) { UpdateObjectGesture(e.localPosition); if(!objectGesture)ConstructionPointerMove(e.localPosition); }
+            if (drag < 0 || modal != null) return;
+            Vector2 point = e.position, delta = point - previous; previous = point;
+            if (drag == 2) {
+                if (editable) workAngles += new Vector2(delta.y, delta.x) * 0.25f;
+                else referenceAngles += new Vector2(delta.y, delta.x) * 0.25f;
+            } else {
+                var cam = editable ? workCamera : referenceCamera;
+                Vector3 movement = (-cam.transform.right * delta.x + cam.transform.up * delta.y) * (editable ? workDistance : referenceDistance) * 0.002f;
+                if (editable) workCenter += movement; else referenceCenter += movement;
+            }
+            workAngles.x = Mathf.Clamp(workAngles.x, -89, 89); referenceAngles.x = Mathf.Clamp(referenceAngles.x, -89, 89);
+        });
+        image.RegisterCallback<PointerUpEvent>(e => { if (editable) {EndObjectGesture(false);ConstructionPointerUp();} drag = -1; image.ReleasePointer(e.pointerId); });
+        image.RegisterCallback<PointerCaptureOutEvent>(e => { drag = -1; if(editable) {EndObjectGesture(false);ConstructionPointerUp(true);} });
+        image.RegisterCallback<WheelEvent>(e => {
+            if (modal != null) return;
+            if (editable) { workDistance = Mathf.Clamp(workDistance * Mathf.Exp(e.delta.y * 0.08f), 0.25f, 10000); workCamera.orthographicSize = workDistance * 0.4f; }
+            else referenceDistance = Mathf.Clamp(referenceDistance * Mathf.Exp(e.delta.y * 0.08f), 0.25f, 10000);
+            e.StopPropagation();
+        });
+        image.RegisterCallback<GeometryChangedEvent>(e => {
+            if (e.newRect.width < 2 || e.newRect.height < 2) return;
+            // Bounded render resolution adapts to aspect ratio and resizing.
+            int width = Mathf.Clamp(Mathf.RoundToInt(e.newRect.width), 128, 1920);
+            int height = Mathf.Clamp(Mathf.RoundToInt(e.newRect.height), 128, 1080);
+            texture.Release(); texture.width = width; texture.height = height; texture.Create();
+            (editable ? workCamera : referenceCamera).aspect = e.newRect.width / e.newRect.height;
+        });
+        return image;
+    }
+    void Pick(Vector2 point)
+    {
+        var size = workImage.contentRect;
+        Physics.SyncTransforms();
+        var ray = workCamera.ViewportPointToRay(new Vector3(point.x / size.width, 1 - point.y / size.height, 0));
+        selected = Physics.Raycast(ray, out var hit, 10000, 1 << 31) ? hit.collider.gameObject : null;
+        Refresh();
+    }
+    Material Material(Color color)
+    {
+        var pipeline=UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline;
+        var template=Resources.Load<Material>(pipeline==null?"WorldBuilderDefault":pipeline.GetType().Name.Contains("HDRender")?"WorldBuilderHDRP":"WorldBuilderURP");
+        var shader = template!=null?template.shader:pipeline==null?Shader.Find("Standard"):Shader.Find("HDRP/Lit") ?? Shader.Find("Universal Render Pipeline/Lit");
+        shader=shader??Shader.Find("Unlit/Color");
+        if (shader == null) throw new InvalidOperationException("No compatible material shader is available.");
+        var material = new Material(shader);
+        if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", color); else material.color = color;
+        if(material.HasProperty("_Smoothness"))material.SetFloat("_Smoothness",0.25f);
+        return material;
+    }
+    GameObject Model(WorkspaceProject data, Transform parent, int layer)
+    {
+        data.NormalizeConstruction();
+        if(data.HasConstruction) {
+            var derived=ConstructionData(data.construction);
+            data.vertices=derived.vertices;data.uv=derived.uv;data.triangles=derived.triangles;data.submeshes=derived.submeshes;data.normals=null;
+            if(data.materialColors==null||(data.construction.kind=="road"||data.construction.kind=="junction"))data.materialColors=derived.materialColors;
         }
-        float scroll = Input.mouseScrollDelta.y;
-        if (activeView == 0) referenceDistance = Mathf.Clamp(referenceDistance * Mathf.Exp(-scroll * 0.12f), 0.25f, 10000f);
-        if (activeView == 1) workDistance = Mathf.Clamp(workDistance * Mathf.Exp(-scroll * 0.12f), 0.25f, 10000f);
-        Position(referenceCamera, referenceAngles, referenceCenter, referenceDistance);
-        Position(workCamera, workAngles, workCenter, workDistance);
+        SyncSimsLibraryAppearance(data);
+        Mesh mesh = data.CreateMesh();
+        var go = new GameObject(data.name); go.transform.SetParent(parent, false); go.layer = layer;
+        var identity = go.AddComponent<WorkspaceIdentity>(); identity.ownedMesh = mesh;
+        go.AddComponent<MeshFilter>().sharedMesh = mesh;
+        var colors = data.materialColors ?? new[] { data.color };
+        if(colors.Length == 0) colors=new[] { data.color };
+        identity.ownedMaterials = new Material[colors.Length];
+        for(int i=0;i<colors.Length;i++) {
+            var material=identity.ownedMaterials[i]=Material(colors[i]);
+            if(data.materialNames!=null&&i<data.materialNames.Length)material.name=data.materialNames[i];
+            if(data.metallic!=null&&i<data.metallic.Length&&material.HasProperty("_Metallic"))material.SetFloat("_Metallic",Mathf.Clamp01(data.metallic[i]));
+            if(data.smoothness!=null&&i<data.smoothness.Length&&material.HasProperty("_Smoothness"))material.SetFloat("_Smoothness",Mathf.Clamp01(data.smoothness[i]));
+        }
+        identity.ownedMaterial=identity.ownedMaterials[0];
+        identity.construction=data.construction; identity.libraryId=data.libraryId; identity.albedo=data.albedo;identity.sourceAppearance=data.sourceAppearance;identity.appearanceFingerprint=data.appearanceFingerprint;
+        if(data.albedo!=null) {
+            identity.ownedTextures=new Texture2D[data.albedo.Length];
+            for(int i=0;i<data.albedo.Length&&i<identity.ownedMaterials.Length;i++)if(data.albedo[i]!=null) {
+                if(string.IsNullOrEmpty(data.albedo[i].base64)||data.albedo[i].base64.Length>12*1024*1024)throw new FormatException("Invalid texture payload.");
+                byte[] bytes=Convert.FromBase64String(data.albedo[i].base64);var texture=new Texture2D(2,2);identity.ownedTextures[i]=texture;
+                if(!texture.LoadImage(bytes)||texture.width>8192||texture.height>8192)throw new FormatException("Unsupported or oversized texture image.");
+                var material=identity.ownedMaterials[i];
+                if(material.HasProperty("_BaseColorMap"))material.SetTexture("_BaseColorMap",texture);else material.mainTexture=texture;
+                if(data.sourceAppearance!=null) {
+                    material.EnableKeyword("_ALPHATEST_ON");material.SetOverrideTag("RenderType","TransparentCutout");material.renderQueue=2450;
+                    foreach(string property in new[]{"_AlphaClip","_AlphaCutoffEnable"})if(material.HasProperty(property))material.SetFloat(property,1);
+                    foreach(string property in new[]{"_Cutoff","_AlphaCutoff"})if(material.HasProperty(property))material.SetFloat(property,0.5f);
+                    if(material.HasProperty("_Mode"))material.SetFloat("_Mode",1);
+                }
+            }
+        }
+        go.AddComponent<MeshRenderer>().sharedMaterials = identity.ownedMaterials;
+        var collider=go.AddComponent<MeshCollider>(); collider.sharedMesh=mesh;
+        if(data.construction?.kind=="water") collider.enabled=false;
+        identity.id = data.id ?? Guid.NewGuid().ToString("N"); identity.source = data.source;
+        go.transform.localPosition = data.position; go.transform.localEulerAngles = data.rotation; go.transform.localScale = data.scale;
+        return go;
     }
-
-    static void Position(Camera camera, Vector2 angles, Vector3 target, float distance)
+    void AddPrimitive(PrimitiveType type, string name, bool record = true)
     {
-        angles.x = Mathf.Clamp(angles.x, -89, 89);
-        var orbit = Quaternion.Euler(angles.x, angles.y, 0);
-        camera.transform.position = target + orbit * (Vector3.back * distance);
-        camera.transform.LookAt(target);
+        var go = GameObject.CreatePrimitive(type); go.name = name; go.layer = 31; go.transform.SetParent(world, false);
+        go.transform.position = type == PrimitiveType.Plane ? Vector3.zero : new Vector3(0, 0.5f, 0);
+        var identity = go.AddComponent<WorkspaceIdentity>(); identity.id = Guid.NewGuid().ToString("N"); identity.source = "";
+        // Clone generated mesh so this application's ownership is explicit.
+        var filter = go.GetComponent<MeshFilter>(); filter.sharedMesh = Instantiate(filter.sharedMesh);
+        identity.ownedMesh = filter.sharedMesh;
+        identity.ownedMaterial = Material(new Color(0.62f, 0.72f, 0.8f));
+        go.GetComponent<Renderer>().sharedMaterial = identity.ownedMaterial;
+        selected = go; if (record) Changed();
     }
-
-    void OnGUI()
-    {
-        var scale = Mathf.Max(0.7f, Mathf.Min(Screen.width / 1280f, Screen.height / 720f));
-        var matrix = GUI.matrix;
-        GUI.matrix = Matrix4x4.TRS(Vector3.zero, Quaternion.identity, new Vector3(scale, scale, 1));
-        var w = Screen.width / scale;
-        var h = Screen.height / scale;
-        GUI.color = new Color(0.08f, 0.105f, 0.14f);
-        GUI.DrawTexture(new Rect(0, 0, w, h), Texture2D.whiteTexture);
-        GUI.color = Color.white;
-        GUI.Label(new Rect(24, 12, 550, 28), "WORLD BUILDER  /  ASSET CREATOR  /  v0.2 preview");
-        if (GUI.Button(new Rect(w - 635, 10, 130, 32), "Game Browser")) showBrowser = !showBrowser;
-        if (GUI.Button(new Rect(w - 495, 10, 130, 32), "Import OBJ")) Import();
-        if (GUI.Button(new Rect(w - 355, 10, 155, 32), "Refresh Game Paths")) LocateInstallations();
-        if (GUI.Button(new Rect(w - 190, 10, 165, 32), "Reimport")) ImportExisting();
-
-        var padding = 22f;
-        var top = 58f;
-        var footer = 174f;
-        var viewWidth = (w - padding * 3) / 2;
-        var viewHeight = Mathf.Max(100, h - top - footer);
-        var left = new Rect(padding, top, viewWidth, viewHeight);
-        var right = new Rect(padding * 2 + viewWidth, top, viewWidth, viewHeight);
-        GUI.DrawTexture(left, referenceTexture, ScaleMode.StretchToFill, false);
-        GUI.DrawTexture(right, workTexture, ScaleMode.StretchToFill, false);
-        GUI.Label(new Rect(left.x + 10, top + 10, 220, 22), "REFERENCE");
-        GUI.Label(new Rect(right.x + 10, top + 10, 270, 22), "EDITABLE ASSET");
-        var mouse = Event.current.mousePosition;
-        activeView = left.Contains(mouse) ? 0 : right.Contains(mouse) ? 1 : -1;
-        GUI.Label(new Rect(24, h - 159, w - 48, 28), "SOURCE  " + (string.IsNullOrWhiteSpace(modelPath) ? "No imported model" : modelPath));
-        GUI.Label(new Rect(24, h - 133, w - 48, 26), "STATUS  " + status);
-        GUI.Label(new Rect(24, h - 107, w - 48, 26), "GAME INSTALLATIONS  " + installationStatus);
-        GUI.Label(new Rect(24, h - 76, w - 48, 26), "Controls: hover viewport • left-drag orbit • mouse wheel zoom • Import OBJ / Reimport");
-        GUI.Label(new Rect(24, h - 50, w - 48, 26), "Browser indexes loose OBJ files only. Proprietary Sims/Forza packages are not decoded.");
-        if (showBrowser) DrawGameBrowser(w, h);
-        GUI.matrix = matrix;
-    }
-
     void Import()
     {
+        Try(() => {
+            string path = WorkspaceFiles.Pick(false, "Import OBJ geometry", "obj"); if (string.IsNullOrEmpty(path)) return;
+            if (new FileInfo(path).Length > 32 * 1024 * 1024) throw new IOException("OBJ exceeds the 32 MB import limit.");
+            var data = WorkspaceObjMaterials.Import(path,out string warning);
+            selected = Model(data, PlacementParent(), 31); Preview(data); FrameSelected(); Changed();
+            Status(string.IsNullOrEmpty(warning)?"Imported OBJ; supplied supported material and texture references are preserved.":"Imported with warnings: "+warning);
+        });
+    }
+    void Preview(WorkspaceProject data)
+    {
+        SetMode("Asset");
+        Clear(reference); var model = Model(data, reference, 30);
+        model.transform.localPosition = Vector3.zero; model.transform.localRotation = Quaternion.identity; model.transform.localScale = Vector3.one;
+        var bounds = model.GetComponent<Renderer>().bounds;
+        referenceCenter = bounds.center; referenceDistance = Mathf.Max(2, bounds.extents.magnitude * 3);
+    }
+    GameObject CloneObject(GameObject source,Transform parent)
+    {
+        var data=JsonUtility.FromJson<WorkspaceProject>(JsonUtility.ToJson(WorkspaceProject.Capture(source,source.GetComponent<WorkspaceIdentity>().source)));
+        data.id=Guid.NewGuid().ToString("N");data.name+=" copy";
+        var copy=Model(data,parent,31);
+        foreach(Transform child in source.transform)if(child.GetComponent<MeshFilter>()!=null)CloneObject(child.gameObject,copy.transform);
+        return copy;
+    }
+    void Duplicate()
+    {
+        if (selected == null) return;
+        var original=selected;
+        selected=CloneObject(original,original.transform.parent);
+        selected.transform.localPosition+=Vector3.right;
+        Changed();
+    }
+
+    void Delete()
+    {
+        if (selected == null) return;
+        selected.SetActive(false); Destroy(selected); selected = null; Changed();
+    }
+    void FrameSelected()
+    {
+        if (selected == null) { FrameAll(); return; }
+        var bounds = selected.GetComponent<Renderer>().bounds;
+        foreach(var renderer in selected.GetComponentsInChildren<Renderer>())bounds.Encapsulate(renderer.bounds);
+        workCenter = bounds.center; workDistance = Mathf.Max(2, bounds.extents.magnitude * 3);
+        workCamera.orthographicSize = workDistance * 0.4f;
+    }
+    void FrameAll()
+    {
+        bool found = false; var bounds = new Bounds();
+        foreach (var renderer in world.GetComponentsInChildren<Renderer>()) {
+            var b = renderer.bounds; if (!found) bounds = b; else bounds.Encapsulate(b); found = true;
+        }
+        workCenter = found ? bounds.center : Vector3.zero; workDistance = found ? Mathf.Max(2, bounds.extents.magnitude * 3) : 12;
+        workCamera.orthographicSize = workDistance * 0.4f;
+    }
+    string State() => JsonUtility.ToJson(WorkspaceDocument.Capture(world, title));
+    void Changed() { UpdateRoadConnections();history.Record(State()); Refresh(); }
+    void Undo() { CancelConstruction(); string state = history.Undo(); if (state != null) Restore(JsonUtility.FromJson<WorkspaceDocument>(state)); }
+    void Redo() { CancelConstruction(); string state = history.Redo(); if (state != null) Restore(JsonUtility.FromJson<WorkspaceDocument>(state)); }
+    void Restore(WorkspaceDocument document)
+    {
+        // Construct everything in a staging root first: invalid files leave the scene intact.
+        var stage = new GameObject("Project staging").transform;
+        try {
+            var ids=new Dictionary<string,GameObject>();
+            foreach (var data in document.objects) {
+                var model=Model(data, stage, 31);
+                string id=model.GetComponent<WorkspaceIdentity>().id;
+                if(ids.ContainsKey(id))throw new FormatException("Duplicate object ID"); ids[id]=model;
+            }
+            foreach(var data in document.objects) if(!string.IsNullOrEmpty(data.parentId)) {
+                if(!ids.TryGetValue(data.parentId,out var parent))throw new FormatException("Missing parent object");
+                var child=ids[data.id];
+                if(parent==child || parent.transform.IsChildOf(child.transform))throw new FormatException("Cyclic object parenting");
+                child.transform.SetParent(parent.transform,false);
+            }
+        } catch { Clear(stage); Destroy(stage.gameObject); throw; }
+        Clear(world);
+        while (stage.childCount > 0) stage.GetChild(0).SetParent(world, false);
+        Destroy(stage.gameObject); title = document.title; selected = null; UpdateRoadConnections();RefreshTerrainRoads();ReconnectWorldTools(); Refresh();
+    }
+    void NewProject()
+    {
+        Clear(world); Clear(reference); selected = null; projectPath = ""; title = "Untitled world";
+        ResetWorldTools(); history.Reset(State()); savedState = State(); Refresh(); Status("New world. Generate an island or use Florida Island Test.");
+    }
+    void OpenProject()
+    {
+        Try(() => {
+            string path = WorkspaceFiles.Pick(false, "Open World Builder project", "wbworld"); if (string.IsNullOrEmpty(path)) return;
+            WorkspaceDocument document;
+            if (Path.GetExtension(path).Equals(".wbasset", StringComparison.OrdinalIgnoreCase))
+                document = new WorkspaceDocument { title = Path.GetFileNameWithoutExtension(path), objects = new List<WorkspaceProject> { WorkspaceProject.Open(path) } };
+            else document = WorkspaceDocument.Open(path);
+            Restore(document); Clear(reference); projectPath = Path.GetExtension(path) == ".wbasset" ? "" : path;
+            history.Reset(State()); savedState = State(); FrameAll(); Refresh(); Status("Project opened.");
+        });
+    }
+    void Save(bool saveAs)
+    {
+        Try(() => {
+            string path = saveAs || string.IsNullOrEmpty(projectPath) ? WorkspaceFiles.Pick(true, "Save world project", "wbworld") : projectPath;
+            if (string.IsNullOrEmpty(path)) return;
+            var document = WorkspaceDocument.Capture(world, Path.GetFileNameWithoutExtension(path)); document.Save(path);
+            projectPath = path; title = document.title; PlayerPrefs.SetString("worldbuilder.lastProject",path);PlayerPrefs.Save(); history.Record(State()); savedState = State(); Refresh(); Status("Saved " + Path.GetFileName(path));
+        });
+    }
+    void Export()
+    {
+        Try(() => {
+            string path = WorkspaceFiles.Pick(true, "Export scene OBJ + MTL", "obj"); if (string.IsNullOrEmpty(path)) return;
+            foreach (var identity in world.GetComponentsInChildren<WorkspaceIdentity>()) {
+                var source = identity.source;
+                if (!string.IsNullOrEmpty(source) && string.Equals(Path.GetFullPath(source), Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase))
+                    throw new IOException("Choose a different filename to preserve the imported source model.");
+            }
+            WorkspaceObjExport.Export(world, path); Status("Exported OBJ + MTL base colors. Import both into Blender.");
+        });
+    }
+    void Refresh()
+    {
+        if (hierarchy == null) return;
+        if(startCard!=null)startCard.style.display=world.childCount==0?DisplayStyle.Flex:DisplayStyle.None;
+        titleLabel.text = title + (State() != savedState ? " • unsaved" : "");
+        undoButton.SetEnabled(history.CanUndo); redoButton.SetEnabled(history.CanRedo);
+        hierarchy.Clear();
+        foreach (var identity in world.GetComponentsInChildren<WorkspaceIdentity>()) {
+            var go = identity.gameObject;
+            if(hierarchyQuery.Length>0 && go.name.IndexOf(hierarchyQuery,StringComparison.OrdinalIgnoreCase)<0)continue;
+            var button = Button(hierarchy, go.name, () => { selected = go; Refresh(); });
+            int depth=0;for(var ancestor=go.transform.parent;ancestor!=null&&ancestor!=world;ancestor=ancestor.parent)depth++;
+            button.style.marginLeft=3+depth*12;
+            if (go == selected) button.AddToClassList("selected");
+        }
+        inspector.Clear(); Label(inspector, "PROPERTIES", "section");
+        RefreshWorldTools();
+        if (selected == null) { Label(inspector, "Select an object in the scene or hierarchy.", "hint"); return; }
+        var name = new TextField("Name") { value = selected.name, isDelayed = true }; inspector.Add(name);
+        name.RegisterValueChangedCallback(e => { if (selected != null && !string.IsNullOrWhiteSpace(e.newValue)) { selected.name = e.newValue; Changed(); } });
+        AddConstructionInspector();
+        VectorFields("Position", selected.transform.localPosition, v => selected.transform.localPosition = v);
+        VectorFields("Rotation", selected.transform.localEulerAngles, v => selected.transform.localEulerAngles = v);
+        VectorFields("Scale", selected.transform.localScale, v => { if (Mathf.Abs(v.x * v.y * v.z) < 0.000001f) throw new ArgumentException("Scale must be non-zero."); selected.transform.localScale = v; });
+        Label(inspector, "MATERIAL", "section");
+        var materialPicker=new DropdownField("Preset",new List<string>(WorldMaterials.Names),0);inspector.Add(materialPicker);
+        materialPicker.RegisterValueChangedCallback(e=>{
+            var material=selected.GetComponent<Renderer>().sharedMaterial;var color=WorldMaterials.Color(e.newValue);
+            if(material.HasProperty("_BaseColor"))material.SetColor("_BaseColor",color);else material.color=color;
+            if(material.HasProperty("_Metallic"))material.SetFloat("_Metallic",e.newValue=="Metal"?0.85f:0);
+            if(material.HasProperty("_Smoothness"))material.SetFloat("_Smoothness",e.newValue=="Metal"||e.newValue=="Glass"?0.7f:0.2f);
+            Changed();
+        });
+        Label(inspector, "BASE COLOR", "section");
+        var colors = Row(inspector);
+        foreach (var color in new[] { Color.gray, new Color(0.15f, 0.45f, 0.25f), new Color(0.7f, 0.55f, 0.33f), new Color(0.2f, 0.45f, 0.8f) }) {
+            var c = color; var b = Button(colors, "●", () => {
+                var material = selected.GetComponent<Renderer>().sharedMaterial;
+                if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", c); else material.color = c;
+                Changed();
+            }); b.style.color = c;
+        }
+        var mesh = selected.GetComponent<MeshFilter>().sharedMesh;
+        Label(inspector, mesh.vertexCount + " vertices\n" + mesh.triangles.Length / 3 + " triangles", "hint");
+        Label(inspector, "Numeric transforms are editable. Visual gizmos and mesh editing are next.", "hint");
+    }
+    void VectorFields(string label, Vector3 value, Action<Vector3> apply)
+    {
+        Label(inspector, label.ToUpperInvariant(), "section");
+        for (int i = 0; i < 3; i++) {
+            int axis = i; var field = new FloatField(new[] { "X", "Y", "Z" }[i]) { value = value[i], isDelayed = true }; inspector.Add(field);
+            field.RegisterValueChangedCallback(e => Try(() => {
+                if (float.IsNaN(e.newValue) || float.IsInfinity(e.newValue)) throw new ArgumentException("Enter a finite number.");
+                var changed = value; changed[axis] = e.newValue; apply(changed); Changed();
+            }));
+        }
+    }
+    void ConfirmDiscard(Action action)
+    {
+        if (State() == savedState) { action(); return; }
+        Dialog("Unsaved changes", "Save your world before replacing it?", box => {
+            Button(box, "Save", () => { Save(false); if (State() == savedState) { CloseDialog(); action(); } });
+            Button(box, "Discard changes", () => { CloseDialog(); action(); });
+            Button(box, "Cancel", CloseDialog);
+        });
+    }
+    bool WantsToQuit()
+    {
+        if (quitting || State() == savedState) return true;
+        ConfirmDiscard(() => { quitting = true; Application.Quit(); }); return false;
+    }
+    void Dialog(string titleText, string text, Action<VisualElement> actions)
+    {
+        EndObjectGesture(true); CloseDialog(); modal = new VisualElement(); modal.AddToClassList("modal"); root.Add(modal);
+        var box = new VisualElement(); box.AddToClassList("dialog"); modal.Add(box);
+        Label(box, titleText, "section"); var content = new ScrollView(); content.AddToClassList("dialog-scroll"); box.Add(content); Label(content, text, "hint"); actions(content);
+    }
+    void CloseDialog() { DisposeLibraryPreview(); previewGeneration++; if (modal != null) modal.RemoveFromHierarchy(); modal = null; }
+    void GameBrowser()
+    {
+        Dialog("Game Asset Browser", "Read-only game preview adapters: Sims MLOD subsets and plain Forza float/SNORM mesh parts. Missing textures, unsupported versions, compression and encrypted archives report their limits.", box => {
+            foreach (var game in new[] { "Forza Horizon 5", "The Sims 4" }) {
+                int index = game == "The Sims 4" ? 1 : 0;
+                var field = new TextField(game) { value = PlayerPrefs.GetString("worldbuilder.gamePath." + index, ""), isDelayed = true }; box.Add(field);
+                field.RegisterValueChangedCallback(e => { PlayerPrefs.SetString("worldbuilder.gamePath." + index, e.newValue); PlayerPrefs.Save(); });
 #if UNITY_EDITOR
-        string selected = UnityEditor.EditorUtility.OpenFilePanel("Import Blender OBJ", Path.GetDirectoryName(modelPath), "obj");
-        if (!string.IsNullOrEmpty(selected)) modelPath = selected;
+                Button(box, "Choose " + game + " folder", () => {
+                    string folder = UnityEditor.EditorUtility.OpenFolderPanel("Choose installation", field.value, "");
+                    if (string.IsNullOrEmpty(folder)) return;
+                    field.value = folder;
+                });
 #endif
-        if (string.IsNullOrWhiteSpace(modelPath))
-        {
-            status = "In editor use Import OBJ. For standalone builds, set WORLD_BUILDER_OBJ_PATH to an absolute OBJ path.";
-            modelPath = Environment.GetEnvironmentVariable("WORLD_BUILDER_OBJ_PATH") ?? "";
-        }
-        ImportExisting();
+                Button(box, "Scan " + game, () => ScanCatalog(field.value, box));
+            }
+            Button(box, "Export Game Diagnostic", ExportGameDiagnostic);
+            Button(box, "Import authorized OBJ export", () => { CloseDialog(); Import(); });
+            Button(box, "Close", CloseDialog);
+        });
+    }
+    async void ScanCatalog(string path, VisualElement box)
+    {
+        if (!Directory.Exists(path)) { Status("Select an existing installation folder."); return; }
+        Status("Scanning compatible files in the background…");
+        try {
+            var files = await Task.Run(() => {
+                var result = new List<string>(); var pending = new Queue<string>(); pending.Enqueue(path); int count = 0;
+                while (pending.Count > 0 && count++ < 1000 && result.Count < 250) {
+                    var folder = pending.Dequeue();
+                    try {
+                        foreach (var file in Directory.EnumerateFiles(folder)) {
+                            string ext = Path.GetExtension(file).ToLowerInvariant();
+                            if (ext == ".obj" || ext == ".package" || ext == ".modelbin" || ext == ".swatchbin" || ext == ".zip" || ext == ".minizip") result.Add(file);
+                            if (result.Count >= 250) break;
+                        }
+                        foreach (var child in Directory.EnumerateDirectories(folder))
+                            if (pending.Count < 1000 && (File.GetAttributes(child) & FileAttributes.ReparsePoint) == 0) pending.Enqueue(child);
+                    } catch (UnauthorizedAccessException) { } catch (IOException) { }
+                }
+                return result;
+            });
+            if (this == null || modal == null || box.panel == null) return;
+            var old = box.Q<ScrollView>("catalog"); old?.RemoveFromHierarchy();
+            var list = new ScrollView { name = "catalog" }; list.style.height = 220; box.Add(list);
+            foreach (var file in files) {
+                string selectedFile = file;
+                if (Path.GetExtension(file).Equals(".obj", StringComparison.OrdinalIgnoreCase))
+                    Button(list, "Preview OBJ: " + Path.GetFileName(file), () => Try(() => {
+                        if (new FileInfo(selectedFile).Length > 32 * 1024 * 1024) throw new IOException("OBJ exceeds import limit.");
+                        var mesh = WorldBuilderObj.Load(selectedFile);
+                        var data = new WorkspaceProject { name = Path.GetFileNameWithoutExtension(selectedFile), vertices = mesh.vertices, normals = mesh.normals, uv = mesh.uv, triangles = mesh.triangles };
+                        Destroy(mesh); Preview(data);
+                        CloseDialog(); Status("Reference preview only. Use Import OBJ to add it to the editable scene.");
+                    }));
+                else if (Path.GetExtension(file).Equals(".package", StringComparison.OrdinalIgnoreCase))
+                    Button(list, "Inspect Sims package: " + Path.GetFileName(file), () => InspectSims(selectedFile));
+                else if (Path.GetExtension(file).Equals(".modelbin", StringComparison.OrdinalIgnoreCase))
+                    Button(list, "Inspect Forza model: " + Path.GetFileName(file), () => InspectForza(selectedFile));
+                else if (Path.GetExtension(file).Equals(".zip", StringComparison.OrdinalIgnoreCase))
+                    Button(list, "Browse model archive: " + Path.GetFileName(file), () => InspectForzaZip(selectedFile));
+                else Label(list, Path.GetFileName(file) + " — texture/MiniZip adapter pending", "hint");
+            }
+            Status("Scan found " + files.Count + " files (limit 250). Inspect a package/model to browse its geometry resources.");
+        } catch (Exception e) { if (this != null) Status("Scan failed: " + e.Message); }
+    }
+    async void ExportGameDiagnostic()
+    {
+        string destination;
+        try { destination = WorkspaceFiles.Pick(true, "Save game metadata diagnostic", "json"); }
+        catch (Exception e) { Status(e.Message); return; }
+        if (string.IsNullOrEmpty(destination)) return;
+        var names = new[] { "Forza Horizon 5", "The Sims 4" };
+        var paths = new[] { PlayerPrefs.GetString("worldbuilder.gamePath.0", ""), PlayerPrefs.GetString("worldbuilder.gamePath.1", "") };
+        Status("Collecting bounded game metadata report…");
+        try {
+            var report = await Task.Run(() => GameAssetDiagnostic.Scan(names, paths));
+            if (this == null) return;
+            WorkspaceAtomicFile.Write(destination, JsonUtility.ToJson(report, true));
+            Status("Diagnostic saved. Review and share the JSON report; no game resource bytes are included.");
+        } catch (Exception e) { if (this != null) Status("Diagnostic failed: " + e.Message); }
     }
 
-    void ImportExisting()
+    async void InspectSims(string path)
     {
-        if (string.IsNullOrWhiteSpace(modelPath) || !File.Exists(modelPath)) { status = "No valid OBJ path selected."; return; }
-        try
-        {
-            var mesh = LoadObj(modelPath);
-            foreach (Transform child in workRoot.transform) Destroy(child.gameObject);
-            var model = new GameObject(Path.GetFileNameWithoutExtension(modelPath));
-            model.transform.SetParent(workRoot.transform, false);
-            var filter = model.AddComponent<MeshFilter>();
-            filter.sharedMesh = mesh;
-            var renderer = model.AddComponent<MeshRenderer>();
-            var shader = Shader.Find("HDRP/Lit") ?? Shader.Find("Standard") ?? Shader.Find("Unlit/Color");
-            renderer.sharedMaterial = new Material(shader);
-            var bounds = mesh.bounds;
-            workCenter = bounds.center;
-            workDistance = Mathf.Max(2f, bounds.extents.magnitude * 3f);
-            status = "Imported " + mesh.vertexCount + " vertices, " + mesh.triangles.Length / 3 + " triangles. Geometry/UV/normals only in this first slice.";
-            PlayerPrefs.SetString("worldbuilder.lastObj", modelPath);
-            PlayerPrefs.Save();
-        }
-        catch (Exception e) { status = "Import error: " + e.Message; Debug.LogException(e); }
+        Status("Reading Sims package resource index…");
+        try {
+            var package = await Task.Run(() => new SimsPackage(path));
+            if (this == null) return;
+            Dialog("Sims package resources", Path.GetFileName(path) + " • " + package.Entries.Count + " resources. MLOD previews are neutral geometry only; cross-package dependencies, textures and unsupported vertex layouts remain pending.", box => {
+                var list = new ScrollView(); list.style.height = 320; box.Add(list);
+                int shown = 0;
+                foreach (var entry in package.Entries) if (!entry.IsDeleted && entry.Type == SimsPackage.Mlod && shown++ < 250) {
+                    var resource = entry;
+                    Button(list, "Preview MLOD " + resource.Instance.ToString("X16"), () => PreviewSims(package, resource));
+                }
+                if (shown == 0) Label(list, "No object MLOD resources in this package. CAS GEOM is not implemented.", "hint");
+                if (shown > 250) Label(list, "Showing first 250 geometry resources. Search/pagination is pending.", "hint");
+                Button(box, "Back to game folders", GameBrowser); Button(box, "Close", CloseDialog);
+            });
+            Status("Package index loaded. Preview buttons attempt supported geometry decoding; compatibility is checked on selection.");
+        } catch (Exception e) { if (this != null) Status("Package inspection: " + e.Message); }
     }
-
-    static Mesh LoadObj(string path)
+    async void PreviewSims(SimsPackage package, SimsPackage.Entry resource)
     {
-        var positions = new List<Vector3>();
-        var uvs = new List<Vector2>();
-        var normals = new List<Vector3>();
-        var outPos = new List<Vector3>();
-        var outUV = new List<Vector2>();
-        var outNormal = new List<Vector3>();
-        var triangles = new List<int>();
-        var unique = new Dictionary<string, int>();
-        foreach (var raw in File.ReadLines(path))
-        {
-            string line = raw.Trim();
-            if (line.Length == 0 || line.StartsWith("#")) continue;
-            var tokens = line.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
-            if (tokens.Length < 2) continue;
-            if (tokens[0] == "v" && tokens.Length >= 4)
-                positions.Add(new Vector3(Parse(tokens[1]), Parse(tokens[2]), Parse(tokens[3])));
-            else if (tokens[0] == "vt" && tokens.Length >= 3)
-                uvs.Add(new Vector2(Parse(tokens[1]), Parse(tokens[2])));
-            else if (tokens[0] == "vn" && tokens.Length >= 4)
-                normals.Add(new Vector3(Parse(tokens[1]), Parse(tokens[2]), Parse(tokens[3])));
-            else if (tokens[0] == "f" && tokens.Length >= 4)
-            {
-                var corners = new List<int>();
-                for (int i = 1; i < tokens.Length; i++)
-                {
-                    var key = tokens[i];
-                    if (!unique.TryGetValue(key, out var vertexIndex))
-                    {
-                        var parts = key.Split('/');
-                        int posId = Index(parts[0], positions.Count);
-                        if (posId < 0 || posId >= positions.Count) throw new FormatException("OBJ face references nonexistent vertex");
-                        vertexIndex = outPos.Count;
-                        unique[key] = vertexIndex;
-                        outPos.Add(positions[posId]);
-                        outUV.Add(parts.Length > 1 && parts[1].Length > 0 ? uvs[Index(parts[1], uvs.Count)] : Vector2.zero);
-                        outNormal.Add(parts.Length > 2 && parts[2].Length > 0 ? normals[Index(parts[2], normals.Count)] : Vector3.zero);
+        int generation = ++previewGeneration;
+        Status("Decoding Sims object geometry…");
+        try {
+            var data = await Task.Run(() => SimsMeshPreview.Decode(package, resource));
+            if (this == null || generation != previewGeneration) return;
+            PreviewModels(data); CloseDialog(); Status("Sims neutral-geometry reference preview. Textures/materials not decoded. Game file remains read-only.");
+        } catch (Exception e) { if (this != null) Status("Sims preview unavailable: " + e.Message); }
+    }
+    async void InspectForzaZip(string path)
+    {
+        Status("Reading archive model directory…");
+        try {
+            var archive = await Task.Run(() => GameArchiveDiagnostic.Inspect(path));
+            if (this == null) return;
+            Dialog("Archive model resources", Path.GetFileName(path) + " • " + archive.MeshEntries + " model files. Only stored/deflated, unencrypted entries are opened. Select a model part; skeleton files may have no mesh.", box => {
+                var list = new ScrollView(); list.style.height = 320; box.Add(list); int shown = 0;
+                foreach (var member in archive.Members) if (Path.GetExtension(member.Name).Equals(".modelbin", StringComparison.OrdinalIgnoreCase) && shown++ < 500) {
+                    var resource = member;
+                    var button = Button(list, member.Name, () => OpenArchivedModel(path, resource));
+                    if (member.Encrypted || (member.Method != 0 && member.Method != 8)) {
+                        button.SetEnabled(false); button.tooltip = "Unsupported encrypted/compressed entry.";
                     }
-                    corners.Add(vertexIndex);
                 }
-                for (int i = 1; i + 1 < corners.Count; i++)
-                {
-                    triangles.Add(corners[0]); triangles.Add(corners[i]); triangles.Add(corners[i + 1]);
-                }
+                if (shown == 0) Label(list, "No modelbin names in this archive. MiniZip geometry uses a separate format.", "hint");
+                Button(box, "Back to game folders", GameBrowser); Button(box, "Close", CloseDialog);
+            });
+        } catch (Exception e) { if (this != null) Status("Archive browser: " + e.Message); }
+    }
+    async void OpenArchivedModel(string path, GameArchiveDiagnostic.Member member)
+    {
+        Status("Opening selected model in memory…");
+        try {
+            var bundle = await Task.Run(() => new ForzaBundle(GameArchiveRead.Read(path, member), path + "::" + member.Name));
+            if (this == null) return;
+            ShowForzaMeshes(bundle, member.Name);
+        } catch (Exception e) { if (this != null) Status("Archived model: " + e.Message); }
+    }
+    void ShowForzaMeshes(ForzaBundle bundle, string name)
+    {
+        Dialog("Forza model mesh parts", name + " • " + bundle.Blobs.Count + " blobs. Preview shows supported mesh parts with neutral shading. Assembly, materials, textures and other packed layouts remain pending.", box => {
+            var list = new ScrollView(); list.style.height = 320; box.Add(list); int shown = 0;
+            foreach (var blob in bundle.Blobs) if (blob.Tag == ForzaBundle.MeshTag && shown++ < 250) {
+                var resource = blob;
+                Button(list, "Preview " + (string.IsNullOrEmpty(blob.Name) ? "mesh at " + blob.Offset : blob.Name) + " v" + blob.Major + "." + blob.Minor,
+                    () => PreviewForza(bundle, resource));
             }
-        }
-        var mesh = new Mesh { name = Path.GetFileNameWithoutExtension(path) };
-        mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
-        mesh.SetVertices(outPos);
-        mesh.SetUVs(0, outUV);
-        mesh.SetTriangles(triangles, 0);
-        bool hasNormals = outNormal.Exists(n => n.sqrMagnitude > 0.00001f);
-        if (hasNormals) mesh.SetNormals(outNormal); else mesh.RecalculateNormals();
-        mesh.RecalculateBounds();
-        return mesh;
+            if (shown == 0) Label(list, "No mesh blobs in this bundle (it may be a skeleton-only file).", "hint");
+            Button(box, "Back to game folders", GameBrowser); Button(box, "Close", CloseDialog);
+        });
     }
 
-    static float Parse(string s) => float.Parse(s, NumberStyles.Float, C);
-    static int Index(string s, int count) { var i = int.Parse(s, C); return i > 0 ? i - 1 : count + i; }
-
-    void LocateInstallations()
+    async void InspectForza(string path)
     {
-        string[] defaults = {
-            @"C:\Program Files (x86)\Steam\steamapps\common\ForzaHorizon5",
-            @"C:\Program Files\EA Games\The Sims 4"
-        };
-        for (int i = 0; i < gamePaths.Length; i++)
-            if (string.IsNullOrWhiteSpace(gamePaths[i]) && Directory.Exists(defaults[i])) gamePaths[i] = defaults[i];
-        installationStatus = "Forza: " + (Directory.Exists(gamePaths[0]) ? "folder detected" : "choose folder")
-            + " | Sims 4: " + (Directory.Exists(gamePaths[1]) ? "folder detected" : "choose folder");
+        Status("Reading Forza model directory…");
+        try {
+            var bundle = await Task.Run(() => new ForzaBundle(path));
+            if (this == null) return;
+            ShowForzaMeshes(bundle, Path.GetFileName(path));
+        } catch (Exception e) { if (this != null) Status("Forza inspection: " + e.Message); }
     }
-
-    void ChooseGameFolder()
+    async void PreviewForza(ForzaBundle bundle, ForzaBundle.Blob resource)
     {
-#if UNITY_EDITOR
-        string path = UnityEditor.EditorUtility.OpenFolderPanel("Locate " + gameNames[selectedGame], gamePaths[selectedGame], "");
-        if (string.IsNullOrWhiteSpace(path)) return;
-        gamePaths[selectedGame] = path;
-        PlayerPrefs.SetString("worldbuilder.gamePath." + selectedGame, path);
-        PlayerPrefs.Save();
-        LocateInstallations();
-        ScanLooseModels();
-#else
-        status = "Folder picker is currently Editor-only; native Windows picker is planned.";
-#endif
+        int generation = ++previewGeneration;
+        Status("Decoding Forza mesh buffer…");
+        try {
+            var data = await Task.Run(() => ForzaMeshPreview.Decode(bundle, resource));
+            if (this == null || generation != previewGeneration) return;
+            PreviewModels(new List<WorkspaceProject> { data }); CloseDialog();
+            Status("Forza local-part buffer preview only. Assembly, textures and game materials are not reproduced.");
+        } catch (Exception e) { if (this != null) Status("Forza preview unavailable: " + e.Message); }
     }
-
-    void ScanLooseModels()
+    void PreviewModels(List<WorkspaceProject> objects)
     {
-        catalog.Clear();
-        string path = gamePaths[selectedGame];
-        if (!Directory.Exists(path)) { status = "Select an existing game folder first."; return; }
-        try
-        {
-            // Only loose, readable OBJ files. No proprietary package parsing or extraction.
-            // Bound the scan to avoid blocking the Editor on huge installations.
-            var pending = new Queue<string>();
-            pending.Enqueue(path);
-            int folders = 0;
-            while (pending.Count > 0 && folders < 250 && catalog.Count < 250)
-            {
-                var folder = pending.Dequeue();
-                folders++;
-                try
-                {
-                    foreach (var file in Directory.EnumerateFiles(folder, "*.obj"))
-                    {
-                        catalog.Add(file);
-                        if (catalog.Count >= 250) break;
-                    }
-                    foreach (var child in Directory.EnumerateDirectories(folder))
-                        if (pending.Count < 1000) pending.Enqueue(child);
-                }
-                catch (UnauthorizedAccessException) { }
-                catch (IOException) { }
-            }
-            status = "Indexed " + catalog.Count + " loose OBJ models in " + folders +
-                " folders. Proprietary game archives are not supported.";
-        }
-        catch (Exception e) { status = "Scan failed: " + e.Message; }
+        SetMode("Asset");
+        var stage = new GameObject("Reference preview staging").transform;
+        try { foreach (var data in objects) Model(data, stage, 30); }
+        catch { Clear(stage); Destroy(stage.gameObject); throw; }
+        Clear(reference);
+        while (stage.childCount > 0) stage.GetChild(0).SetParent(reference, false);
+        Destroy(stage.gameObject);
+        var bounds = reference.GetChild(0).GetComponent<Renderer>().bounds;
+        foreach (Transform child in reference) bounds.Encapsulate(child.GetComponent<Renderer>().bounds);
+        referenceCenter = bounds.center; referenceDistance = Mathf.Max(2, bounds.extents.magnitude * 3);
     }
 
-    void DrawGameBrowser(float w, float h)
+    void ApplyTheme()
     {
-        float width = Mathf.Min(630f, w - 40f);
-        var panel = new Rect((w - width) / 2f, 52f, width, Mathf.Min(h - 110f, 570f));
-        GUI.Box(panel, "");
-        float x = panel.x + 16f, y = panel.y + 12f, inner = panel.width - 32f;
-        GUI.Label(new Rect(x, y, inner - 85f, 24f), "GAME ASSET BROWSER  /  read-only discovery");
-        if (GUI.Button(new Rect(panel.xMax - 85f, y, 65f, 25f), "Close")) showBrowser = false;
-        y += 36f;
-        if (GUI.Button(new Rect(x, y, inner / 2f - 5f, 30f), "Forza Horizon 5"))
-            { selectedGame = 0; catalog.Clear(); }
-        if (GUI.Button(new Rect(x + inner / 2f + 5f, y, inner / 2f - 5f, 30f), "The Sims 4"))
-            { selectedGame = 1; catalog.Clear(); }
-        y += 38f;
-        GUI.Label(new Rect(x, y, inner, 36f), gameNames[selectedGame] + ": " +
-            (Directory.Exists(gamePaths[selectedGame]) ? gamePaths[selectedGame] : "No folder selected"));
-        y += 40f;
-        if (GUI.Button(new Rect(x, y, 155f, 30f), "Choose Folder")) ChooseGameFolder();
-        if (GUI.Button(new Rect(x + 165f, y, 160f, 30f), "Scan Loose OBJ")) ScanLooseModels();
-        y += 38f;
-        GUI.Label(new Rect(x, y, inner, 22f), "Found " + catalog.Count + " compatible loose .obj files (max 250)");
-        y += 26f;
-        var scrollRect = new Rect(x, y, inner, Mathf.Max(65f, panel.yMax - y - 48f));
-        var contentRect = new Rect(0, 0, inner - 25f, Mathf.Max(scrollRect.height, catalog.Count * 32f));
-        catalogScroll = GUI.BeginScrollView(scrollRect, catalogScroll, contentRect);
-        for (int i = 0; i < catalog.Count; i++)
-        {
-            string file = catalog[i];
-            if (GUI.Button(new Rect(0, i * 32f, inner - 32f, 28f), Path.GetFileName(file)))
-            {
-                modelPath = file;
-                ImportExisting();
-                showBrowser = false;
-            }
-        }
-        GUI.EndScrollView();
-        GUI.Label(new Rect(x, panel.yMax - 34f, inner, 28f), "No decoding, extraction, or redistribution of proprietary game assets.");
+        root.RemoveFromClassList("dark"); root.RemoveFromClassList("light"); root.RemoveFromClassList("contrast");
+        root.AddToClassList(new[] { "dark", "light", "contrast" }[Mathf.Clamp(theme, 0, 2)]);
     }
-
+    static Label Label(VisualElement parent, string text, string className = null)
+    {
+        var label = new Label(text); if (className != null) label.AddToClassList(className); parent.Add(label); return label;
+    }
+    static VisualElement Row(VisualElement parent, string className = null)
+    {
+        var row = new VisualElement(); row.style.flexDirection = FlexDirection.Row;
+        if (className != null) row.AddToClassList(className); parent.Add(row); return row;
+    }
+    Button Button(VisualElement parent, string text, Action action)
+    {
+        var button = new Button(() => Try(action)) { text = text, tooltip = text }; parent.Add(button); return button;
+    }
+    void Try(Action action) { try { action(); } catch (Exception e) { Status(e.Message); Debug.LogException(e); Refresh(); } }
+    void Status(string text) { if (statusLabel != null) statusLabel.text = text; }
+    static void Clear(Transform parent)
+    {
+        while (parent.childCount > 0) { var child = parent.GetChild(0); child.gameObject.SetActive(false); child.SetParent(null); Destroy(child.gameObject); }
+    }
     void OnDestroy()
     {
-        if (referenceTexture != null) { referenceTexture.Release(); Destroy(referenceTexture); }
+        cancelLibraryImport=true;
+        Application.wantsToQuit -= WantsToQuit;
+        DisposeWorldTools();DisposeLibraryPreview();DisposeCatalogThumbnails();
+        if (world != null) Destroy(world.gameObject); if (reference != null) Destroy(reference.gameObject);
+        if (sun != null) Destroy(sun);
+        if (workCamera != null) Destroy(workCamera.gameObject); if (referenceCamera != null) Destroy(referenceCamera.gameObject);
+        if (displayCamera != null) Destroy(displayCamera.gameObject);
         if (workTexture != null) { workTexture.Release(); Destroy(workTexture); }
+        if (referenceTexture != null) { referenceTexture.Release(); Destroy(referenceTexture); }
+        ClearRoadDragPreview();
+        if (ui != null) Destroy(ui); if (panel != null) Destroy(panel);
     }
 }

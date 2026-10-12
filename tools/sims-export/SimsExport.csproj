@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><EnableDefaultCompileItems>false</EnableDefaultCompileItems></PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="../../Assets/Scripts/GameAssets/SimsMaterialReader.cs" Link="SimsMaterialReader.cs" />
+    <Compile Include="../../Assets/Scripts/GameAssets/SimsTextureReader.cs" Link="SimsTextureReader.cs" />
+    <Compile Include="../../Assets/Scripts/GameAssets/SimsCatalogReader.cs" Link="SimsCatalogReader.cs" />
+    <Compile Include="../../Assets/Scripts/GameAssets/SimsBatchExporter.cs" Link="SimsBatchExporter.cs" />
+    <Compile Include="../../Assets/Scripts/GameAssets/SimsPackage.cs" Link="SimsPackage.cs" />
+    <Compile Include="../../Assets/Scripts/GameAssets/SimsMeshReader.cs" Link="SimsMeshReader.cs" />
+    <Compile Include="../../Assets/Scripts/World/WorldConstruction.cs" Link="WorldConstruction.cs" />
+  </ItemGroup>
+</Project>

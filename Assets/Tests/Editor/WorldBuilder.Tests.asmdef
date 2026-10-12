@@ -1,0 +1,1 @@
+{"name":"WorldBuilder.Tests","references":["WorldBuilder.Runtime"],"includePlatforms":["Editor"],"optionalUnityReferences":["TestAssemblies"]}

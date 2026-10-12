@@ -1,0 +1,99 @@
+.dark { --surface: rgb(24,28,35); --raised: rgb(34,40,49); --text: rgb(227,234,244); --muted: rgb(157,173,192); --accent: rgb(75,151,218); --edge: rgb(54,65,80); --error: rgb(255,135,135); }
+.light { --surface: rgb(235,240,245); --raised: rgb(255,255,255); --text: rgb(25,39,53); --muted: rgb(70,89,105); --accent: rgb(20,100,170); --edge: rgb(180,194,206); --error: rgb(170,35,35); }
+.contrast { --surface: black; --raised: rgb(15,15,15); --text: white; --muted: white; --accent: yellow; --edge: white; --error: yellow; }
+.dark, .light, .contrast { background-color: var(--surface); color: var(--text); font-size: 14px; flex-grow: 1; }
+.topbar { flex-wrap: wrap; padding: 6px; align-items: center; border-bottom-width: 1px; border-bottom-color: var(--edge); }
+.brand { font-size: 17px; -unity-font-style: bold; margin-right: 18px; }
+.project-title { flex-grow: 1; margin-right: 14px; min-width: 0; flex-basis: 0; flex-shrink: 1; overflow: hidden; white-space: nowrap; }
+.body { flex-grow: 1; min-height: 0; flex-basis: 0; overflow: hidden; }
+.sidebar { width: 220px; flex-shrink: 0; min-height: 0; padding: 12px; border-right-width: 1px; border-right-color: var(--edge); }
+.inspector { width: 255px; flex-shrink: 0; min-height: 0; padding: 12px; border-left-width: 1px; border-left-color: var(--edge); }
+.center { flex-grow: 1; min-width: 0; min-height: 0; flex-basis: 0; padding: 10px; }
+.toolbar { flex-wrap: wrap; margin-bottom: 10px; }
+.views { flex-grow: 1; flex-basis: 0; min-height: 0; }
+.view { flex-grow: 1; flex-basis: 0; margin: 4px; overflow: hidden; border-top-left-radius: 8px; border-top-right-radius: 8px; border-bottom-left-radius: 8px; border-bottom-right-radius: 8px; background-color: var(--raised); min-width: 0; min-height: 0; }
+.section { color: var(--muted); -unity-font-style: bold; font-size: 12px; padding-top: 12px; padding-bottom: 8px; padding-left: 4px; }
+.hint { color: var(--muted); white-space: normal; padding: 8px; font-size: 12px; }
+.status { padding: 6px; flex-shrink: 0; white-space: normal; border-top-width: 1px; border-top-color: var(--edge); }
+Button { background-color: var(--raised); color: var(--text); padding: 8px; margin: 3px; border-left-width: 1px; border-right-width: 1px; border-top-width: 1px; border-bottom-width: 1px; border-left-color: var(--edge); border-right-color: var(--edge); border-top-color: var(--edge); border-bottom-color: var(--edge); border-top-left-radius: 5px; border-top-right-radius: 5px; border-bottom-left-radius: 5px; border-bottom-right-radius: 5px; min-height: 34px; -unity-text-align: middle-center; white-space: normal; }
+Button:hover, Button.selected { border-left-color: var(--accent); border-right-color: var(--accent); border-top-color: var(--accent); border-bottom-color: var(--accent); color: var(--accent); }
+Button:disabled { opacity: 0.4; }
+.unity-base-field { margin: 5px; flex-direction: row; min-height: 30px; }
+.unity-base-field__label { min-width: 95px; color: var(--muted); }
+.unity-base-field__input { flex-grow: 1; min-width: 60px; background-color: var(--raised); color: var(--text); padding: 6px; }
+.modal { position: absolute; left: 0; right: 0; top: 0; bottom: 0; background-color: rgba(0,0,0,0.7); align-items: center; justify-content: center; }
+.dialog { width: 620px; max-width: 95%; max-height: 85%; background-color: var(--surface); padding: 24px; border-top-left-radius: 12px; border-top-right-radius: 12px; border-bottom-left-radius: 12px; border-bottom-right-radius: 12px; }
+Label, Button, .unity-base-field { flex-shrink: 0; }
+.topbar, .mode-navigation, .toolbar { flex-shrink: 0; }
+.mode-navigation { flex-wrap: wrap; padding: 4px; border-bottom-width: 1px; border-bottom-color: var(--edge); }
+.dock-scroll { flex-grow: 1; flex-basis: 0; min-height: 0; }
+.catalog { height: 240px; flex-shrink: 0; padding: 8px; border-top-width: 1px; border-top-color: var(--edge); background-color: var(--raised); }
+.catalog-tabs { flex-wrap: wrap; flex-shrink: 0; }
+.catalog-content { flex-shrink: 0; flex-wrap: wrap; }
+.catalog-choices { flex-direction: row; flex-wrap: wrap; flex-grow: 1; flex-basis: 0; min-width: 250px; align-content: flex-start; }
+.catalog-choices Button { width: 112px; min-height: 48px; }
+.catalog-settings { width: 270px; flex-shrink: 0; }
+.dialog-scroll { flex-shrink: 1; min-height: 0; }
+.unity-scroll-view__content-container { flex-shrink: 0; }
+.unity-popup-field__input, .unity-base-popup-field__text { background-color: var(--raised); color: var(--text); }
+.unity-scroller Button { min-height: 14px; padding: 0; margin: 0; }
+.sidebar, .inspector { background-color: var(--surface); }
+
+.unity-base-slider__track { background-color: var(--edge); min-height: 4px; }
+.unity-base-slider__dragger { background-color: var(--accent); min-width: 12px; min-height: 18px; }
+
+.viewport-feedback { position: absolute; left: 0; right: 0; top: 0; bottom: 0; overflow: hidden; color: var(--accent); }
+.viewport-feedback.invalid { color: var(--error); }
+.editing-tools { flex-wrap: wrap; }
+
+.preview-badge { position: absolute; left: 12px; top: 12px; background-color: var(--raised); color: var(--text); padding: 8px; border-top-left-radius: 5px; border-top-right-radius: 5px; border-bottom-left-radius: 5px; border-bottom-right-radius: 5px; }
+
+.library-preview-image { height: 280px; min-height: 180px; flex-shrink: 0; background-color: var(--raised); margin: 4px; }
+
+.asset-catalog { flex-grow: 1; min-width: 240px; }
+.asset-grid { flex-direction: row; flex-wrap: wrap; align-content: flex-start; }
+Button.asset-tile, .catalog-choices Button.asset-tile { width: 132px; min-height: 120px; padding: 5px; flex-direction: column; align-items: stretch; }
+.asset-thumbnail { height: 82px; min-height: 82px; background-color: var(--surface); }
+.asset-caption { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; -unity-text-align: middle-center; padding-top: 5px; }
+
+.start-card { position: absolute; width: 290px; max-width: 70%; left: 15%; top: 20%; padding: 20px; background-color: var(--surface); border-top-left-radius: 10px; border-top-right-radius: 10px; border-bottom-left-radius: 10px; border-bottom-right-radius: 10px; }
+
+.catalog-settings.compact-settings { width: 130px; }
+
+.mode-heading { flex-grow: 1; min-width: 0; white-space: normal; color: var(--muted); padding: 8px; font-size: 12px; }
+
+.settings-content { padding: 10px; min-height: 180px; flex-grow: 1; flex-basis: 0; min-width: 0; }
+
+.settings-layout { min-height: 220px; flex-shrink: 0; }
+.settings-navigation { width: 132px; flex-shrink: 0; }
+
+.start-card Label { white-space: normal; }
+.narrow-layout .settings-layout { flex-direction: column; }
+.narrow-layout .settings-navigation { width: auto; flex-direction: row; flex-wrap: wrap; }
+
+/* Buy catalog: persistent room/function rail, name search and actual preview cards. */
+.catalog.buy-catalog { height: 340px; }
+.buy-catalog-header { align-items: center; flex-wrap: wrap; }
+.buy-search { flex-grow: 1; min-width: 140px; }
+.buy-search .unity-base-field__label { min-width: 48px; }
+.buy-browse-tabs Button, .catalog-choices .buy-browse-tabs Button { width: auto; min-height: 28px; padding: 5px 10px; }
+.buy-catalog-content { flex-wrap: nowrap; }
+.buy-category-rail { width: 156px; height: 230px; flex-shrink: 0; margin-right: 8px; }
+Button.buy-category-button, .catalog-choices Button.buy-category-button { flex-direction: row; align-items: center; width: 136px; min-height: 32px; padding: 4px; margin: 2px; -unity-text-align: middle-left; }
+.buy-category-button Label { flex-shrink: 1; white-space: normal; font-size: 12px; }
+.buy-category-icon { width: 28px; height: 28px; flex-shrink: 0; margin-right: 6px; color: var(--text); }
+.buy-category-button.selected .buy-category-icon { color: var(--accent); }
+.buy-results { flex-grow: 1; flex-basis: 0; min-width: 0; }
+.buy-grid-scroll { height: 194px; min-height: 120px; }
+.buy-pagination { align-items: center; }
+.buy-result-heading { flex-grow: 1; flex-shrink: 1; color: var(--muted); font-size: 12px; }
+.buy-pagination Button, .catalog-choices .buy-pagination Button { width: 28px; min-height: 26px; padding: 2px; }
+.buy-results Button.asset-tile { width: 112px; min-height: 92px; }
+.buy-results .asset-thumbnail { height: 58px; min-height: 58px; }
+.narrow-layout .buy-category-rail { width: 116px; }
+.narrow-layout Button.buy-category-button { width: 100px; }
+.road-sections, .road-presets, .road-drawing-tools { width: 100%; flex-wrap: wrap; }
+.road-presets Button { min-height: 54px; }
+.asset-card { position: relative; width: 112px; margin: 3px; }
+.buy-results .asset-card Button.asset-tile { width: 112px; margin: 0; }
+Button.asset-details, .catalog-choices Button.asset-details { position: absolute; right: 4px; top: 4px; width: 24px; min-height: 22px; height: 22px; padding: 0; margin: 0; background-color: var(--raised); }

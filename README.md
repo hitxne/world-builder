@@ -1,32 +1,155 @@
 # World Builder
 
-A Windows-first, game-feeling, standalone map and asset creation tool. The first milestone is **Asset Creator**: a dual-viewport reference / editable-workspace application with Blender OBJ importing. Longer term: Sims-inspired parametric Building Mode; Forza-inspired roads, terrain, water, and foliage; portable export targeting original Assetto Corsa (2014) first, GTA V second, and CarX Street as research.
+Independent Windows-first world and lot construction application in Unity.
+Target editor: **6000.6.5f1**. Work is on `development/world-builder-operational`;
+[PR #1](https://github.com/hitxne/world-builder/pull/1) remains draft while native
+Unity/Windows validation is incomplete.
 
-## Status
+## Core priorities: usability and large-map scalability
 
-**Early source prototype — not a downloadable Windows build.** Unity 6 project skeleton; no game-engine port, no Sims/Forza asset extraction, no finished map exporter.
+Make the existing world/lot workflow understandable and usable before expanding
+features. A feature is not accepted merely because its code exists: users must be
+able to find it, understand its state, perform the action and recover from mistakes.
+See [usability priority and acceptance gate](docs/UI-USABILITY-PRIORITY.md).
+Large-map scalability is a parallel architectural requirement: terrain chunks,
+streamed detail, shared assets, precision and incremental persistence must support
+the intended huge map. See [large-world priority](docs/LARGE-WORLD-PRIORITY.md).
+The current small-scene prototype is not yet suitable for a huge production map.
 
-## Quick start (developer)
+## Use the world/lot workflow
 
-1. Install Unity Hub and **Unity 6** with Windows build support. Open this folder as a project in Unity.
-2. Install the High Definition Render Pipeline package if Unity prompts you to resolve packages.
-3. Open any empty scene and choose **World Builder > Create Starter Scene** from the Unity editor menu.
-4. Press Play. The runtime Asset Creator UI should open.
-5. Use **Import OBJ** to select a local Blender-exported `.obj` file (geometry, UVs, and normals only in this first prototype; MTL/textures are next). The Unity Editor has an OBJ file picker. Standalone builds currently require the `WORLD_BUILDER_OBJ_PATH` environment variable; a native Windows file picker is planned.
-6. Orbit either viewport with left-drag, zoom with the scroll wheel.
-7. Native Windows builds must be built and tested on a Windows machine with Unity installed.
+1. Open this project in Unity 6000.6.5f1 and press Play.
+2. Choose **Menu > Project > Create island > Create sample neighborhood** to create an original island, ocean,
+   neighborhood road, editable lot, house and palms. Or Generate Island with your
+   own dimensions/seed and build from an empty world.
+3. Sculpt terrain with Raise/Lower/Smooth/Flatten, and paint Sand/Grass.
+4. Draw Road: click control points on terrain, then Finish Road or Enter. Width,
+   sidewalks and control points remain editable in Properties.
+5. Draw Lot: click two corners. Select the lot and enter Lot Mode.
+6. Draw Room/Wall/Floor/Roof with two clicks. Door/Window tools cut real openings
+   in existing walls. Place Stairs, choose floor level and edit dimensions/transforms.
+7. Save `.wbworld` inside the app **before stopping Play**. Reopen it to continue;
+   Unity's saved editor scene does not contain runtime edits.
+8. Save a selected object or whole lot to Local Asset Library for reuse in another
+   project. Import/Reimport OBJ with supported MTL/PNG/JPEG textures; export the
+   world or edited assets as OBJ/MTL with texture files.
 
-## Key design requirements
+World, Lot and Asset modes use the same authoritative scene, hierarchy, materials,
+selection, snapshot history and project serialization. Lots actually parent their
+walls/floors/frames, so moving a lot moves its building. Construction source data
+(heightfield, paint layers, splines and openings) persists alongside generated meshes.
 
-- The custom World Builder project is the authoritative editable data source, not a Forza or Sims engine file.
-- Asset Creator is permanent; Blender OBJ/MTL import → adjust → library → reimport/export is a central workflow.
-- Reference pane and edit pane are visually separate. Installed Forza/Sims resources are only indexed through supported, read-only adapters and are **not automatically extractable or reusable**.
-- Preserve original user-supplied mesh source and asset IDs; optimize generated runtime geometry separately.
-- Allow categorized materials, surface painting, assembly, LODs, and OBJ/MTL or glTF exports in subsequent iterations.
-- Target games: original Assetto Corsa first, GTA V second, CarX Street experimental. OBJ alone is not a complete drivable-map export.
+## Windows application build
 
-## Current implementation boundaries
+Use **World Builder > Build Windows Release** in Unity with Windows x64 Build
+Support installed. Output: `Builds/Windows/WorldBuilder.exe` and required companion
+files. The build also packages the whole directory in a timestamped ZIP under Builds. A Development build menu is available for debugging. The build creates a separate bootstrap
+scene and generated shader resources; it does not overwrite the saved user scene.
+A Windows build has not been produced or smoke-tested in this cloud environment.
 
-The prototype includes a two-camera viewport, camera orbit, a runtime OBJ geometry reader and persistence of the last selected local source path, plus directory-probe foundations. The full procedural 3D building systems, original game-resource decoders, texture-brush painting, high-quality baking, production asset library, signed updates, and game exporters are **planned but not yet implemented**.
+## Verification
 
-Do not commit copyrighted game assets, extracted packages, or imported commercial models to this repository. It currently contains only project source and documentation.
+The engine-independent C# geometry/container code compiled and its executable tests
+passed in cloud (.NET 8). Tested: deterministic islands, raise/flatten/paint, source
+round-trip, road width/sidewalks/markings, real wall apertures, nondegenerate geometry,
+zlib resources and bounded ZIP read/CRC/encryption rejection. Configuration/GUID,
+C# grammar and whitespace checks also passed. Unity EditMode tests are included but
+have not run here; UI, physics, materials and the Windows player need local testing.
+
+```powershell
+dotnet run --project tools/world-geometry-tests/WorldGeometryTests.csproj
+```
+
+In Unity, run **Window > General > Test Runner > EditMode > Run All**. See
+[world/lot acceptance and release status](docs/WORLD-LOT-MILESTONE.md).
+
+## Current limits
+
+This is a functional source increment, not a verified World Builder 1.0 release.
+Water is an independent flat surface, not a validated ocean/connected canal simulator.
+Roads have mesh collisions and editable splines, but automatic cut/fill, intersections
+and driving-game validation are pending. Windows execution, advanced modeling/gizmos,
+large-world streaming, full PBR material editing and game-native export remain pending.
+
+Game adapters are read-only subsets: plain Forza mesh parts/ordinary ZIP entries and
+some Sims MLOD layouts. Full textured environment-asset browsing/import, MiniZip,
+cross-package Sims dependencies and unsupported game encodings remain incomplete.
+No game renderer, proprietary assets, encrypted-archive decryption or game source
+files are included. See [game adapter status](docs/GAME-ASSET-ADAPTERS.md).
+
+Primary eventual game export: original Assetto Corsa (2014); GTA V second;
+CarX Street experimental. Generic OBJ export is not a complete Assetto Corsa track.
+
+Workspace controls: **Layout** resizes panels and restores defaults. **Scene** and
+**Properties** toggle panels; narrow windows open them as temporary drawers.
+Hierarchy **Search** filters names. Catalog category changes cancel the previous
+tool; **Cancel Tool** and Escape are available. Camera offers Top/Front/Side views.
+See [directive audit](docs/DIRECTIVE-AUDIT.md) for current acceptance status.
+
+Direct editing: choose **Move**, **Rotate** or **Scale** in the catalog and drag
+an object in the viewport. Move snaps to the grid on a horizontal plane; Rotate
+changes local yaw; Scale is uniform. Release commits one undo step; Escape
+restores the starting transform. With the viewport focused, H selects Hand/Move. See Controls for the Sims-inspired mappings.
+Select a library asset, then click terrain or the active lot to place it; Escape
+cancels before creating anything. These controls still need Unity runtime validation.
+
+Terrain brushes now expose radius and strength sliders with numeric values.
+Terrain-following roads, sidewalks, markings and colliders update after sculpting
+and share the stroke undo step. Turn off **Follow terrain** in road Properties for
+elevated roads. This is surface conformance, not an intersection or cut/fill solver.
+
+See [PC build controls](docs/SIMS-BUILD-CONTROLS.md). The top-bar **Controls**
+button displays the mappings inside the application. Shortcuts act in the focused
+editable viewport; typing in input fields and using dialogs remains separate.
+
+**Local Library > Import Sims export folder** imports an exported OBJ collection
+recursively, with supported MTL/PNG/JPEG references, cancellation, duplicate
+skipping and an import report. The library now pages through matching entries
+instead of stopping after the first 200. This is an external-export import path,
+not complete direct extraction of the installed Sims Build/Buy catalog.
+
+A [local package-to-OBJ batch exporter](tools/sims-export/README.md) is now
+available without Unity. It exports supported MLOD geometry and reports missing
+coverage. It does not yet export every Build/Buy item or reproduce game materials.
+
+**Add Sims Assets** is the normal one-step game import: select the Sims 4 EXE.
+World Builder finds the installation and runs supported extraction/library import
+automatically. This flow and real game coverage still need Unity/Windows testing;
+textures and complete catalog support remain incomplete.
+
+The [major feedback update](docs/MAJOR-USABILITY-UPDATE.md) adds selection
+outlines, brush footprints, construction guides, actual-model placement previews
+and an active-lot grid. Tools are separated from construction choices, and terrain
+brushes rebuild only intersecting roads. Native Unity/Windows validation is pending.
+
+Imported objects now appear as visual cards in **World Build > Sims Assets**
+and **Lot Build > Furnish**, as well as Local Library. Thumbnails are rendered
+from actual meshes on demand and cached locally. Select a card to orbit/pan/zoom
+its read-only 3D preview, then choose **Place in world / active lot**. Existing
+imports with empty construction records are handled as ordinary meshes.
+
+The simplified shell uses **World / Lot / Assets** modes. World catalogs contain
+Terrain, Roads, Lots and Objects; Lot catalogs contain Build, Doors & Windows,
+Floors & Stairs and Buy objects; Assets contains Import, Primitives and Library.
+The active mode/category is shown as a breadcrumb. **Menu > Settings** groups
+Appearance, Workspace, Editing, Graphics and Controls. Buy objects can be browsed
+by room/type using decoded Sims catalog tags when supported links exist, with
+English game display names resolved from STBL string tables.
+After updating, choose **Add Sims assets** and select the EXE again to refresh
+existing imports without recreating their geometry. Multiple room/type tags are
+preserved; manual labels take precedence. Unsupported or ambiguous links remain
+unclassified and are reported. See [catalog decoding](docs/SIMS-CATALOG-DECODING.md).
+
+Existing Sims imports now upgrade automatically on startup using the saved game
+installation: names, categories, supported UVs/materials/textures and thumbnails.
+Original resolved shader/texture payloads are preserved in source snapshots.
+Buy cards place directly; ⋯ opens preview/details. World > Roads offers road
+presets and drag/release straight-road building, plus curved routes and roadside
+objects. See [appearance and road workflow](docs/SIMS-APPEARANCE-AND-ROAD-WORKFLOW.md)
+for supported formats, native validation and remaining renderer/junction limits.
+
+Road settings now group cross-section, markings, elevation, shape, junction
+connections and surface metadata. Junctions have a corner radius and separate
+side offsets for each connected road; connected endpoint drags slide along the
+junction side. Detailed limitations and current grade are in the
+[progress audit](docs/PROGRESS-AUDIT-2026-10-12.md).
