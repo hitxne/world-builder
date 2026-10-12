@@ -12,9 +12,12 @@ A Windows-first, game-feeling, standalone map and asset creation tool. The first
 2. Install the High Definition Render Pipeline package if Unity prompts you to resolve packages.
 3. Open any empty scene and choose **World Builder > Create Starter Scene** from the Unity editor menu.
 4. Press Play. The runtime Asset Creator UI should open.
-5. Use **Import OBJ** to select a local Blender-exported `.obj` file (geometry, UVs, and normals only in this first prototype; MTL/textures are next). The Unity Editor has an OBJ file picker. Standalone builds currently require the `WORLD_BUILDER_OBJ_PATH` environment variable; a native Windows file picker is planned.
-6. Orbit either viewport with left-drag, zoom with the scroll wheel.
+5. Use **Import OBJ** to select a local Blender-exported `.obj` file (geometry, UVs, and normals only in this first prototype; MTL/textures are next). The Unity Editor has an OBJ file picker. Windows standalone builds now include a native OBJ file picker (implementation pending Windows verification).
+6. Save/Open Project writes a one-mesh `.wbasset` snapshot (geometry and transforms; no materials yet).
+7. Orbit either viewport with left-drag, zoom with the scroll wheel.
 7. Native Windows builds must be built and tested on a Windows machine with Unity installed.
+
+See [implementation status and exact validation commands](docs/IMPLEMENTATION.md). Automatic runtime bootstrap no longer requires scene generation to enter Play Mode; Windows builds use **World Builder > Build Windows Release**. UI modernization and full world persistence remain pending.
 
 ## Key design requirements
 

@@ -25,8 +25,24 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
     int activeView = -1;
     static readonly CultureInfo C = CultureInfo.InvariantCulture;
 
+    Camera displayCamera;
+    GameObject workspaceLight;
+    int capturedView = -1;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+    static void Bootstrap()
+    {
+        if (FindFirstObjectByType<WorldBuilderRuntime>() == null)
+            new GameObject("World Builder Runtime").AddComponent<WorldBuilderRuntime>();
+    }
+
     void Start()
     {
+        workspaceLight = new GameObject("Workspace Sun");
+        var sun = workspaceLight.AddComponent<Light>();
+        sun.type = LightType.Directional;
+        sun.intensity = 1.4f;
+        sun.transform.rotation = Quaternion.Euler(45, -35, 0);
         referenceRoot = new GameObject("Reference Model");
         workRoot = new GameObject("Editable Model");
         referenceCamera = CreateCamera("Reference Camera", out referenceTexture);
@@ -35,6 +51,15 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
         MakePrimitive(workRoot.transform, PrimitiveType.Cube, new Vector3(0, 0.5f, 0));
         for (int i = 0; i < gamePaths.Length; i++) gamePaths[i] = PlayerPrefs.GetString("worldbuilder.gamePath." + i, "");
         LocateInstallations();
+        SetLayer(referenceRoot, 30);
+        SetLayer(workRoot, 31);
+        referenceCamera.cullingMask = 1 << 30;
+        workCamera.cullingMask = 1 << 31;
+        // Presentation only: no scene geometry is rendered a third time.
+        displayCamera = new GameObject("Workspace Display").AddComponent<Camera>();
+        displayCamera.cullingMask = 0;
+        displayCamera.clearFlags = CameraClearFlags.SolidColor;
+        displayCamera.backgroundColor = Color.black;
     }
 
     static Camera CreateCamera(string name, out RenderTexture target)
@@ -49,10 +74,6 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
         target = new RenderTexture(960, 600, 24);
         target.Create();
         camera.targetTexture = target;
-        var key = new GameObject(name + " Light").AddComponent<Light>();
-        key.type = LightType.Directional;
-        key.intensity = 1.4f;
-        key.transform.rotation = Quaternion.Euler(45, -35, 0);
         return camera;
     }
 
@@ -66,15 +87,25 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
 
     void Update()
     {
-        if (Input.GetMouseButton(0) && activeView >= 0)
+        var input = WorkspaceInput.Read();
+        float scale = Mathf.Max(0.7f, Mathf.Min(Screen.width / 1280f, Screen.height / 720f));
+        float w = Screen.width / scale, h = Screen.height / scale;
+        float vw = (w - 66f) / 2f, vh = Mathf.Max(100, h - 232f);
+        var pointer = new Vector2(input.Position.x, Screen.height - input.Position.y) / scale;
+        activeView = showBrowser ? -1 : new Rect(22, 58, vw, vh).Contains(pointer) ? 0
+            : new Rect(44 + vw, 58, vw, vh).Contains(pointer) ? 1 : -1;
+        if (input.Pressed) capturedView = activeView;
+        if (!input.Held || showBrowser) capturedView = -1;
+        if (capturedView >= 0)
         {
-            var delta = new Vector2(Input.GetAxis("Mouse X"), Input.GetAxis("Mouse Y")) * 3f;
-            if (activeView == 0) referenceAngles += new Vector2(-delta.y, delta.x);
+            var delta = input.Delta * 0.2f;
+            if (capturedView == 0) referenceAngles += new Vector2(-delta.y, delta.x);
             else workAngles += new Vector2(-delta.y, delta.x);
         }
-        float scroll = Input.mouseScrollDelta.y;
-        if (activeView == 0) referenceDistance = Mathf.Clamp(referenceDistance * Mathf.Exp(-scroll * 0.12f), 0.25f, 10000f);
-        if (activeView == 1) workDistance = Mathf.Clamp(workDistance * Mathf.Exp(-scroll * 0.12f), 0.25f, 10000f);
+        referenceAngles.x = Mathf.Clamp(referenceAngles.x, -89, 89);
+        workAngles.x = Mathf.Clamp(workAngles.x, -89, 89);
+        if (activeView == 0) referenceDistance = Mathf.Clamp(referenceDistance * Mathf.Exp(-input.Scroll * 0.12f), 0.25f, 10000f);
+        if (activeView == 1) workDistance = Mathf.Clamp(workDistance * Mathf.Exp(-input.Scroll * 0.12f), 0.25f, 10000f);
         Position(referenceCamera, referenceAngles, referenceCenter, referenceDistance);
         Position(workCamera, workAngles, workCenter, workDistance);
     }
@@ -97,7 +128,9 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
         GUI.color = new Color(0.08f, 0.105f, 0.14f);
         GUI.DrawTexture(new Rect(0, 0, w, h), Texture2D.whiteTexture);
         GUI.color = Color.white;
-        GUI.Label(new Rect(24, 12, 550, 28), "WORLD BUILDER  /  ASSET CREATOR  /  v0.2 preview");
+        GUI.Label(new Rect(24, 12, 550, 28), "WORLD BUILDER  /  ASSET CREATOR  /  foundation");
+        if (GUI.Button(new Rect(24, h - 24, 110, 22), "Save Project")) SaveProject();
+        if (GUI.Button(new Rect(140, h - 24, 110, 22), "Open Project")) OpenProject();
         if (GUI.Button(new Rect(w - 635, 10, 130, 32), "Game Browser")) showBrowser = !showBrowser;
         if (GUI.Button(new Rect(w - 495, 10, 130, 32), "Import OBJ")) Import();
         if (GUI.Button(new Rect(w - 355, 10, 155, 32), "Refresh Game Paths")) LocateInstallations();
@@ -114,8 +147,7 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
         GUI.DrawTexture(right, workTexture, ScaleMode.StretchToFill, false);
         GUI.Label(new Rect(left.x + 10, top + 10, 220, 22), "REFERENCE");
         GUI.Label(new Rect(right.x + 10, top + 10, 270, 22), "EDITABLE ASSET");
-        var mouse = Event.current.mousePosition;
-        activeView = left.Contains(mouse) ? 0 : right.Contains(mouse) ? 1 : -1;
+
         GUI.Label(new Rect(24, h - 159, w - 48, 28), "SOURCE  " + (string.IsNullOrWhiteSpace(modelPath) ? "No imported model" : modelPath));
         GUI.Label(new Rect(24, h - 133, w - 48, 26), "STATUS  " + status);
         GUI.Label(new Rect(24, h - 107, w - 48, 26), "GAME INSTALLATIONS  " + installationStatus);
@@ -127,15 +159,13 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
 
     void Import()
     {
-#if UNITY_EDITOR
-        string selected = UnityEditor.EditorUtility.OpenFilePanel("Import Blender OBJ", Path.GetDirectoryName(modelPath), "obj");
-        if (!string.IsNullOrEmpty(selected)) modelPath = selected;
-#endif
-        if (string.IsNullOrWhiteSpace(modelPath))
+        try
         {
-            status = "In editor use Import OBJ. For standalone builds, set WORLD_BUILDER_OBJ_PATH to an absolute OBJ path.";
-            modelPath = Environment.GetEnvironmentVariable("WORLD_BUILDER_OBJ_PATH") ?? "";
+            string selected = WorkspaceFiles.Pick(false, "Import Blender OBJ", "obj");
+            if (string.IsNullOrEmpty(selected)) return;
+            modelPath = selected;
         }
+        catch (Exception e) { status = e.Message; return; }
         ImportExisting();
     }
 
@@ -144,7 +174,7 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
         if (string.IsNullOrWhiteSpace(modelPath) || !File.Exists(modelPath)) { status = "No valid OBJ path selected."; return; }
         try
         {
-            var mesh = LoadObj(modelPath);
+            var mesh = WorldBuilderObj.Load(modelPath);
             foreach (Transform child in workRoot.transform) Destroy(child.gameObject);
             var model = new GameObject(Path.GetFileNameWithoutExtension(modelPath));
             model.transform.SetParent(workRoot.transform, false);
@@ -153,6 +183,7 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
             var renderer = model.AddComponent<MeshRenderer>();
             var shader = Shader.Find("HDRP/Lit") ?? Shader.Find("Standard") ?? Shader.Find("Unlit/Color");
             renderer.sharedMaterial = new Material(shader);
+            SetLayer(model, 31);
             var bounds = mesh.bounds;
             workCenter = bounds.center;
             workDistance = Mathf.Max(2f, bounds.extents.magnitude * 3f);
@@ -163,66 +194,45 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
         catch (Exception e) { status = "Import error: " + e.Message; Debug.LogException(e); }
     }
 
-    static Mesh LoadObj(string path)
+    void SaveProject()
     {
-        var positions = new List<Vector3>();
-        var uvs = new List<Vector2>();
-        var normals = new List<Vector3>();
-        var outPos = new List<Vector3>();
-        var outUV = new List<Vector2>();
-        var outNormal = new List<Vector3>();
-        var triangles = new List<int>();
-        var unique = new Dictionary<string, int>();
-        foreach (var raw in File.ReadLines(path))
-        {
-            string line = raw.Trim();
-            if (line.Length == 0 || line.StartsWith("#")) continue;
-            var tokens = line.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
-            if (tokens.Length < 2) continue;
-            if (tokens[0] == "v" && tokens.Length >= 4)
-                positions.Add(new Vector3(Parse(tokens[1]), Parse(tokens[2]), Parse(tokens[3])));
-            else if (tokens[0] == "vt" && tokens.Length >= 3)
-                uvs.Add(new Vector2(Parse(tokens[1]), Parse(tokens[2])));
-            else if (tokens[0] == "vn" && tokens.Length >= 4)
-                normals.Add(new Vector3(Parse(tokens[1]), Parse(tokens[2]), Parse(tokens[3])));
-            else if (tokens[0] == "f" && tokens.Length >= 4)
-            {
-                var corners = new List<int>();
-                for (int i = 1; i < tokens.Length; i++)
-                {
-                    var key = tokens[i];
-                    if (!unique.TryGetValue(key, out var vertexIndex))
-                    {
-                        var parts = key.Split('/');
-                        int posId = Index(parts[0], positions.Count);
-                        if (posId < 0 || posId >= positions.Count) throw new FormatException("OBJ face references nonexistent vertex");
-                        vertexIndex = outPos.Count;
-                        unique[key] = vertexIndex;
-                        outPos.Add(positions[posId]);
-                        outUV.Add(parts.Length > 1 && parts[1].Length > 0 ? uvs[Index(parts[1], uvs.Count)] : Vector2.zero);
-                        outNormal.Add(parts.Length > 2 && parts[2].Length > 0 ? normals[Index(parts[2], normals.Count)] : Vector3.zero);
-                    }
-                    corners.Add(vertexIndex);
-                }
-                for (int i = 1; i + 1 < corners.Count; i++)
-                {
-                    triangles.Add(corners[0]); triangles.Add(corners[i]); triangles.Add(corners[i + 1]);
-                }
-            }
-        }
-        var mesh = new Mesh { name = Path.GetFileNameWithoutExtension(path) };
-        mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
-        mesh.SetVertices(outPos);
-        mesh.SetUVs(0, outUV);
-        mesh.SetTriangles(triangles, 0);
-        bool hasNormals = outNormal.Exists(n => n.sqrMagnitude > 0.00001f);
-        if (hasNormals) mesh.SetNormals(outNormal); else mesh.RecalculateNormals();
-        mesh.RecalculateBounds();
-        return mesh;
+        try {
+            if (workRoot.transform.childCount != 1) throw new InvalidOperationException("Save currently supports one editable mesh.");
+            string path = WorkspaceFiles.Pick(true, "Save World Builder asset project", "wbasset");
+            if (string.IsNullOrEmpty(path)) return;
+            WorkspaceProject.Capture(workRoot.transform.GetChild(0).gameObject, modelPath).Save(path);
+            status = "Project saved: " + path;
+        } catch (Exception e) { status = "Save failed: " + e.Message; }
     }
 
-    static float Parse(string s) => float.Parse(s, NumberStyles.Float, C);
-    static int Index(string s, int count) { var i = int.Parse(s, C); return i > 0 ? i - 1 : count + i; }
+    void OpenProject()
+    {
+        try {
+            string path = WorkspaceFiles.Pick(false, "Open World Builder asset project", "wbasset");
+            if (string.IsNullOrEmpty(path)) return;
+            var project = WorkspaceProject.Open(path);
+            var mesh = project.CreateMesh(); // validate before replacing the current scene
+            var model = new GameObject(project.name);
+            model.AddComponent<MeshFilter>().sharedMesh = mesh;
+            model.AddComponent<MeshRenderer>().sharedMaterial = new Material(Shader.Find("HDRP/Lit") ?? Shader.Find("Standard"));
+            model.transform.SetParent(workRoot.transform, false);
+            model.transform.localPosition = project.position;
+            model.transform.localEulerAngles = project.rotation;
+            model.transform.localScale = project.scale;
+            for (int i = workRoot.transform.childCount - 2; i >= 0; i--) Destroy(workRoot.transform.GetChild(i).gameObject);
+            SetLayer(model, 31);
+            modelPath = project.source;
+            workCenter = model.transform.TransformPoint(mesh.bounds.center);
+            workDistance = Mathf.Max(2, mesh.bounds.extents.magnitude * model.transform.lossyScale.magnitude * 3);
+            status = "Project opened. Geometry is independent of the original source.";
+        } catch (Exception e) { status = "Open failed: " + e.Message; }
+    }
+
+    static void SetLayer(GameObject root, int layer)
+    {
+        root.layer = layer;
+        foreach (Transform child in root.transform) SetLayer(child.gameObject, layer);
+    }
 
     void LocateInstallations()
     {
@@ -327,6 +337,12 @@ public sealed class WorldBuilderRuntime : MonoBehaviour
 
     void OnDestroy()
     {
+        if (workspaceLight != null) Destroy(workspaceLight);
+        if (referenceRoot != null) Destroy(referenceRoot);
+        if (workRoot != null) Destroy(workRoot);
+        if (referenceCamera != null) Destroy(referenceCamera.gameObject);
+        if (workCamera != null) Destroy(workCamera.gameObject);
+        if (displayCamera != null) Destroy(displayCamera.gameObject);
         if (referenceTexture != null) { referenceTexture.Release(); Destroy(referenceTexture); }
         if (workTexture != null) { workTexture.Release(); Destroy(workTexture); }
     }
