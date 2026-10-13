@@ -166,6 +166,8 @@ def sync_model(model):
     if current==old:return
     if len(current)==len(old):
         for v,co in zip(model.data.vertices,current):v.co=co
+        model.data.update();model.update_tag()
+        return
     else:
         arrays={a.name:read(model,a.name) for a in model.data.attributes if a.data_type=='FLOAT' and a.domain=='POINT'}
         result={key:[] for key in arrays}
@@ -233,9 +235,17 @@ def sync_controls(scene,depsgraph):
     finally:_busy=False
 
 # Panels register after their native parent panel.
+@bpy.app.handlers.persistent
+def upgrade_layers(_unused):
+    for scene in bpy.data.scenes:
+        if any(o.get('wb_native_feature') in KINDS for o in scene.objects):migrate_scene(scene)
+
 def register_panels():
     for cls in (WB_PT_curbs,WB_PT_grass,WB_PT_sidewalks):bpy.utils.register_class(cls)
     if sync_controls not in bpy.app.handlers.depsgraph_update_post:bpy.app.handlers.depsgraph_update_post.append(sync_controls)
+    if upgrade_layers not in bpy.app.handlers.load_post:bpy.app.handlers.load_post.append(upgrade_layers)
+    upgrade_layers(None)
 def unregister_panels():
+    if upgrade_layers in bpy.app.handlers.load_post:bpy.app.handlers.load_post.remove(upgrade_layers)
     if sync_controls in bpy.app.handlers.depsgraph_update_post:bpy.app.handlers.depsgraph_update_post.remove(sync_controls)
     for cls in (WB_PT_sidewalks,WB_PT_grass,WB_PT_curbs):bpy.utils.unregister_class(cls)

@@ -9,6 +9,7 @@ for p,q in zip(s.points,[(0,0,1.5),(10,0,1.5),(20,0,1.5),(30,0,1.5)]):p.co=(*q,1
 road.data=curve;road.matrix_world=Matrix.Identity(4);m=ext.road_modifier(road)
 for name,val in [('road width',6.),('crossfall',0.)]:ext.set_input(m,name,val)
 bpy.context.scene.wb_native.road=road
+bpy.context.scene.wb_native.precise_cleanup=os.environ.get('WB_TEST_PRECISE')=='1'
 objects=[]
 for kind in ['curb','grass','sidewalk','grass','sidewalk']:objects.append(feats.add_extrusion(bpy.context.scene,road,kind)[0])
 model=layers.model_for(road)

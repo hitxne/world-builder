@@ -1,0 +1,68 @@
+{
+  "environment": "Blender 5.1.2 headless, same original TrackTools startup scene, four source-control-point movement updates per configuration",
+  "terrain_enabled": true,
+  "cleanup_enabled": true,
+  "before_v08": {
+    "road_only": {
+      "median_seconds": 0.030514278999362432,
+      "samples": [
+        0.03125753899985284,
+        0.029771018998872023,
+        0.03442956699836941,
+        0.029011479000473628
+      ]
+    },
+    "curb": {
+      "median_seconds": 2.6817911524994997,
+      "samples": [
+        2.6447102980000636,
+        2.7342294529989886,
+        2.718872006998936,
+        2.6401637330000085
+      ]
+    },
+    "curb_sidewalk": {
+      "median_seconds": 2.9323351920002096,
+      "samples": [
+        2.9864896519993636,
+        2.7530874170006427,
+        2.9005305009995936,
+        2.9641398830008256
+      ]
+    }
+  },
+  "after_v081": {
+    "road_only": {
+      "median_seconds": 0.029854874000193377,
+      "samples": [
+        0.031095464000827633,
+        0.03235829699951864,
+        0.027766036000684835,
+        0.02861428399955912
+      ]
+    },
+    "curb": {
+      "median_seconds": 0.10887373550031043,
+      "samples": [
+        0.10098050699889427,
+        0.10731033999945794,
+        0.11103369999909773,
+        0.11043713100116292
+      ]
+    },
+    "curb_sidewalk": {
+      "median_seconds": 0.12221047050024936,
+      "samples": [
+        0.12404446400068991,
+        0.12396771800013084,
+        0.11652290999882098,
+        0.12045322300036787
+      ]
+    }
+  },
+  "curb_sidewalk_speedup": 23.994140436553074,
+  "limitations": "Dependency-graph update timings, not graphical FPS; scene size and solver fallback affect results.",
+  "fast_and_precise_layer_checks_passed": true,
+  "existing_v08_upgrade_passed": true,
+  "portable_tests_passed": 46
+}

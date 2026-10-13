@@ -5,13 +5,13 @@ from .native_extension import socket,set_input,road_modifier
 
 def extrusion_group():
     name='WB_EXTENSION_BORDER_EXTRUSION';g=bpy.data.node_groups.get(name)
-    if g and g.get('wb_schema',0)>=8 and any(s.name=='Layer prefix' for s in g.interface.items_tree):return g
+    if g and g.get('wb_schema',0)>=9 and any(s.name=='Layer prefix' for s in g.interface.items_tree):return g
     if g and g.library:g=g.copy();g.name=name+'_v08'
     if g:g.nodes.clear()
     else:g=bpy.data.node_groups.new(name,'GeometryNodeTree')
-    g['wb_schema']=8
+    g['wb_schema']=9
     socket(g,'Geometry','INPUT','NodeSocketGeometry')
-    for n,k,d in [('Vertex controls','NodeSocketObject',None),('Layer prefix','NodeSocketString',''),('Use vertex controls','NodeSocketBool',False),('Use layer order','NodeSocketBool',False),('Junction cleanup','NodeSocketBool',True),('Road surfaces','NodeSocketCollection',None),('Enabled','NodeSocketBool',True),('Road','NodeSocketObject',None),('Profile curve','NodeSocketObject',None),('Path curve','NodeSocketObject',None),('Use custom path','NodeSocketBool',False),('Profile width scale','NodeSocketFloat',1.),('Profile height scale','NodeSocketFloat',1.),('Setback','NodeSocketFloat',0.),('Height offset','NodeSocketFloat',0.),('Crossing road','NodeSocketObject',None),('Lower at crossing','NodeSocketBool',False),('Transition length','NodeSocketFloat',3.),('Material','NodeSocketMaterial',None)]:
+    for n,k,d in [('Vertex controls','NodeSocketObject',None),('Layer prefix','NodeSocketString',''),('Use vertex controls','NodeSocketBool',False),('Use layer order','NodeSocketBool',False),('Junction cleanup','NodeSocketBool',True),('Precise viewport cleanup','NodeSocketBool',False),('Road surfaces','NodeSocketCollection',None),('Enabled','NodeSocketBool',True),('Road','NodeSocketObject',None),('Profile curve','NodeSocketObject',None),('Path curve','NodeSocketObject',None),('Use custom path','NodeSocketBool',False),('Profile width scale','NodeSocketFloat',1.),('Profile height scale','NodeSocketFloat',1.),('Setback','NodeSocketFloat',0.),('Height offset','NodeSocketFloat',0.),('Crossing road','NodeSocketObject',None),('Lower at crossing','NodeSocketBool',False),('Transition length','NodeSocketFloat',3.),('Material','NodeSocketMaterial',None)]:
         item=socket(g,n,'INPUT',k,d)
         if n in ('Profile width scale','Profile height scale','Transition length'):item.min_value=.01
     socket(g,'Geometry','OUTPUT','NodeSocketGeometry')
@@ -49,11 +49,10 @@ def extrusion_group():
         text=N.new('GeometryNodeStringJoin');text.inputs['Delimiter'].default_value='';suffix=N.new('FunctionNodeInputString');suffix.string=key;L.new(suffix.outputs['String'],text.inputs['Strings']);L.new(inp.outputs['Layer prefix'],text.inputs['Strings'])
         attr_field=N.new('GeometryNodeInputNamedAttribute');attr_field.data_type='FLOAT';L.new(text.outputs['String'],attr_field.inputs['Name'])
         value=N.new('GeometryNodeSampleIndex');value.data_type='FLOAT';value.domain='POINT';L.new(controls.outputs['Geometry'],value.inputs['Geometry']);L.new(attr_field.outputs['Attribute'],value.inputs['Value']);L.new(nearest.outputs['Index'],value.inputs['Index']);fields[key]=value.outputs['Value']
-    # Disconnected two-point curve segments provide real caps around disabled spans.
+    # Delete mesh edges to create connected enabled runs, capped only at real gaps.
     wire=N.new('GeometryNodeCurveToMesh');L.new(position_store.outputs['Geometry'],wire.inputs['Curve'])
-    split_edges=N.new('GeometryNodeSplitEdges');L.new(wire.outputs['Mesh'],split_edges.inputs['Mesh'])
     disabled=N.new('ShaderNodeMath');disabled.operation='LESS_THAN';disabled.inputs[1].default_value=.5;L.new(fields['enabled'],disabled.inputs[0])
-    delete_edges=N.new('GeometryNodeDeleteGeometry');delete_edges.domain='EDGE';L.new(split_edges.outputs['Mesh'],delete_edges.inputs['Geometry']);L.new(disabled.outputs[0],delete_edges.inputs['Selection'])
+    delete_edges=N.new('GeometryNodeDeleteGeometry');delete_edges.domain='EDGE';L.new(wire.outputs['Mesh'],delete_edges.inputs['Geometry']);L.new(disabled.outputs[0],delete_edges.inputs['Selection'])
     segments=N.new('GeometryNodeMeshToCurve');L.new(delete_edges.outputs['Geometry'],segments.inputs['Mesh'])
     normal_attr=N.new('GeometryNodeInputNamedAttribute');normal_attr.data_type='FLOAT_VECTOR';normal_attr.inputs['Name'].default_value='wb_edge_normal'
     segment_normals=N.new('GeometryNodeSetCurveNormal');segment_normals.inputs['Mode'].default_value='Free';L.new(segments.outputs['Curve'],segment_normals.inputs['Curve']);L.new(normal_attr.outputs['Attribute'],segment_normals.inputs['Normal'])
@@ -113,7 +112,15 @@ def extrusion_group():
     closed_cutter=N.new('GeometryNodeJoinGeometry');L.new(road_floor.outputs['Mesh'],closed_cutter.inputs['Geometry']);L.new(cutter.outputs['Mesh'],closed_cutter.inputs['Geometry'])
     weld_cutter=N.new('GeometryNodeMergeByDistance');weld_cutter.inputs['Distance'].default_value=.0001;L.new(closed_cutter.outputs['Geometry'],weld_cutter.inputs['Geometry'])
     clip=N.new('GeometryNodeMeshBoolean');clip.operation='DIFFERENCE';clip.solver='EXACT';clip.inputs['Self Intersection'].default_value=True;L.new(union.outputs['Mesh'],clip.inputs['Mesh 1']);L.new(weld_cutter.outputs['Geometry'],clip.inputs['Mesh 2'])
-    cleaned=N.new('GeometryNodeSwitch');cleaned.input_type='GEOMETRY';L.new(inp.outputs['Junction cleanup'],cleaned.inputs['Switch']);L.new(deform.outputs['Geometry'],cleaned.inputs['False']);L.new(clip.outputs['Mesh'],cleaned.inputs['True'])
+    # Fast interactive solver; precise cleanup remains lazy until requested/rendered.
+    fast_union=N.new('GeometryNodeMeshBoolean');fast_union.operation='UNION';fast_union.solver='FLOAT';L.new(deform.outputs['Geometry'],fast_union.inputs['Mesh 2'])
+    fast_clip=N.new('GeometryNodeMeshBoolean');fast_clip.operation='DIFFERENCE';fast_clip.solver='FLOAT';L.new(fast_union.outputs['Mesh'],fast_clip.inputs['Mesh 1']);L.new(weld_cutter.outputs['Geometry'],fast_clip.inputs['Mesh 2'])
+    viewport=N.new('GeometryNodeIsViewport');rendering=N.new('FunctionNodeBooleanMath');rendering.operation='NOT';L.new(viewport.outputs['Is Viewport'],rendering.inputs[0])
+    precise=N.new('FunctionNodeBooleanMath');precise.operation='OR';L.new(rendering.outputs['Boolean'],precise.inputs[0]);L.new(inp.outputs['Precise viewport cleanup'],precise.inputs[1])
+    fast_size=N.new('GeometryNodeAttributeDomainSize');fast_size.component='MESH';L.new(fast_clip.outputs['Mesh'],fast_size.inputs['Geometry']);fast_empty=N.new('ShaderNodeMath');fast_empty.operation='LESS_THAN';fast_empty.inputs[1].default_value=1;L.new(fast_size.outputs['Face Count'],fast_empty.inputs[0])
+    fallback=N.new('GeometryNodeSwitch');fallback.input_type='GEOMETRY';L.new(fast_empty.outputs[0],fallback.inputs['Switch']);L.new(fast_clip.outputs['Mesh'],fallback.inputs['False']);L.new(clip.outputs['Mesh'],fallback.inputs['True'])
+    quality=N.new('GeometryNodeSwitch');quality.input_type='GEOMETRY';L.new(precise.outputs['Boolean'],quality.inputs['Switch']);L.new(fallback.outputs['Output'],quality.inputs['False']);L.new(clip.outputs['Mesh'],quality.inputs['True'])
+    cleaned=N.new('GeometryNodeSwitch');cleaned.input_type='GEOMETRY';L.new(inp.outputs['Junction cleanup'],cleaned.inputs['Switch']);L.new(deform.outputs['Geometry'],cleaned.inputs['False']);L.new(quality.outputs['Output'],cleaned.inputs['True'])
     mat=N.new('GeometryNodeSetMaterial');L.new(inp.outputs['Material'],mat.inputs['Material']);L.new(cleaned.outputs['Output'],mat.inputs['Geometry'])
     # Native terrain receives tagged physical surfaces and their final boundary curves.
     surfaces=N.new('GeometryNodeStoreNamedAttribute');surfaces.data_type='INT';surfaces.domain='POINT';surfaces.inputs['Name'].default_value='parts';surfaces.inputs['Value'].default_value=1;L.new(mat.outputs['Geometry'],surfaces.inputs['Geometry'])
@@ -144,7 +151,7 @@ def add_extrusion(scene,road,kind):
     for p,(x,y) in zip(spline.points,coords):p.co=(x,y,0,1)
     profile=bpy.data.objects.new('WB_Profile_'+kind,curve);profiles.objects.link(profile);profile.hide_render=True;profile.hide_set(True);profile['wb_native_feature']='profile'
     obj=bpy.data.objects.new('WB_'+kind+'_'+road.name,bpy.data.meshes.new('WB_'+kind));collection.objects.link(obj);obj['wb_native_feature']=kind
-    mod=obj.modifiers.new('WB optional '+kind+' extrusion','NODES');mod.node_group=extrusion_group();set_input(mod,'Road',road);set_input(mod,'Profile curve',profile);set_input(mod,'Material',material({'curb':'concrete','sidewalk':'sidewalk','grass':'grass'}[kind]));
+    mod=obj.modifiers.new('WB optional '+kind+' extrusion','NODES');mod.node_group=extrusion_group();set_input(mod,'Road',road);set_input(mod,'Profile curve',profile);set_input(mod,'Precise viewport cleanup',scene.wb_native.precise_cleanup);set_input(mod,'Material',material({'curb':'concrete','sidewalk':'sidewalk','grass':'grass'}[kind]));
     from .native_layers import add_layer
     add_layer(scene,road,obj,kind)
     from .native_contacts import connect_surfaces

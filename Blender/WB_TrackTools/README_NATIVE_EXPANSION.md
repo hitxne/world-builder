@@ -1,6 +1,14 @@
-# TrackTools + WB — repeatable layer expansion 0.8
+# TrackTools + WB — repeatable layer expansion 0.8.1
 
-Install `WB_TrackTools_Additive_v08.zip`, enable the addon, open your original TrackTools project, and click **WB Roads > TrackTools + WB > Use existing TrackTools scene**. This button also adopts existing WB 0.7 extrusions into the new layer stack. TrackTools remains the authoring system: its original terrain plane, road curve data, and commercial Geometry Nodes groups are retained.
+Install `WB_TrackTools_Additive_v081.zip`, enable the addon, open your original TrackTools project, and click **WB Roads > TrackTools + WB > Use existing TrackTools scene**. This button also adopts existing WB 0.7 extrusions into the new layer stack. TrackTools remains the authoring system: its original terrain plane, road curve data, and commercial Geometry Nodes groups are retained.
+
+## Performance repair
+
+0.8.1 removes the per-segment edge splitting that capped every resampled piece. Enabled spans now remain connected, with caps only at actual disabled gaps. Viewport cleanup uses the faster floating-point Boolean solver. Precise cleanup is lazy: it runs for rendering or when **Precise viewport cleanup (slower)** is enabled in the sidebar. An empty fast result falls back to precise cleanup instead of silently deleting a feature. Fast and precise solvers can differ around difficult coplanar or self-intersecting junctions; enable precise viewport cleanup when reviewing those or exporting evaluated viewport meshes.
+
+The original native terrain remains connected and enabled. A fixed headless Blender 5.1.2 test moves the native road control point four times per configuration. With curb and sidewalk, the median update dropped from 2.93 s in 0.8 to approximately 0.12 s in 0.8.1, about 24 times faster in this scene. These are dependency-graph update times, not a graphical viewport FPS guarantee. The before/after samples are included in `Evidence/native_performance.json`.
+
+Existing layers upgrade automatically when this addon is enabled or their scene is loaded. Their ROAD/profile bindings and existing socket identifiers are retained; the original commercial node groups and road curve data are preserved. Unchanged modifier inputs are no longer retagged, and moving control points no longer rewrites unchanged layer-stack inputs. If the previous addon is already enabled, replace it with this version and restart Blender to load the new Python code.
 
 ## Ordered, repeatable layers
 
@@ -34,7 +42,7 @@ The native terrain's target collection is extended to include the generated WB s
 
 ## Validation and package
 
-Blender 5.1.2 headless integration checks verify the requested five-layer stack's non-overlapping lateral ranges, width propagation, reordering, independent repeated IDs, selected-vertex width/offset/height, span disabling, empty output when all vertices are disabled, and live source-curve edits. The existing native integration also passes: original source hashes and modifier stacks preserved, profile/custom-path edits live, and selected crossing top within 0.04 mm. The 46 portable geometry tests pass. Sidebar classes register successfully; mouse interaction has not been manually tested in a graphical Blender session.
+Blender 5.1.2 headless integration checks verify the requested five-layer stack's non-overlapping lateral ranges, width propagation, reordering, independent repeated IDs, selected-vertex width/offset/height, span disabling, empty output when all vertices are disabled, and live source-curve edits. The existing native integration also passes: original source hashes and modifier stacks preserved, profile/custom-path edits live, and selected crossing top within 0.04 mm. The layer checks pass in both fast and precise viewport modes; a 0.8 node-group adoption test retains existing road/profile bindings and verifies visible output after upgrading. The 46 portable geometry tests pass. Sidebar classes register successfully; mouse interaction has not been manually tested in a graphical Blender session.
 
 `Evidence/RepeatedLayers.png` is an actual Blender render of the tested stack, with terrain hidden for visibility and a plain asphalt material on a temporary render copy because the supplied texture file was unavailable. `Nodes/WB_Native_Expansion_Nodes.blend` contains only our expansion group, with no commercial node dependencies. The original TrackTools scene and node library are intentionally not redistributed.
 

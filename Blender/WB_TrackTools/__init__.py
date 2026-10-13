@@ -1,4 +1,4 @@
-bl_info={'name':'WB TrackTools Geometry Nodes Expansion','author':'World Builder','version':(0,8,0),'blender':(5,1,0),'location':'View3D > Sidebar > WB Roads','category':'Object'}
+bl_info={'name':'WB TrackTools Geometry Nodes Expansion','author':'World Builder','version':(0,8,1),'blender':(5,1,0),'location':'View3D > Sidebar > WB Roads','category':'Object'}
 import bpy,json,math
 from pathlib import Path
 from bpy.props import StringProperty,FloatProperty,BoolProperty,EnumProperty,FloatVectorProperty,CollectionProperty,PointerProperty

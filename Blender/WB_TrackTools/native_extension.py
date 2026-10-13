@@ -29,10 +29,21 @@ def socket(group,name,direction,kind,default=None):
 
 
 def set_input(mod,name,value):
-    item=next(s for s in mod.node_group.interface.items_tree if getattr(s,'in_out',None)=='INPUT' and s.name==name);mod[item.identifier]=value;mod.id_data.update_tag()
+    item=next(s for s in mod.node_group.interface.items_tree if getattr(s,'in_out',None)=='INPUT' and s.name==name)
+    if item.identifier in mod and mod[item.identifier]==value:return
+    mod[item.identifier]=value;mod.id_data.update_tag()
+
+
+def cleanup_quality(self,context):
+    for obj in context.scene.objects:
+        if obj.get('wb_native_feature') not in ('curb','sidewalk','grass'):continue
+        for mod in obj.modifiers:
+            if mod.type=='NODES' and mod.node_group and mod.node_group.get('wb_schema',0)>=9:
+                set_input(mod,'Precise viewport cleanup',self.precise_cleanup)
 
 
 class WBNativeSettings(bpy.types.PropertyGroup):
+    precise_cleanup:bpy.props.BoolProperty(name='Precise viewport cleanup',default=False,update=cleanup_quality)
     road:PointerProperty(name='TrackTools road curve',type=bpy.types.Object,poll=lambda self,obj:bool(road_modifier(obj)))
     terrain:PointerProperty(name='TrackTools terrain plane',type=bpy.types.Object,poll=lambda self,obj:obj.type=='MESH')
 
@@ -86,6 +97,8 @@ class WB_PT_native(bpy.types.Panel):
         road=s.road;mod=road_modifier(road)
         if mod:
             layout.label(text='Edit the original road curve in Edit Mode')
+            layout.prop(s,'precise_cleanup',text='Precise viewport cleanup (slower)')
+            layout.label(text='Renders use precise cleanup automatically')
             for name in ('road width','resolution','crossfall','Shrinkwrap'):
                 item=next((p for p in mod.node_group.interface.items_tree if p.name==name and getattr(p,'in_out',None)=='INPUT'),None)
                 if item:layout.prop(mod,'["'+item.identifier+'"]',text=name)
