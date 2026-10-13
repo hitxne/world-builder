@@ -1,0 +1,129 @@
+{
+  "version": 2,
+  "revision": 1,
+  "units": "m",
+  "fixture": "parking",
+  "settings": {
+    "curb_height": 0.1524,
+    "sidewalk_width": 1.8,
+    "sample_spacing": 0.5,
+    "show_guides": false
+  },
+  "crosswalks": [],
+  "parking": {
+    "id": "parking-1",
+    "vertices": [
+      [
+        12,
+        -28
+      ],
+      [
+        45,
+        -28
+      ],
+      [
+        62,
+        -16
+      ],
+      [
+        62,
+        18
+      ],
+      [
+        46,
+        32
+      ],
+      [
+        12,
+        25
+      ]
+    ],
+    "access_road": {
+      "id": "access-1",
+      "half_width": 4,
+      "length": 110
+    },
+    "connection": {
+      "id": "lot-connection",
+      "station": 0,
+      "width": 8,
+      "lot_edge_x": 12
+    },
+    "islands": [
+      {
+        "id": "planter-1",
+        "vertices": [
+          [
+            26,
+            -4
+          ],
+          [
+            42,
+            -4
+          ],
+          [
+            44,
+            0
+          ],
+          [
+            42,
+            4
+          ],
+          [
+            26,
+            4
+          ],
+          [
+            24,
+            0
+          ]
+        ]
+      },
+      {
+        "id": "planter-2",
+        "vertices": [
+          [
+            50,
+            12
+          ],
+          [
+            55,
+            12
+          ],
+          [
+            55,
+            22
+          ],
+          [
+            50,
+            22
+          ]
+        ]
+      }
+    ],
+    "rows": [
+      {
+        "id": "stall-row-south",
+        "origin": [
+          18,
+          -24
+        ],
+        "count": 10,
+        "stall_width": 2.7,
+        "stall_depth": 5.4,
+        "bearing": 0
+      },
+      {
+        "id": "stall-row-north",
+        "origin": [
+          18,
+          15
+        ],
+        "count": 10,
+        "stall_width": 2.7,
+        "stall_depth": 5.4,
+        "bearing": 0
+      }
+    ]
+  }
+}

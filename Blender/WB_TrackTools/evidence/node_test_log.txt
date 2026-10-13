@@ -1,0 +1,6 @@
+WB_GN_BOUNDS [(-3.0, 3.0), (0.0, 30.0), (0.0, 0.0)] [(-3.0, 6.0), (0.0, 30.0), (0.0, 0.0)]
+Info: Saved as "WB_Profile_Proof.blend"
+WB_NODE_TEST_PASSED
+Blender 5.1.2 (hash ec6e62d40fa9 built 2026-05-19 02:18:37)
+
+Blender quit

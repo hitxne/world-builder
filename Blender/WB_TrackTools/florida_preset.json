@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "units": "m",
+  "lane_width_example": 3.6576,
+  "urban_lane_width_example": 3.3528,
+  "curb_reveal_example": 0.1524,
+  "certified": false,
+  "status": "Illustrative defaults; context-specific standards selection pending"
+}

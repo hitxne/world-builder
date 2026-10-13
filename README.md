@@ -29,4 +29,8 @@ A Windows-first, game-feeling, standalone map and asset creation tool. The first
 
 The prototype includes a two-camera viewport, camera orbit, a runtime OBJ geometry reader and persistence of the last selected local source path, plus directory-probe foundations. The full procedural 3D building systems, original game-resource decoders, texture-brush painting, high-quality baking, production asset library, signed updates, and game exporters are **planned but not yet implemented**.
 
-Do not commit copyrighted game assets, extracted packages, or imported commercial models to this repository. It currently contains only project source and documentation.
+Do not commit copyrighted game assets, extracted packages, or imported commercial models to this repository. The Blender folder contains our own generated demonstration scenes; commercial TrackTools nodes remain external dependencies.
+
+## Blender Road Lab
+
+The `BLENDER` branch includes the Blender 5.1 road, parking, terrain sculpting and bridge-support tool under [Blender](Blender/README.md). Install [the addon](Blender/Dist/WB_RoadLab_Addon_v06.zip). Editable terrain links your original TrackTools node library; that commercial dependency is not included.

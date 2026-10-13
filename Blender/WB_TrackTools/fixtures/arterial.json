@@ -1,0 +1,71 @@
+{
+  "version": 2,
+  "revision": 1,
+  "units": "m",
+  "fixture": "arterial",
+  "settings": {
+    "curb_height": 0.1524,
+    "sidewalk_width": 3.2,
+    "sample_spacing": 0.5,
+    "show_guides": false
+  },
+  "boulevard": {
+    "id": "arterial-1",
+    "length": 160,
+    "lane_width": 3.66,
+    "median_width": 6,
+    "pocket_start": 30,
+    "taper_length": 25,
+    "pocket_end": 90,
+    "median_material": "grass",
+    "origin": [
+      0,
+      0,
+      0
+    ],
+    "bearing": 0,
+    "sample_spacing": 1,
+    "median_end": 103,
+    "nose_length": 5,
+    "nose_shape": "rounded",
+    "through_lanes": 3,
+    "bike_width": 1.5,
+    "outer_turns": [
+      {
+        "id": "aux-right-1",
+        "side": 1,
+        "start": 45,
+        "taper": 20,
+        "end": 112,
+        "taper_out": 12,
+        "width": 3.66
+      },
+      {
+        "id": "aux-right-2",
+        "side": -1,
+        "start": 12,
+        "taper": 12,
+        "end": 85,
+        "taper_out": 20,
+        "width": 3.66
+      }
+    ],
+    "driveways": [
+      {
+        "id": "driveway-east",
+        "side": 1,
+        "station": 92,
+        "width": 8,
+        "depth": 14
+      },
+      {
+        "id": "driveway-west",
+        "side": -1,
+        "station": 40,
+        "width": 8,
+        "depth": 14
+      }
+    ]
+  },
+  "crosswalks": []
+}

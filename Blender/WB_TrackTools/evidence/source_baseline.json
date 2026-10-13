@@ -1,0 +1,122 @@
+{
+  "runtime": "5.1.2",
+  "libraries": [
+    {
+      "name": "TT_NodeGroups.blend",
+      "filepath": "/workspace/scratch/acafaa3cddce/upload/TT_NodeGroups(3).blend"
+    }
+  ],
+  "groups": {
+    "ROAD": {
+      "nodes": 138,
+      "links": 163,
+      "nested": [
+        "smooth_Z_curve",
+        "road_bool",
+        "|DJH_border_curve"
+      ]
+    },
+    "road_bool": {
+      "nodes": 204,
+      "links": 255,
+      "nested": [
+        "\u24e4 Solidify",
+        "End lenght selection",
+        "curve_coord",
+        "curve_coord",
+        "End lenght selection"
+      ]
+    },
+    "TERRAIN_GEOMETRY": {
+      "nodes": 108,
+      "links": 142,
+      "nested": [
+        "subdivide_selection",
+        "subdivide_selection",
+        "subdivide_selection",
+        "subdivide_selection",
+        "subdivide_selection",
+        "subdivide_selection",
+        "TRANSFER_UVs"
+      ]
+    },
+    "TERRAIN_SHAPE": {
+      "nodes": 235,
+      "links": 276,
+      "nested": []
+    },
+    "|DJH_border_curve": {
+      "nodes": 86,
+      "links": 107,
+      "nested": []
+    }
+  },
+  "objects": [
+    {
+      "name": "road_01",
+      "type": "CURVE",
+      "modifiers": [
+        {
+          "name": "ROAD",
+          "group": "ROAD"
+        }
+      ],
+      "vertices": 322,
+      "polygons": 270,
+      "seconds": 0.1205736019996948
+    },
+    {
+      "name": "terrain_01",
+      "type": "MESH",
+      "modifiers": [
+        {
+          "name": "QUICK_GRID",
+          "group": "QUICK_GRID"
+        },
+        {
+          "name": "TERRAIN_GEOMETRY",
+          "group": "TERRAIN_GEOMETRY"
+        },
+        {
+          "name": "TERRAIN_SHAPE",
+          "group": "TERRAIN_SHAPE"
+        }
+      ],
+      "vertices": 4033,
+      "polygons": 4159,
+      "seconds": 6.414900008167024e-05
+    }
+  ],
+  "images": [
+    {
+      "name": "Render Result",
+      "path": "",
+      "packed": false
+    },
+    {
+      "name": "road_asphalt1_diff.png",
+      "path": "//texture/road_asphalt1_diff.png",
+      "packed": false
+    },
+    {
+      "name": "road_asphalt1_norm.png",
+      "path": "//texture/road_asphalt1_norm.png",
+      "packed": false
+    },
+    {
+      "name": "road_asphalt1_rough.png",
+      "path": "//texture/road_asphalt1_rough.png",
+      "packed": false
+    },
+    {
+      "name": "Wild Grass_diff.dds",
+      "path": "//texture/Wild Grass_diff.dds",
+      "packed": false
+    },
+    {
+      "name": "Wild Grass_Norm.dds",
+      "path": "//texture/Wild Grass_Norm.dds",
+      "packed": false
+    }
+  ]
+}

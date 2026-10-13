@@ -1,0 +1,59 @@
+/workspace/scratch/acafaa3cddce/WB_TrackTools/build_blender.py:11: DeprecationWarning: 'World.use_nodes' is expected to be removed in Blender 6.0
+  world=bpy.data.worlds.new('WB_EvidenceWorld');world.use_nodes=True;world.node_tree.nodes.get('Background').inputs[0].default_value=(.24,.27,.31,1);world.node_tree.nodes.get('Background').inputs[1].default_value=.8;scene.world=world
+00:22.366  render           | Saved: '/workspace/scratch/acafaa3cddce/WB_Output/intersection_overview.png'
+00:35.914  render           | Saved: '/workspace/scratch/acafaa3cddce/WB_Output/intersection_top.png'
+01:01.003  render           | Saved: '/workspace/scratch/acafaa3cddce/WB_Output/ramp_detail.png'
+01:01.108  blend            | Read blend: "/workspace/scratch/acafaa3cddce/WB_Output/WB_Intersection.blend"
+Info: Saved as "WB_Intersection.blend"
+WB_FIXTURE_VALIDATED intersection
+01:28.116  render           | Saved: '/workspace/scratch/acafaa3cddce/WB_Output/skew_overview.png'
+01:28.220  blend            | Read blend: "/workspace/scratch/acafaa3cddce/WB_Output/WB_Skew.blend"
+Info: Saved as "WB_Skew.blend"
+WB_FIXTURE_VALIDATED skew
+01:35.325  render           | Saved: '/workspace/scratch/acafaa3cddce/WB_Output/boulevard_overview.png'
+01:35.350  blend            | Read blend: "/workspace/scratch/acafaa3cddce/WB_Output/WB_Boulevard.blend"
+Info: Saved as "WB_Boulevard.blend"
+WB_FIXTURE_VALIDATED boulevard
+01:54.113  render           | Saved: '/workspace/scratch/acafaa3cddce/WB_Output/arterial_overview.png'
+01:54.179  blend            | Read blend: "/workspace/scratch/acafaa3cddce/WB_Output/WB_Arterial.blend"
+Info: Saved as "WB_Arterial.blend"
+WB_FIXTURE_VALIDATED arterial
+02:06.191  render           | Saved: '/workspace/scratch/acafaa3cddce/WB_Output/interchange_overview.png'
+02:06.263  blend            | Read blend: "/workspace/scratch/acafaa3cddce/WB_Output/WB_Interchange.blend"
+Info: Saved as "WB_Interchange.blend"
+WB_FIXTURE_VALIDATED interchange
+02:14.367  render           | Saved: '/workspace/scratch/acafaa3cddce/WB_Output/parking_overview.png'
+02:14.442  blend            | Read blend: "/workspace/scratch/acafaa3cddce/WB_Output/WB_Parking.blend"
+Info: Saved as "WB_Parking.blend"
+WB_FIXTURE_VALIDATED parking
+02:14.931  blend            | Read blend: "/workspace/scratch/acafaa3cddce/upload/TT_startup_scene_01(2).blend"
+02:15.322  object.modifier  | WARNING Object: "road_01", Modifier: "ROAD", Property type does not match input socket "(Shrinkwrap)"
+02:15.322  object.modifier  | WARNING Object: "road_01", Modifier: "ROAD", Property type does not match input socket "(UVs)"
+02:15.322  object.modifier  | WARNING Object: "road_01", Modifier: "ROAD", Property type does not match input socket "(stretch UVs)"
+02:15.363  object.modifier  | WARNING Object: "terrain_01", Modifier: "TERRAIN_GEOMETRY", Property type does not match input socket "(show point count)"
+02:15.363  object.modifier  | WARNING Object: "terrain_01", Modifier: "TERRAIN_GEOMETRY", Property type does not match input socket "(invert delete far)"
+02:15.447  object.modifier  | WARNING Object: "terrain_01", Modifier: "TERRAIN_SHAPE", Property type does not match input socket "(cut terrain)"
+02:15.447  object.modifier  | WARNING Object: "terrain_01", Modifier: "TERRAIN_SHAPE", Property type does not match input socket "(extrude cutter)"
+02:15.447  object.modifier  | WARNING Object: "terrain_01", Modifier: "TERRAIN_SHAPE", Property type does not match input socket "(show point count)"
+02:24.034  object.modifier  | WARNING Object: "terrain_01", Modifier: "TERRAIN_GEOMETRY", Property type does not match input socket "(show point count)"
+02:24.034  object.modifier  | WARNING Object: "terrain_01", Modifier: "TERRAIN_GEOMETRY", Property type does not match input socket "(invert delete far)"
+02:24.091  object.modifier  | WARNING Object: "terrain_01", Modifier: "TERRAIN_SHAPE", Property type does not match input socket "(cut terrain)"
+02:24.091  object.modifier  | WARNING Object: "terrain_01", Modifier: "TERRAIN_SHAPE", Property type does not match input socket "(extrude cutter)"
+02:24.091  object.modifier  | WARNING Object: "terrain_01", Modifier: "TERRAIN_SHAPE", Property type does not match input socket "(show point count)"
+Info: Read library: '/workspace/scratch/acafaa3cddce/upload/TT_NodeGroups.blend', '//TT_NodeGroups.blend', parent '<direct>'
+Warning: Unable to open '/workspace/scratch/acafaa3cddce/upload/TT_NodeGroups.blend': No such file or directory
+Info: Cannot find lib '/workspace/scratch/acafaa3cddce/upload/TT_NodeGroups.blend'
+Info: LIB: NodeTree: 'QUICK_GRID' missing from '/workspace/scratch/acafaa3cddce/upload/TT_NodeGroups.blend', parent '<direct>'
+Info: LIB: NodeTree: 'ROAD' missing from '/workspace/scratch/acafaa3cddce/upload/TT_NodeGroups.blend', parent '<direct>'
+Info: LIB: NodeTree: 'TERRAIN_GEOMETRY' missing from '/workspace/scratch/acafaa3cddce/upload/TT_NodeGroups.blend', parent '<direct>'
+Info: LIB: NodeTree: 'TERRAIN_SHAPE' missing from '/workspace/scratch/acafaa3cddce/upload/TT_NodeGroups.blend', parent '<direct>'
+Warning: 1 libraries and 4 linked data-blocks are missing (including 0 ObjectData), please check the Info and Outliner editors for details
+WB_BASELINE_COMPARE {'road_01': {'vertices': 322, 'faces': 270, 'surface_area': 271.47874879837036, 'bounds': [[-3.0000078678131104, 3.0000078678131104], [-22.619237899780273, 22.61923599243164], [0.0, 0.05000000074505806]]}, 'terrain_01': {'vertices': 4033, 'faces': 4160, 'surface_area': 40049.362142562866, 'bounds': [[-100.0, 100.00000762939453], [-100.0, 100.00001525878906], [-3.814697265625e-06, 1.5331608057022095]]}} {'road_01': {'vertices': 322, 'faces': 270, 'surface_area': 271.47874879837036, 'bounds': [[-3.0000078678131104, 3.0000078678131104], [-22.619237899780273, 22.61923599243164], [0.0, 0.05000000074505806]]}, 'terrain_01': {'vertices': 4033, 'faces': 4160, 'surface_area': 40049.362142562866, 'bounds': [[-100.0, 100.00000762939453], [-100.0, 100.00001525878906], [-3.814697265625e-06, 1.5331608057022095]]}}
+02:24.280  blend            | Read blend: "/workspace/scratch/acafaa3cddce/WB_Output/WB_Startup_Extension.blend"
+Info: Saved as "WB_Startup_Extension.blend"
+Info: Saved "WB_Startup_Extension.blend"
+Info: Read library: '/workspace/scratch/acafaa3cddce/WB_Output/WB_TrackTools_Dependency.blend', '//WB_TrackTools_Dependency.blend', parent '<direct>'
+WB_BUILD_COMPLETE /workspace/scratch/acafaa3cddce/WB_Output
+Blender 5.1.2 (hash ec6e62d40fa9 built 2026-05-19 02:18:37)
+
+Blender quit

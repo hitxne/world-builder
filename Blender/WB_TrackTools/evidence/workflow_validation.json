@@ -1,0 +1,15 @@
+{
+  "runtime": "5.1.2",
+  "results": {
+    "intersection": "load and regenerate operators passed",
+    "skew": "load and regenerate operators passed",
+    "boulevard": "load and regenerate operators passed",
+    "arterial": "load and regenerate operators passed",
+    "interchange": "load and regenerate operators passed",
+    "parking": "load and regenerate operators passed",
+    "parking_outlines": "editable planter applied; lot boundary unchanged",
+    "endpoint_handle": "uncaptured move rejected, captured override kept, far endpoint unchanged",
+    "corner_change": "manual endpoint retained",
+    "curve_copy": "independent source preserved; repeat command retains earlier groups"
+  }
+}

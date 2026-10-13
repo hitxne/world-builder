@@ -1,0 +1,10 @@
+/workspace/scratch/acafaa3cddce/WB_TrackTools/build_blender.py:11: DeprecationWarning: 'World.use_nodes' is expected to be removed in Blender 6.0
+  world=bpy.data.worlds.new('WB_EvidenceWorld');world.use_nodes=True;world.node_tree.nodes.get('Background').inputs[0].default_value=(.24,.27,.31,1);world.node_tree.nodes.get('Background').inputs[1].default_value=.8;scene.world=world
+00:14.168  render           | Saved: '/workspace/scratch/acafaa3cddce/WB_Output/parking_overview.png'
+00:14.207  blend            | Read blend: "/workspace/scratch/acafaa3cddce/WB_Output/WB_Parking.blend"
+Info: Saved as "WB_Parking.blend"
+WB_FIXTURE_VALIDATED parking
+WB_BUILD_COMPLETE /workspace/scratch/acafaa3cddce/WB_Output
+Blender 5.1.2 (hash ec6e62d40fa9 built 2026-05-19 02:18:37)
+
+Blender quit

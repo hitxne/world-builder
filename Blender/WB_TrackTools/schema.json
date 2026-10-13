@@ -1,0 +1,211 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WB Road Lab v2 graph",
+  "type": "object",
+  "required": [
+    "version",
+    "revision",
+    "units",
+    "fixture",
+    "settings",
+    "crosswalks"
+  ],
+  "properties": {
+    "version": {
+      "const": 2
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "units": {
+      "const": "m"
+    },
+    "fixture": {
+      "enum": [
+        "intersection",
+        "skew",
+        "boulevard",
+        "arterial",
+        "interchange",
+        "parking"
+      ]
+    },
+    "settings": {
+      "type": "object",
+      "required": [
+        "curb_height",
+        "sidewalk_width",
+        "sample_spacing"
+      ],
+      "properties": {
+        "curb_height": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "sidewalk_width": {
+          "type": "number",
+          "exclusiveMinimum": 0.5
+        },
+        "sample_spacing": {
+          "type": "number",
+          "minimum": 0.1
+        }
+      }
+    },
+    "parking": {
+      "type": "object",
+      "required": [
+        "id",
+        "vertices",
+        "access_road",
+        "connection",
+        "islands",
+        "rows"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "vertices": {
+          "type": "array",
+          "minItems": 3,
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "number"
+            }
+          }
+        },
+        "islands": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "vertices"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "vertices": {
+                "type": "array",
+                "minItems": 3,
+                "items": {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "items": {
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "crosswalks": {
+      "type": "array"
+    },
+    "junction": {
+      "type": "object",
+      "required": [
+        "id",
+        "approaches",
+        "corners",
+        "lanes",
+        "movements"
+      ]
+    },
+    "boulevard": {
+      "type": "object",
+      "required": [
+        "id",
+        "length",
+        "lane_width",
+        "median_width"
+      ]
+    },
+    "interchange": {
+      "type": "object",
+      "required": [
+        "id",
+        "length",
+        "split_station",
+        "merge_station",
+        "median_setback",
+        "connections"
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "fixture": {
+            "enum": [
+              "intersection",
+              "skew"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "junction"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "fixture": {
+            "enum": [
+              "boulevard",
+              "arterial"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "boulevard"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "fixture": {
+            "const": "interchange"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "interchange"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "fixture": {
+            "const": "parking"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "parking"
+        ]
+      }
+    }
+  ]
+}

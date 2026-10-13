@@ -1,0 +1,402 @@
+{
+  "version": 2,
+  "revision": 1,
+  "units": "m",
+  "fixture": "skew",
+  "settings": {
+    "curb_height": 0.1524,
+    "sidewalk_width": 3.2,
+    "sample_spacing": 0.5,
+    "show_guides": false
+  },
+  "junction": {
+    "id": "junction-1",
+    "center": [
+      0,
+      0,
+      0
+    ],
+    "approaches": [
+      {
+        "id": "approach-E",
+        "label": "E",
+        "bearing": 0,
+        "offset": 0,
+        "half_width": 7.32,
+        "length": 42,
+        "stop_station": 30
+      },
+      {
+        "id": "approach-N",
+        "label": "N",
+        "bearing": 1.4207963267948966,
+        "offset": 0,
+        "half_width": 7.32,
+        "length": 42,
+        "stop_station": 30
+      },
+      {
+        "id": "approach-W",
+        "label": "W",
+        "bearing": 3.141592653589793,
+        "offset": 2,
+        "half_width": 7.32,
+        "length": 42,
+        "stop_station": 30
+      },
+      {
+        "id": "approach-S",
+        "label": "S",
+        "bearing": 4.71238898038469,
+        "offset": 0,
+        "half_width": 7.32,
+        "length": 42,
+        "stop_station": 30
+      }
+    ],
+    "corners": {
+      "NE": {
+        "id": "corner-NE",
+        "label": "NE",
+        "approach_pair": [
+          "approach-E",
+          "approach-N"
+        ],
+        "radius": 5,
+        "mode": "manual"
+      },
+      "NW": {
+        "id": "corner-NW",
+        "label": "NW",
+        "approach_pair": [
+          "approach-N",
+          "approach-W"
+        ],
+        "radius": 7,
+        "mode": "manual"
+      },
+      "SW": {
+        "id": "corner-SW",
+        "label": "SW",
+        "approach_pair": [
+          "approach-W",
+          "approach-S"
+        ],
+        "radius": 9,
+        "mode": "manual"
+      },
+      "SE": {
+        "id": "corner-SE",
+        "label": "SE",
+        "approach_pair": [
+          "approach-S",
+          "approach-E"
+        ],
+        "radius": 11,
+        "mode": "manual"
+      }
+    },
+    "lanes": [
+      {
+        "id": "lane-E-incoming",
+        "approach_id": "approach-E",
+        "travel": "incoming",
+        "offset": 1.83,
+        "width": 3.66,
+        "connection_station": 24,
+        "type": "through",
+        "mode": "auto"
+      },
+      {
+        "id": "lane-E-outgoing",
+        "approach_id": "approach-E",
+        "travel": "outgoing",
+        "offset": -1.83,
+        "width": 3.66,
+        "connection_station": 24,
+        "type": "through",
+        "mode": "auto"
+      },
+      {
+        "id": "lane-N-incoming",
+        "approach_id": "approach-N",
+        "travel": "incoming",
+        "offset": 1.83,
+        "width": 3.66,
+        "connection_station": 24,
+        "type": "through",
+        "mode": "auto"
+      },
+      {
+        "id": "lane-N-outgoing",
+        "approach_id": "approach-N",
+        "travel": "outgoing",
+        "offset": -1.83,
+        "width": 3.66,
+        "connection_station": 24,
+        "type": "through",
+        "mode": "auto"
+      },
+      {
+        "id": "lane-W-incoming",
+        "approach_id": "approach-W",
+        "travel": "incoming",
+        "offset": 1.83,
+        "width": 3.66,
+        "connection_station": 24,
+        "type": "through",
+        "mode": "auto"
+      },
+      {
+        "id": "lane-W-outgoing",
+        "approach_id": "approach-W",
+        "travel": "outgoing",
+        "offset": -1.83,
+        "width": 3.66,
+        "connection_station": 24,
+        "type": "through",
+        "mode": "auto"
+      },
+      {
+        "id": "lane-S-incoming",
+        "approach_id": "approach-S",
+        "travel": "incoming",
+        "offset": 1.83,
+        "width": 3.66,
+        "connection_station": 24,
+        "type": "through",
+        "mode": "auto"
+      },
+      {
+        "id": "lane-S-outgoing",
+        "approach_id": "approach-S",
+        "travel": "outgoing",
+        "offset": -1.83,
+        "width": 3.66,
+        "connection_station": 24,
+        "type": "through",
+        "mode": "auto"
+      },
+      {
+        "id": "lane-E-incoming-outer",
+        "approach_id": "approach-E",
+        "travel": "incoming",
+        "offset": 5.49,
+        "width": 3.66,
+        "connection_station": 24,
+        "type": "through",
+        "mode": "auto"
+      },
+      {
+        "id": "lane-E-outgoing-outer",
+        "approach_id": "approach-E",
+        "travel": "outgoing",
+        "offset": -5.49,
+        "width": 3.66,
+        "connection_station": 24,
+        "type": "through",
+        "mode": "auto"
+      },
+      {
+        "id": "lane-N-incoming-outer",
+        "approach_id": "approach-N",
+        "travel": "incoming",
+        "offset": 5.49,
+        "width": 3.66,
+        "connection_station": 24,
+        "type": "through",
+        "mode": "auto"
+      },
+      {
+        "id": "lane-N-outgoing-outer",
+        "approach_id": "approach-N",
+        "travel": "outgoing",
+        "offset": -5.49,
+        "width": 3.66,
+        "connection_station": 24,
+        "type": "through",
+        "mode": "auto"
+      },
+      {
+        "id": "lane-W-incoming-outer",
+        "approach_id": "approach-W",
+        "travel": "incoming",
+        "offset": 5.49,
+        "width": 3.66,
+        "connection_station": 24,
+        "type": "through",
+        "mode": "auto"
+      },
+      {
+        "id": "lane-W-outgoing-outer",
+        "approach_id": "approach-W",
+        "travel": "outgoing",
+        "offset": -5.49,
+        "width": 3.66,
+        "connection_station": 24,
+        "type": "through",
+        "mode": "auto"
+      },
+      {
+        "id": "lane-S-incoming-outer",
+        "approach_id": "approach-S",
+        "travel": "incoming",
+        "offset": 5.49,
+        "width": 3.66,
+        "connection_station": 24,
+        "type": "through",
+        "mode": "auto"
+      },
+      {
+        "id": "lane-S-outgoing-outer",
+        "approach_id": "approach-S",
+        "travel": "outgoing",
+        "offset": -5.49,
+        "width": 3.66,
+        "connection_station": 24,
+        "type": "through",
+        "mode": "auto"
+      }
+    ],
+    "movements": [
+      {
+        "id": "movement-SN",
+        "from": "lane-S-incoming",
+        "to": "lane-N-outgoing",
+        "type": "straight"
+      },
+      {
+        "id": "movement-SW",
+        "from": "lane-S-incoming",
+        "to": "lane-W-outgoing",
+        "type": "left"
+      },
+      {
+        "id": "movement-SE",
+        "from": "lane-S-incoming-outer",
+        "to": "lane-E-outgoing-outer",
+        "type": "right"
+      },
+      {
+        "id": "movement-NS",
+        "from": "lane-N-incoming",
+        "to": "lane-S-outgoing",
+        "type": "straight"
+      },
+      {
+        "id": "movement-EW",
+        "from": "lane-E-incoming",
+        "to": "lane-W-outgoing",
+        "type": "straight"
+      },
+      {
+        "id": "movement-WE",
+        "from": "lane-W-incoming",
+        "to": "lane-E-outgoing",
+        "type": "straight"
+      },
+      {
+        "id": "movement-SN-outer",
+        "from": "lane-S-incoming-outer",
+        "to": "lane-N-outgoing-outer",
+        "type": "straight"
+      },
+      {
+        "id": "movement-NS-outer",
+        "from": "lane-N-incoming-outer",
+        "to": "lane-S-outgoing-outer",
+        "type": "straight"
+      },
+      {
+        "id": "movement-EW-outer",
+        "from": "lane-E-incoming-outer",
+        "to": "lane-W-outgoing-outer",
+        "type": "straight"
+      },
+      {
+        "id": "movement-WE-outer",
+        "from": "lane-W-incoming-outer",
+        "to": "lane-E-outgoing-outer",
+        "type": "straight"
+      }
+    ]
+  },
+  "crosswalks": [
+    {
+      "id": "crosswalk-N",
+      "width": 3.2,
+      "stripe_width": 0.45,
+      "stripe_gap": 0.45,
+      "endpoints": {
+        "A": {
+          "id": "endpoint-N-A",
+          "approach_id": "approach-N",
+          "side": 1,
+          "station": 26,
+          "opening_width": 3.2,
+          "transition_left": 1.8,
+          "transition_right": 2.4,
+          "run": 2,
+          "height": 0.1524,
+          "rotation_offset": 0,
+          "mode": "auto",
+          "ramp_type": "custom-depressed",
+          "warning_depth": 0.61
+        },
+        "B": {
+          "id": "endpoint-N-B",
+          "approach_id": "approach-N",
+          "side": -1,
+          "station": 26,
+          "opening_width": 3.2,
+          "transition_left": 2.6,
+          "transition_right": 1.6,
+          "run": 2.2,
+          "height": 0.1524,
+          "rotation_offset": 0,
+          "mode": "auto",
+          "ramp_type": "custom-depressed",
+          "warning_depth": 0.61
+        }
+      }
+    },
+    {
+      "id": "crosswalk-S",
+      "width": 3.2,
+      "stripe_width": 0.45,
+      "stripe_gap": 0.45,
+      "endpoints": {
+        "A": {
+          "id": "endpoint-S-A",
+          "approach_id": "approach-S",
+          "side": 1,
+          "station": 26,
+          "opening_width": 3.2,
+          "transition_left": 1.8,
+          "transition_right": 2.4,
+          "run": 2,
+          "height": 0.1524,
+          "rotation_offset": 0,
+          "mode": "auto",
+          "ramp_type": "custom-depressed",
+          "warning_depth": 0.61
+        },
+        "B": {
+          "id": "endpoint-S-B",
+          "approach_id": "approach-S",
+          "side": -1,
+          "station": 26,
+          "opening_width": 3.2,
+          "transition_left": 2.6,
+          "transition_right": 1.6,
+          "run": 2.2,
+          "height": 0.1524,
+          "rotation_offset": 0,
+          "mode": "auto",
+          "ramp_type": "custom-depressed",
+          "warning_depth": 0.61
+        }
+      }
+    }
+  ]
+}

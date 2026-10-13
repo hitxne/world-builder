@@ -1,0 +1,43 @@
+test_arterial_one_side_edit_preserves_opposite (test_connected.ConnectedTests.test_arterial_one_side_edit_preserves_opposite) ... ok
+test_boulevard_fixed_opposition (test_connected.ConnectedTests.test_boulevard_fixed_opposition) ... ok
+test_corner_edit_local (test_connected.ConnectedTests.test_corner_edit_local) ... ok
+test_determinism_v2 (test_connected.ConnectedTests.test_determinism_v2) ... ok
+test_driveways_staggered (test_connected.ConnectedTests.test_driveways_staggered) ... ok
+test_duplicate_id_rejected (test_connected.ConnectedTests.test_duplicate_id_rejected) ... ok
+test_endpoint_edit_local (test_connected.ConnectedTests.test_endpoint_edit_local) ... ok
+test_endpoints_face_each_other (test_connected.ConnectedTests.test_endpoints_face_each_other) ... ok
+test_interchange_decks_have_no_lower_connections (test_connected.ConnectedTests.test_interchange_decks_have_no_lower_connections) ... ok
+test_invalid_radius_rejected (test_connected.ConnectedTests.test_invalid_radius_rejected) ... ok
+test_island_edit_keeps_parking_outline (test_connected.ConnectedTests.test_island_edit_keeps_parking_outline) ... ok
+test_manual_override_preserved (test_connected.ConnectedTests.test_manual_override_preserved) ... ok
+test_median_ends_before_road (test_connected.ConnectedTests.test_median_ends_before_road) ... ok
+test_median_setback_independent_of_ramp (test_connected.ConnectedTests.test_median_setback_independent_of_ramp) ... ok
+test_metadata_roundtrip (test_connected.ConnectedTests.test_metadata_roundtrip) ... ok
+test_movement_directions (test_connected.ConnectedTests.test_movement_directions) ... ok
+test_parking_concave_polygon (test_connected.ConnectedTests.test_parking_concave_polygon) ... ok
+test_parking_cuts_have_explicit_target (test_connected.ConnectedTests.test_parking_cuts_have_explicit_target) ... ok
+test_planter_outside_rejected (test_connected.ConnectedTests.test_planter_outside_rejected) ... ok
+test_planter_overlap_rejected (test_connected.ConnectedTests.test_planter_overlap_rejected) ... ok
+test_pocket_station_precision (test_connected.ConnectedTests.test_pocket_station_precision) ... ok
+test_ramp_lowers_curb (test_connected.ConnectedTests.test_ramp_lowers_curb) ... ok
+test_ribbon_top_normals (test_connected.ConnectedTests.test_ribbon_top_normals) ... ok
+test_sidewalks_outside_pavement (test_connected.ConnectedTests.test_sidewalks_outside_pavement) ... ok
+test_skew_and_offset (test_connected.ConnectedTests.test_skew_and_offset) ... ok
+test_solid_geometry_closed (test_connected.ConnectedTests.test_solid_geometry_closed) ... ok
+test_triangle_areas_match_polygon (test_connected.ConnectedTests.test_triangle_areas_match_polygon) ... ok
+test_warning_domes_closed (test_connected.ConnectedTests.test_warning_domes_closed) ... ok
+test_corner_isolation (test_core.Tests.test_corner_isolation) ... ok
+test_corner_radius (test_core.Tests.test_corner_radius) ... ok
+test_determinism (test_core.Tests.test_determinism) ... ok
+test_endpoint_isolation (test_core.Tests.test_endpoint_isolation) ... ok
+test_fixed_right_edge (test_core.Tests.test_fixed_right_edge) ... ok
+test_invalid_ids (test_core.Tests.test_invalid_ids) ... ok
+test_order (test_core.Tests.test_order) ... ok
+test_ramp_profile (test_core.Tests.test_ramp_profile) ... ok
+test_roundtrip (test_core.Tests.test_roundtrip) ... ok
+test_units (test_core.Tests.test_units) ... ok
+
+----------------------------------------------------------------------
+Ran 38 tests in 36.136s
+
+OK

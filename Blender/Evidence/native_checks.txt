@@ -1,0 +1,4 @@
+Blender 5.1.2: WB_NATIVE_TERRAIN_PASSED
+Standalone preview: 43 scene objects, no external libraries after save/reopen.
+Editable scene: both linked terrain modifiers present and evaluated after save/reopen with the original TrackTools node library.
+Setup operator: missing library preserves existing generated geometry; valid library reconnects and rebuilds.
