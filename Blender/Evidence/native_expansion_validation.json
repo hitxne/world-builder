@@ -1,0 +1,17 @@
+{
+  "native_sources_preserved": true,
+  "native_modifier_stacks_preserved": true,
+  "road_curve_edit_delta_m": 0.9999997615814209,
+  "extrusions": [
+    "curb",
+    "sidewalk",
+    "grass"
+  ],
+  "sidewalk_crossing_lowering_m": 0.11469388008117676,
+  "json_world_not_required": true,
+  "editable_custom_path_vertices_live": true,
+  "optional_enable_toggle": true,
+  "editable_profile_vertices_live": true,
+  "original_files_unchanged": true,
+  "sidewalk_crossing_contact_error_m": 3.814697265625e-05
+}

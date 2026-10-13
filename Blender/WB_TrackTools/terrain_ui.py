@@ -224,6 +224,10 @@ class WB_OT_capture_terrain(bpy.types.Operator):
 
 class WB_PT_terrain(bpy.types.Panel):
     bl_label='Terrain sculpting';bl_idname='WB_PT_terrain';bl_space_type='VIEW_3D';bl_region_type='UI';bl_category='WB Roads'
+    @classmethod
+    def poll(cls,context):
+        from .native_extension import is_tracktools_scene
+        return not is_tracktools_scene(context.scene)
     def draw(self,context):
         l=self.layout;s=context.scene.wb_terrain
         if not terrain_object():l.operator('wb.load_terrain_world');return

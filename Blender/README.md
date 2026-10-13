@@ -1,31 +1,24 @@
-# WB Road Lab 0.6 — TrackTools terrain connection
+# WB TrackTools additive Geometry Nodes expansion — 0.7
 
-The accompanying WB_RoadLab_v06 download bundle contains `Scenes/WB_Terrain_Preview.blend` to inspect the repaired world immediately. It contains baked terrain and needs no external nodes. It is a viewing copy; use the live scene for sculpting.
+This is the first migration to the correct TrackTools-native workflow. Open your original working TrackTools project. Keep its original road curves, terrain plane, collections and Geometry Nodes modifiers. Install `Dist/WB_TrackTools_Additive_v07.zip`, enable it, then use **WB Roads > TrackTools + WB > Use existing TrackTools scene**.
 
-Install `Dist/WB_RoadLab_Addon_v06.zip` in Blender 5.1 (Preferences > Add-ons > Install from Disk). Open `Scenes/WB_TrackTools_Terrain.blend` from that bundle. Put your own original TrackTools node library alongside it, named `TT_NodeGroups.blend`, or use **WB Roads > Terrain sculpting > Connect TrackTools node library** and select your existing node library. The commercial node library is intentionally not included in this bundle.
+The addon binds to the existing native `ROAD` curve modifier and `TERRAIN_SHAPE` plane. It does not replace either object, apply their modifiers, rewrite their node groups, create a parallel JSON world, or save over the original TrackTools files. The native width, resolution, crossfall and terrain blend controls continue to edit the existing modifiers.
 
-The connection button also works in an existing version 3 WB connected-world scene. It stages a replacement first; missing or incompatible node libraries leave the current world intact. Terrain must be enabled. Direct mesh edits are protected from rebuilding; use the terrain brush for persistent sculpting.
+Choose **Add curb**, **Add sidewalk**, or **Add grass strip**. Each adds its own Geometry Nodes extrusion object and editable profile curve in WB-owned collections. No extrusion is enabled until you add it. The original ROAD output's tagged border curves are used as the live path. Geometry is generated on demand by `WB_EXTENSION_BORDER_EXTRUSION`.
 
-## What changed
+Select an extrusion to expose its node inputs:
 
-The connected terrain now links the original `TERRAIN_GEOMETRY` and `TERRAIN_SHAPE` groups. WB supplies upward road, sidewalk, curb, median and planter faces plus tagged border curves (`parts` and `edgeID`). The original groups perform adaptive refinement, terrain shaping, road cutting and boundary alignment. Their contents are never edited.
+- Enabled: independently show or disable its output.
+- Profile curve: edit the curve's vertices to shape its cross section.
+- Path curve / Use custom path: optionally use your own curve vertices instead of the native border curves.
+- Profile width scale, profile height scale, setback and height offset.
+- Crossing road, Lower at crossing and Transition length: choose a native crossing road and enable lowering. Ray hits set the sidewalk top to the native crossing surface; the nearby transition blends smoothly. The cross-section thickness is retained. Elevated crossing roads do not force a downward depression.
+- Material: available in the Geometry Nodes modifier.
 
-This uses TrackTools' native optional **cut terrain** branch, rather than lowering a whole terrain grid beneath every road slab. Elevated bridge faces and the designated elevated portions of connecting ramps are excluded from the ground cutter. Supports sample evaluated terrain or physical median soil, not the unmodified baseline.
+The **Edit extrusion profile vertices** button selects the profile curve and enters Edit Mode. You can also use the Outliner. Profile objects are initially hidden from the viewport and render so they do not appear as loose scene geometry. Changing the road curve, native ROAD settings, profile vertices or crossing curve updates the extrusion without rebuilding a JSON graph.
 
-The original TrackTools startup uses its continuous-under-road configuration with cutting disabled. That was checked as the baseline. Cutting is enabled in this WB adapter because the WB network contains overlapping separate furniture surfaces and Boolean road joins; continuous terrain produced up to 9 cm of pavement overlap in the complex fixture. The native cutting branch removed those visible overlaps and aligned the exterior boundaries.
+The standalone `WB_Native_Expansion_Nodes.blend` contains only our expansion group. It has no commercial node dependencies. You may append that group and use its exposed object inputs directly without the sidebar.
 
-The circular Raise, Lower, Smooth and Flatten brushes edit a persistent baseline while the linked TrackTools modifiers preserve road contact. The cursor follows the evaluated terrain. Radius and strength remain adjustable, including Shift+wheel and Ctrl+wheel. Enter commits; Escape cancels. Contact band and terrain blend can be changed before **Apply detail / rebuild terrain**. The demonstration uses a 1 m contact band, 18 m blend, and 1 m baseline grid.
+Validation on Blender 5.1.2: original source-file hashes unchanged; native source datablocks and modifier stacks unchanged; +1 m road-curve edit moves the extrusion +1 m; editable profile vertex changes appear in output; enable toggle removes/restores output; sidewalk crossing top within 0.04 mm of the selected native road. The modal Edit Mode UI has not been manually exercised in a graphical Blender session.
 
-## Validation and limits
-
-Blender 5.1.2 headless: simple raised strip, complex interchange renders, six exposed arterial sidewalk-edge contact samples, all four brush modes, baseline persistence through rebuild and save/reopen, linked native groups, and original library byte hash unchanged. Existing 46 portable tests pass.
-
-At the six unobstructed arterial samples, terrain contact error was below 0.02 mm. Across 16,785 terrain/pavement projected triangle overlaps, the largest positive difference was 0.044 mm (Boolean/float precision), rather than the earlier 9 cm. This is a tolerance measurement, not an exact-zero claim. Samples deliberately avoid ramp and access openings, where the sidewalk has been cut away. See `Evidence/validation.json`; the renders are in the accompanying download bundle.
-
-The modal brush UI has not been exercised in a live graphical session. Very dense terrain and Boolean cuts can take several seconds to evaluate. The comparison scene demonstrates this network; it does not certify every possible road layout or terrain source.
-
-Original commercial TrackTools files remain external dependencies. The original startup and node library were inspected without overwriting them. The editable scene resolves `//TT_NodeGroups.blend` relative to its own folder. Reconnect the library after moving it. The standalone preview is for immediate visual review.
-
-## Repository checks
-
-Run `python -m unittest discover -s Blender/WB_TrackTools/tests` from the repository root. To run the native integration check, set `WB_TT_LIBRARY` to your own TrackTools node file and run `blender --background --factory-startup --python Blender/tests/native_terrain.py`. The test checks road-edge contact, native terrain cutting, all brush modes, rebuild persistence and save/reopen. Run `python Blender/build_addon.py` to rebuild the installable ZIP from source.
+Scope: this first additive pass covers native binding and optional curb/sidewalk/grass extrusions with a selected crossing road. It does not migrate the previous JSON world's junctions, parking lots, median openings, brush or bridge support tools into native node controls yet. Legacy examples are hidden in a native TrackTools scene to avoid replacing the authoring workflow. Multiple crossing roads require separate extrusion controls in this pass. Terrain collection targeting remains under your original TrackTools controls; the addon does not rewrite those connections.

@@ -85,6 +85,10 @@ class WB_OT_move_support(bpy.types.Operator):
 
 class WB_PT_bridge(bpy.types.Panel):
  bl_label='Bridge supports';bl_idname='WB_PT_bridge';bl_space_type='VIEW_3D';bl_region_type='UI';bl_category='WB Roads'
+ @classmethod
+ def poll(cls,context):
+  from .native_extension import is_tracktools_scene
+  return not is_tracktools_scene(context.scene)
  def draw(self,context):
   l=self.layout;s=context.scene.wb_bridge
   if not context.scene.wb_graph:l.label(text='Load a connected world first');return

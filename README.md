@@ -31,6 +31,6 @@ The prototype includes a two-camera viewport, camera orbit, a runtime OBJ geomet
 
 Do not commit copyrighted game assets, extracted packages, or imported commercial models to this repository. The Blender folder contains our own generated demonstration scenes; commercial TrackTools nodes remain external dependencies.
 
-## Blender Road Lab
+## TrackTools + WB Geometry Nodes expansion
 
-The `BLENDER` branch includes the Blender 5.1 road, parking, terrain sculpting and bridge-support tool under [Blender](Blender/README.md). Install [the addon](Blender/Dist/WB_RoadLab_Addon_v06.zip). Editable terrain links your original TrackTools node library; that commercial dependency is not included.
+On the `BLENDER` branch, [Blender](Blender/README.md) now provides an additive extension for an existing TrackTools scene. Keep the original terrain plane, road curves and node groups. Install [v0.7](Blender/Dist/WB_TrackTools_Additive_v07.zip) to add optional, controllable curb, sidewalk and grass Geometry Nodes extrusions with editable profile/path curves and crossing-road sidewalk lowering. The original commercial node library remains external. The v0.6 JSON-world architecture is superseded; remaining legacy features still need native migration.

@@ -1,4 +1,4 @@
-bl_info={'name':'WB TrackTools Road Lab','author':'World Builder','version':(0,6,0),'blender':(5,1,0),'location':'View3D > Sidebar > WB Roads','category':'Object'}
+bl_info={'name':'WB TrackTools Geometry Nodes Expansion','author':'World Builder','version':(0,7,0),'blender':(5,1,0),'location':'View3D > Sidebar > WB Roads','category':'Object'}
 import bpy,json,math
 from pathlib import Path
 from bpy.props import StringProperty,FloatProperty,BoolProperty,EnumProperty,FloatVectorProperty,CollectionProperty,PointerProperty
@@ -315,7 +315,11 @@ class WB_OT_diagnostics(bpy.types.Operator,ExportHelper):
   Path(self.filepath).write_text(json.dumps(diagnostics.inspect_scene(context.scene),indent=2));return {'FINISHED'}
 
 class WB_PT_panel(bpy.types.Panel):
- bl_label='WB Road Lab 0.5';bl_idname='WB_PT_panel';bl_space_type='VIEW_3D';bl_region_type='UI';bl_category='WB Roads'
+ bl_label='Legacy WB examples';bl_idname='WB_PT_panel';bl_space_type='VIEW_3D';bl_region_type='UI';bl_category='WB Roads'
+ @classmethod
+ def poll(cls,context):
+  from .native_extension import is_tracktools_scene
+  return not is_tracktools_scene(context.scene)
  def draw(self,context):
   l=self.layout;s=context.scene.wb_controls;l.prop(s,'fixture');l.operator('wb.load_pilot');l.operator('wb.curve_profile')
   if not context.scene.wb_graph:return
@@ -375,7 +379,11 @@ def register():
  terrain_ui.register()
  from . import bridge_ui
  bridge_ui.register()
+ from . import native_extension
+ native_extension.register()
 def unregister():
+ from . import native_extension
+ native_extension.unregister()
  from . import bridge_ui
  bridge_ui.unregister()
  from . import terrain_ui
