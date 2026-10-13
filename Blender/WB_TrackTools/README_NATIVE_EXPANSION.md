@@ -1,24 +1,41 @@
-# WB TrackTools additive Geometry Nodes expansion — 0.7
+# TrackTools + WB — repeatable layer expansion 0.8
 
-This is the first migration to the correct TrackTools-native workflow. Open your original working TrackTools project. Keep its original road curves, terrain plane, collections and Geometry Nodes modifiers. Install the v0.7 addon ZIP, enable it, then use **WB Roads > TrackTools + WB > Use existing TrackTools scene**.
+Install `WB_TrackTools_Additive_v08.zip`, enable the addon, open your original TrackTools project, and click **WB Roads > TrackTools + WB > Use existing TrackTools scene**. This button also adopts existing WB 0.7 extrusions into the new layer stack. TrackTools remains the authoring system: its original terrain plane, road curve data, and commercial Geometry Nodes groups are retained.
 
-The addon binds to the existing native `ROAD` curve modifier and `TERRAIN_SHAPE` plane. It does not replace either object, apply their modifiers, rewrite their node groups, create a parallel JSON world, or save over the original TrackTools files. The native width, resolution, crossfall and terrain blend controls continue to edit the existing modifiers.
+## Ordered, repeatable layers
 
-Choose **Add curb**, **Add sidewalk**, or **Add grass strip**. Each adds its own Geometry Nodes extrusion object and editable profile curve in WB-owned collections. No extrusion is enabled until you add it. The original ROAD output's tagged border curves are used as the live path. Geometry is generated on demand by `WB_EXTENSION_BORDER_EXTRUSION`.
+Every Add button creates an independent instance with a unique identifier, profile, settings, and generated object. Add **Curb, Grass Patch, Sidewalk, Grass Patch, Sidewalk** in that order for:
 
-Select an extrusion to expose its node inputs:
+**Road → Curb 1 → Grass Patch 1 → Sidewalk 1 → Grass Patch 2 → Sidewalk 2.**
 
-- Enabled: independently show or disable its output.
-- Profile curve: edit the curve's vertices to shape its cross section.
-- Path curve / Use custom path: optionally use your own curve vertices instead of the native border curves.
-- Profile width scale, profile height scale, setback and height offset.
-- Crossing road, Lower at crossing and Transition length: choose a native crossing road and enable lowering. Ray hits set the sidewalk top to the native crossing surface; the nearby transition blends smoothly. The cross-section thickness is retained. Elevated crossing roads do not force a downward depression.
-- Material: available in the Geometry Nodes modifier.
+The list runs from the road edge outward, on both native borders. Select a row and use the up/down arrows to reorder it. Starting offsets are calculated from the widths and gaps of preceding enabled layers, independently at each original control vertex. Changing an inner width moves the outer layers. Disabling a layer closes its occupied space. Repeated kinds never share vertex-setting identifiers.
 
-The **Edit extrusion profile vertices** button selects the profile curve and enters Edit Mode. You can also use the Outliner. Profile objects are initially hidden from the viewport and render so they do not appear as loose scene geometry. Changing the road curve, native ROAD settings, profile vertices or crossing curve updates the extrusion without rebuilding a JSON graph.
+The **Curb layers**, **Grass patch layers**, and **Sidewalk layers** panels contain separate controls for every instance:
 
-The standalone `WB_Native_Expansion_Nodes.blend` contains only our expansion group. It has no commercial node dependencies. You may append that group and use its exposed object inputs directly without the sidebar.
+- Width: physical width in metres, independent of the profile's original X coordinate.
+- Offset / gap: additional lateral space before this layer; zero means touching the preceding layer.
+- Z offset: vertical adjustment relative to the road and profile height.
+- Enabled at vertices: removes the affected span, rather than hiding all instances of that kind.
+- Layer enabled: globally enables/disables just this instance.
 
-Validation on Blender 5.1.2: original source-file hashes unchanged; native source datablocks and modifier stacks unchanged; +1 m road-curve edit moves the extrusion +1 m; editable profile vertex changes appear in output; enable toggle removes/restores output; sidewalk crossing top within 0.04 mm of the selected native road. The modal Edit Mode UI has not been manually exercised in a graphical Blender session.
+In **Object Mode**, these fields apply to all road vertices. In the original road's **Edit Mode**, they apply only to selected control vertices. Click **Read selected** to inspect the first selected point; mixed selections show that point's values. **Disable** and **Restore** affect only the selected vertices for that instance. Values interpolate along the raw source curve. Enabled values use a midpoint threshold, so a transition between enabled and disabled control points ends halfway along that segment. Select consecutive vertices to remove a longer span. The generated feature is capped at disabled spans.
 
-Scope: this first additive pass covers native binding and optional curb/sidewalk/grass extrusions with a selected crossing road. It does not migrate the previous JSON world's junctions, parking lots, median openings, brush or bridge support tools into native node controls yet. Legacy examples are hidden in a native TrackTools scene to avoid replacing the authoring workflow. Multiple crossing roads require separate extrusion controls in this pass. Terrain collection targeting remains under your original TrackTools controls; the addon does not rewrite those connections.
+New control vertices currently receive layer defaults when source topology changes; existing vertices at unchanged positions retain their settings. Reordering preserves identifiers and all vertex values. Normal movement of existing points remains live.
+
+## Geometry Nodes and terrain
+
+Each WB feature has a Geometry Nodes modifier using `WB_EXTENSION_BORDER_EXTRUSION`. Its live source is the original ROAD's tagged border output. Editable profile curves and optional custom path curves remain available. Profile height scale and selected-crossing lowering are retained. With ordered vertex controls enabled, **Width** in the layer panel is authoritative; the legacy profile width scale and setback inputs are for standalone node use.
+
+WB vertex settings live on WB-owned helper objects. The raw road curve is shared read-only into a helper so custom attributes can interpolate without repurposing the original radius or tilt fields. Original ROAD and TERRAIN node groups are never rewritten.
+
+The native terrain's target collection is extended to include the generated WB surfaces and boundary curves. An object-only target is wrapped in a WB-owned collection retaining the original target. Original terrain modifiers and blend settings remain active. A separate road-only reference collection prevents WB features from referencing themselves through the terrain target collection.
+
+**Junction cleanup** resolves intersecting sweep volumes and clips material over native asphalt through WB-only boolean nodes. Acute corners and unusual multi-road layouts still need visual review; this is not a claim that every possible junction has been validated. **Crossing road**, **Lower at crossing**, and **Transition length** remain explicit controls on each feature modifier.
+
+## Validation and package
+
+Blender 5.1.2 headless integration checks verify the requested five-layer stack's non-overlapping lateral ranges, width propagation, reordering, independent repeated IDs, selected-vertex width/offset/height, span disabling, empty output when all vertices are disabled, and live source-curve edits. The existing native integration also passes: original source hashes and modifier stacks preserved, profile/custom-path edits live, and selected crossing top within 0.04 mm. The 46 portable geometry tests pass. Sidebar classes register successfully; mouse interaction has not been manually tested in a graphical Blender session.
+
+`Evidence/RepeatedLayers.png` is an actual Blender render of the tested stack, with terrain hidden for visibility and a plain asphalt material on a temporary render copy because the supplied texture file was unavailable. `Nodes/WB_Native_Expansion_Nodes.blend` contains only our expansion group, with no commercial node dependencies. The original TrackTools scene and node library are intentionally not redistributed.
+
+Native migration of the legacy JSON parking, median, sculpt-brush, and bridge-support examples remains separate work. Existing legacy examples are hidden in native TrackTools scenes.

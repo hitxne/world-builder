@@ -1,0 +1,56 @@
+{
+  "stack": [
+    {
+      "name": "Curb 1",
+      "kind": "curb",
+      "uid": "0722e358661b",
+      "radial_bounds": [
+        2.999999761581421,
+        3.320000171661377
+      ]
+    },
+    {
+      "name": "Grass Patch 1",
+      "kind": "grass",
+      "uid": "ee5fe88fb026",
+      "radial_bounds": [
+        3.3199994564056396,
+        4.520000457763672
+      ]
+    },
+    {
+      "name": "Sidewalk 1",
+      "kind": "sidewalk",
+      "uid": "f478c271351a",
+      "radial_bounds": [
+        4.5199995040893555,
+        6.720000267028809
+      ]
+    },
+    {
+      "name": "Grass Patch 2",
+      "kind": "grass",
+      "uid": "4ff5e1a17c41",
+      "radial_bounds": [
+        6.719999313354492,
+        7.920001029968262
+      ]
+    },
+    {
+      "name": "Sidewalk 2",
+      "kind": "sidewalk",
+      "uid": "644d0021de59",
+      "radial_bounds": [
+        7.919999122619629,
+        10.120000839233398
+      ]
+    }
+  ],
+  "both_road_sides": true,
+  "reordering": true,
+  "width_propagation": true,
+  "selected_vertex_fields": true,
+  "selected_disable": true,
+  "all_disabled_empty": true,
+  "live_source_curve": true
+}

@@ -1,4 +1,4 @@
-bl_info={'name':'WB TrackTools Geometry Nodes Expansion','author':'World Builder','version':(0,7,0),'blender':(5,1,0),'location':'View3D > Sidebar > WB Roads','category':'Object'}
+bl_info={'name':'WB TrackTools Geometry Nodes Expansion','author':'World Builder','version':(0,8,0),'blender':(5,1,0),'location':'View3D > Sidebar > WB Roads','category':'Object'}
 import bpy,json,math
 from pathlib import Path
 from bpy.props import StringProperty,FloatProperty,BoolProperty,EnumProperty,FloatVectorProperty,CollectionProperty,PointerProperty
@@ -379,11 +379,15 @@ def register():
  terrain_ui.register()
  from . import bridge_ui
  bridge_ui.register()
+ from . import native_layers
+ native_layers.register()
  from . import native_extension
  native_extension.register()
 def unregister():
  from . import native_extension
  native_extension.unregister()
+ from . import native_layers
+ native_layers.unregister()
  from . import bridge_ui
  bridge_ui.unregister()
  from . import terrain_ui

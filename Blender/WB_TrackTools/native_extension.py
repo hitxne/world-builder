@@ -20,6 +20,8 @@ def is_tracktools_scene(scene):
 
 
 def socket(group,name,direction,kind,default=None):
+    result=next((s for s in group.interface.items_tree if s.name==name and getattr(s,'in_out',None)==direction),None)
+    if result:return result
     result=group.interface.new_socket(name=name,in_out=direction,socket_type=kind)
     if default is not None:result.default_value=default
     return result
@@ -41,6 +43,8 @@ class WB_OT_bind_native(bpy.types.Operator):
         roads=native_roads(context.scene);terrain=native_terrain(context.scene)
         if not roads or not terrain:self.report({'ERROR'},'Open your original TrackTools scene with its road curves and terrain plane');return {'CANCELLED'}
         settings=context.scene.wb_native;settings.road=context.active_object if context.active_object in roads else roads[0];settings.terrain=terrain
+        from .native_layers import migrate_scene
+        migrate_scene(context.scene)
         return {'FINISHED'}
 
 
@@ -51,7 +55,8 @@ class WB_OT_native_curbs(bpy.types.Operator):
         road=context.scene.wb_native.road
         if not road_modifier(road):self.report({'ERROR'},'Select an existing TrackTools road curve');return {'CANCELLED'}
         from .native_extrusion import add_extrusion
-        obj,profile=add_extrusion(context.scene,road,self.kind);context.view_layer.objects.active=obj;obj.select_set(True)
+        obj,profile=add_extrusion(context.scene,road,self.kind)
+        if context.mode=='OBJECT':context.view_layer.objects.active=obj;obj.select_set(True)
         return {'FINISHED'}
 
 
@@ -84,7 +89,15 @@ class WB_PT_native(bpy.types.Panel):
             for name in ('road width','resolution','crossfall','Shrinkwrap'):
                 item=next((p for p in mod.node_group.interface.items_tree if p.name==name and getattr(p,'in_out',None)=='INPUT'),None)
                 if item:layout.prop(mod,'["'+item.identifier+'"]',text=name)
-            for kind,label in [('curb','Add curb'),('sidewalk','Add sidewalk'),('grass','Add grass strip')]:
+            from .native_layers import model_for
+            model=model_for(road)
+            if model:
+                layout.label(text='Layers: road edge outward')
+                row=layout.row();row.template_list('WB_UL_layers','',model,'wb_layers',model,'wb_layer_index',rows=5)
+                col=row.column(align=True)
+                col.operator('wb.move_native_layer',text='',icon='TRIA_UP').direction=-1
+                col.operator('wb.move_native_layer',text='',icon='TRIA_DOWN').direction=1
+            for kind,label in [('curb','Add curb layer'),('sidewalk','Add sidewalk layer'),('grass','Add grass patch layer')]:
                 layout.operator('wb.add_native_curbs',text=label).kind=kind
         if s.terrain:
             for terrain_modifier in s.terrain.modifiers:
@@ -109,6 +122,10 @@ classes=(WBNativeSettings,WB_OT_bind_native,WB_OT_native_curbs,WB_OT_edit_native
 def register():
     for cls in classes:bpy.utils.register_class(cls)
     bpy.types.Scene.wb_native=PointerProperty(type=WBNativeSettings)
+    from .native_layers import register_panels
+    register_panels()
 def unregister():
+    from .native_layers import unregister_panels
+    unregister_panels()
     del bpy.types.Scene.wb_native
     for cls in reversed(classes):bpy.utils.unregister_class(cls)
