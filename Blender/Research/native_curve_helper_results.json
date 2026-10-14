@@ -1,0 +1,33 @@
+{
+  "generic": {
+    "median_update_seconds": 0.0396618180002406,
+    "samples": [
+      0.0396618180002406,
+      0.03829135400019368,
+      0.04694865300007223,
+      0.035240766999777406,
+      0.04158327100003589
+    ],
+    "vertices": 344,
+    "faces": 340,
+    "native_terrain_enabled": true,
+    "terrain_observes_research_sidewalk": false,
+    "extra_wb_mesh_booleans": 0
+  },
+  "native_even_thickness": {
+    "median_update_seconds": 0.03978823999977976,
+    "samples": [
+      0.04030582399991545,
+      0.03978823999977976,
+      0.039089317999696505,
+      0.04057519800016962,
+      0.03858953500002826
+    ],
+    "vertices": 344,
+    "faces": 340,
+    "native_terrain_enabled": true,
+    "terrain_observes_research_sidewalk": false,
+    "extra_wb_mesh_booleans": 0
+  },
+  "scope": "Isolated curve-helper prototype only; per-vertex layer controls, terrain contacts and junction clipping are not integrated. Native terrain remains enabled with its original road-only targets. Not a production replacement or large-network performance claim."
+}
