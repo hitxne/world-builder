@@ -240,12 +240,20 @@ def upgrade_layers(_unused):
     for scene in bpy.data.scenes:
         if any(o.get('wb_native_feature') in KINDS for o in scene.objects):migrate_scene(scene)
 
+def deferred_upgrade():
+    """Addon registration runs under Blender's restricted data context."""
+    if not hasattr(bpy.data,'scenes'):return .1
+    upgrade_layers(None)
+    return None
+
 def register_panels():
     for cls in (WB_PT_curbs,WB_PT_grass,WB_PT_sidewalks):bpy.utils.register_class(cls)
     if sync_controls not in bpy.app.handlers.depsgraph_update_post:bpy.app.handlers.depsgraph_update_post.append(sync_controls)
     if upgrade_layers not in bpy.app.handlers.load_post:bpy.app.handlers.load_post.append(upgrade_layers)
-    upgrade_layers(None)
+    if not bpy.app.timers.is_registered(deferred_upgrade):
+        bpy.app.timers.register(deferred_upgrade,first_interval=.1)
 def unregister_panels():
+    if bpy.app.timers.is_registered(deferred_upgrade):bpy.app.timers.unregister(deferred_upgrade)
     if upgrade_layers in bpy.app.handlers.load_post:bpy.app.handlers.load_post.remove(upgrade_layers)
     if sync_controls in bpy.app.handlers.depsgraph_update_post:bpy.app.handlers.depsgraph_update_post.remove(sync_controls)
     for cls in (WB_PT_sidewalks,WB_PT_grass,WB_PT_curbs):bpy.utils.unregister_class(cls)

@@ -17,6 +17,9 @@ profile=bpy.data.objects.new('WB_existing_profile',curve);bpy.context.scene.coll
 ext.set_input(mod,'Road',road);ext.set_input(mod,'Profile curve',profile);ext.set_input(mod,'Height offset',.04)
 identifiers={n:next(s.identifier for s in g.interface.items_tree if s.name==n and getattr(s,'in_out',None)=='INPUT') for n in ('Road','Profile curve','Height offset')}
 addon.register()
+from WB_TrackTools import native_layers as layers
+assert bpy.app.timers.is_registered(layers.deferred_upgrade)
+assert layers.deferred_upgrade() is None
 assert mod.node_group['wb_schema']==9
 for n,i in identifiers.items():assert next(s.identifier for s in mod.node_group.interface.items_tree if s.name==n and getattr(s,'in_out',None)=='INPUT')==i
 assert mod[identifiers['Road']]==road and mod[identifiers['Profile curve']]==profile and abs(mod[identifiers['Height offset']]-.04)<1e-5

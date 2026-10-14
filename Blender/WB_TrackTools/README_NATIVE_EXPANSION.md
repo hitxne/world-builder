@@ -1,6 +1,10 @@
-# TrackTools + WB — repeatable layer expansion 0.8.1
+# TrackTools + WB — repeatable layer expansion 0.8.2
 
-Install `WB_TrackTools_Additive_v081.zip`, enable the addon, open your original TrackTools project, and click **WB Roads > TrackTools + WB > Use existing TrackTools scene**. This button also adopts existing WB 0.7 extrusions into the new layer stack. TrackTools remains the authoring system: its original terrain plane, road curve data, and commercial Geometry Nodes groups are retained.
+Install `WB_TrackTools_Additive_v082.zip`, enable the addon, open your original TrackTools project, and click **WB Roads > TrackTools + WB > Use existing TrackTools scene**. This button also adopts existing WB 0.7 extrusions into the new layer stack. TrackTools remains the authoring system: its original terrain plane, road curve data, and commercial Geometry Nodes groups are retained.
+
+## Installation repair
+
+0.8.2 defers existing-scene upgrades to a cancellable timer after addon registration. This avoids accessing scenes inside Blender’s restricted addon-enable context. Scene loads still run the upgrade handler. Disable/uninstall cancels any pending timer.
 
 ## Performance repair
 

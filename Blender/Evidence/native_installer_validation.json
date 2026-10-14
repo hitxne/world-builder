@@ -1,0 +1,8 @@
+{
+  "blender": "5.1.2",
+  "actual_addon_install_enable_disable_reenable_passed": true,
+  "deferred_upgrade_after_registration_passed": true,
+  "pending_timer_cancelled_on_disable": true,
+  "existing_v08_bindings_preserved": true,
+  "fix": "Defer existing-scene upgrade until after restricted addon registration."
+}
