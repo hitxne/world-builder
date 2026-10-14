@@ -1,0 +1,60 @@
+{
+  "version": 2,
+  "revision": 1,
+  "units": "m",
+  "fixture": "interchange",
+  "settings": {
+    "curb_height": 0.1524,
+    "sidewalk_width": 3.2,
+    "sample_spacing": 0.5,
+    "show_guides": true
+  },
+  "crosswalks": [],
+  "interchange": {
+    "id": "interchange-1",
+    "length": 150,
+    "lane_width": 3.66,
+    "median_width": 6,
+    "split_station": 60,
+    "merge_station": 70,
+    "taper_length": 25,
+    "ramp_length": 65,
+    "ramp_offset": 40,
+    "connections": [
+      {
+        "id": "exit-connection",
+        "from": "main-outside-exit",
+        "to": "ramp-exit",
+        "type": "continuation"
+      },
+      {
+        "id": "entry-connection",
+        "from": "ramp-entry",
+        "to": "main-outside-entry",
+        "type": "continuation"
+      },
+      {
+        "id": "opposing-turn-connection",
+        "from": "opposing-left-turn",
+        "to": "ramp-exit",
+        "type": "left"
+      },
+      {
+        "id": "uturn-connection",
+        "from": "opposing-inner",
+        "to": "main-inner",
+        "type": "uturn"
+      }
+    ],
+    "turn_station": 72,
+    "median_setback": 14,
+    "overpass": {
+      "id": "upper-highway",
+      "station": 50,
+      "deck_gap": 4,
+      "deck_width": 10.98,
+      "elevation": 6.5,
+      "length": 130
+    }
+  }
+}

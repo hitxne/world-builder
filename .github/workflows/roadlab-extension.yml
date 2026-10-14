@@ -1,0 +1,39 @@
+name: Build RoadLab update feed
+on:
+  push:
+    branches: [feature/road-lab-updater]
+    paths:
+      - 'road-lab-updater/extension/**'
+      - 'road-lab-updater/tools/**'
+      - '.github/workflows/roadlab-extension.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: roadlab-update-feed
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/road-lab-updater
+      - name: Install Blender 5.1 build runtime
+        run: |
+          curl --fail --location https://download.blender.org/release/Blender5.1/blender-5.1.0-linux-x64.tar.xz --output /tmp/blender.tar.xz
+          mkdir /tmp/roadlab-blender
+          tar -xf /tmp/blender.tar.xz --strip-components=1 -C /tmp/roadlab-blender
+      - name: Validate and build repository
+        env:
+          BLENDER: /tmp/roadlab-blender/blender
+        run: bash road-lab-updater/tools/build_repository.sh
+      - name: Publish generated feed to branch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add road-lab-updater/dist/stable
+          if ! git diff --cached --quiet; then
+            git commit -m 'Publish RoadLab extension update feed'
+            git push origin HEAD:feature/road-lab-updater
+          fi

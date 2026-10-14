@@ -1,0 +1,188 @@
+{
+  "version": 1,
+  "units": "m",
+  "roads": [
+    {
+      "id": "road-1",
+      "points": [
+        [
+          0,
+          -25,
+          0
+        ],
+        [
+          80,
+          -25,
+          0
+        ]
+      ],
+      "left": [
+        [
+          0,
+          3
+        ],
+        [
+          20,
+          3
+        ],
+        [
+          40,
+          6.66
+        ],
+        [
+          80,
+          6.66
+        ]
+      ],
+      "right": [
+        [
+          0,
+          3
+        ],
+        [
+          80,
+          3
+        ]
+      ],
+      "crossfall": 0.02
+    }
+  ],
+  "lanes": [
+    {
+      "id": "lane-1",
+      "road_id": "road-1",
+      "direction": 1,
+      "type": "through",
+      "width": 3,
+      "mode": "auto"
+    },
+    {
+      "id": "lane-2",
+      "road_id": "road-1",
+      "direction": -1,
+      "type": "through",
+      "width": 3,
+      "mode": "auto"
+    }
+  ],
+  "intersections": [
+    {
+      "id": "junction-1",
+      "corners": {
+        "NW": {
+          "id": "corner-NW",
+          "vertex": [
+            -3,
+            3,
+            0
+          ],
+          "a": [
+            -1,
+            0
+          ],
+          "b": [
+            0,
+            1
+          ],
+          "radius": 4,
+          "mode": "manual"
+        },
+        "NE": {
+          "id": "corner-NE",
+          "vertex": [
+            3,
+            3,
+            0
+          ],
+          "a": [
+            1,
+            0
+          ],
+          "b": [
+            0,
+            1
+          ],
+          "radius": 6,
+          "mode": "manual"
+        },
+        "SW": {
+          "id": "corner-SW",
+          "vertex": [
+            -3,
+            -3,
+            0
+          ],
+          "a": [
+            -1,
+            0
+          ],
+          "b": [
+            0,
+            -1
+          ],
+          "radius": 8,
+          "mode": "manual"
+        },
+        "SE": {
+          "id": "corner-SE",
+          "vertex": [
+            3,
+            -3,
+            0
+          ],
+          "a": [
+            1,
+            0
+          ],
+          "b": [
+            0,
+            -1
+          ],
+          "radius": 10,
+          "mode": "manual"
+        }
+      },
+      "connections": []
+    }
+  ],
+  "crosswalks": [
+    {
+      "id": "cross-1",
+      "width": 3,
+      "endpoints": {
+        "A": {
+          "id": "end-A",
+          "position": [
+            -8,
+            -3,
+            0
+          ],
+          "rotation": 3.141592653589793,
+          "opening_width": 2,
+          "transition_left": 2,
+          "transition_right": 3,
+          "run": 2,
+          "height": 0.1524,
+          "mode": "manual",
+          "ramp_type": "depressed-pilot"
+        },
+        "B": {
+          "id": "end-B",
+          "position": [
+            -8,
+            3,
+            0
+          ],
+          "rotation": 0,
+          "opening_width": 2,
+          "transition_left": 2,
+          "transition_right": 3,
+          "run": 2,
+          "height": 0.1524,
+          "mode": "manual",
+          "ramp_type": "depressed-pilot"
+        }
+      }
+    }
+  ]
+}

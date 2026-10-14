@@ -1,0 +1,1156 @@
+{
+  "schema": 1,
+  "name": "RoadLab road marking decals",
+  "version": "0.1.0",
+  "units": "meters",
+  "alpha": "straight alpha; RGB paint color retained outside alpha to prevent black fringes",
+  "texture_origin": "top-left image; forward is top/positive UV V",
+  "assets": [
+    {
+      "id": "arrow_through",
+      "label": "Through",
+      "category": "symbol",
+      "physical_canvas_m": [
+        1.2477,
+        3.12725
+      ],
+      "pixels": [
+        817,
+        2048
+      ],
+      "rgba": "rgba/arrow_through.png",
+      "mask": "mask/arrow_through.png",
+      "svg": "svg/arrow_through.svg",
+      "forward_uv": "positive_V; top of PNG",
+      "source": {
+        "kind": "cleaned_reference_vector",
+        "agency": "FDOT",
+        "index": "711-001",
+        "sheet": 1,
+        "drawing_indices": [
+          1976
+        ],
+        "template_height_ft": 9.5,
+        "pdf_sha256": "2432288e1431fa755009a0fb5c34a5a3e37fe5b9bf815d4bd8764bc12704e15c"
+      },
+      "default_color_srgb": "#F2F0DC",
+      "anchor_uv": [
+        0.5000001408027418,
+        0.03703709321400528
+      ]
+    },
+    {
+      "id": "arrow_left",
+      "label": "Left turn",
+      "category": "symbol",
+      "physical_canvas_m": [
+        2.12679,
+        2.63347
+      ],
+      "pixels": [
+        1654,
+        2048
+      ],
+      "rgba": "rgba/arrow_left.png",
+      "mask": "mask/arrow_left.png",
+      "svg": "svg/arrow_left.svg",
+      "forward_uv": "positive_V; top of PNG",
+      "source": {
+        "kind": "cleaned_reference_vector",
+        "agency": "FDOT",
+        "index": "711-001",
+        "sheet": 1,
+        "drawing_indices": [
+          5052,
+          5065
+        ],
+        "template_height_ft": 8,
+        "pdf_sha256": "2432288e1431fa755009a0fb5c34a5a3e37fe5b9bf815d4bd8764bc12704e15c"
+      },
+      "default_color_srgb": "#F2F0DC",
+      "anchor_uv": [
+        0.8823977621136337,
+        0.03703703703703709
+      ]
+    },
+    {
+      "id": "arrow_right",
+      "label": "Right turn",
+      "category": "symbol",
+      "physical_canvas_m": [
+        2.12679,
+        2.63347
+      ],
+      "pixels": [
+        1654,
+        2048
+      ],
+      "rgba": "rgba/arrow_right.png",
+      "mask": "mask/arrow_right.png",
+      "svg": "svg/arrow_right.svg",
+      "forward_uv": "positive_V; top of PNG",
+      "source": {
+        "kind": "mirrored_vector",
+        "parent": "arrow_left",
+        "note": "Right turn counterpart; template identifies right as similar"
+      },
+      "default_color_srgb": "#F2F0DC",
+      "anchor_uv": [
+        0.11760223788636626,
+        0.03703703703703709
+      ]
+    },
+    {
+      "id": "arrow_left_through",
+      "label": "Left + through",
+      "category": "symbol",
+      "physical_canvas_m": [
+        2.59486,
+        4.1971
+      ],
+      "pixels": [
+        1266,
+        2048
+      ],
+      "rgba": "rgba/arrow_left_through.png",
+      "mask": "mask/arrow_left_through.png",
+      "svg": "svg/arrow_left_through.svg",
+      "forward_uv": "positive_V; top of PNG",
+      "source": {
+        "kind": "cleaned_reference_vector",
+        "agency": "FDOT",
+        "index": "711-001",
+        "sheet": 1,
+        "drawing_indices": [
+          5103,
+          5104
+        ],
+        "template_height_ft": 12.75,
+        "pdf_sha256": "2432288e1431fa755009a0fb5c34a5a3e37fe5b9bf815d4bd8764bc12704e15c"
+      },
+      "default_color_srgb": "#F2F0DC",
+      "anchor_uv": [
+        0.7449893545681201,
+        0.03703703703703698
+      ]
+    },
+    {
+      "id": "arrow_right_through",
+      "label": "Through + right",
+      "category": "symbol",
+      "physical_canvas_m": [
+        2.59486,
+        4.1971
+      ],
+      "pixels": [
+        1266,
+        2048
+      ],
+      "rgba": "rgba/arrow_right_through.png",
+      "mask": "mask/arrow_right_through.png",
+      "svg": "svg/arrow_right_through.svg",
+      "forward_uv": "positive_V; top of PNG",
+      "source": {
+        "kind": "mirrored_vector",
+        "parent": "arrow_left_through",
+        "note": "Right turn counterpart; template identifies right as similar"
+      },
+      "default_color_srgb": "#F2F0DC",
+      "anchor_uv": [
+        0.2550106454318799,
+        0.03703703703703698
+      ]
+    },
+    {
+      "id": "arrow_uturn_left",
+      "label": "U-turn",
+      "category": "symbol",
+      "physical_canvas_m": [
+        2.37658,
+        3.29184
+      ],
+      "pixels": [
+        1479,
+        2048
+      ],
+      "rgba": "rgba/arrow_uturn_left.png",
+      "mask": "mask/arrow_uturn_left.png",
+      "svg": "svg/arrow_uturn_left.svg",
+      "forward_uv": "positive_V; top of PNG",
+      "source": {
+        "kind": "cleaned_reference_vector",
+        "agency": "FDOT",
+        "index": "711-001",
+        "sheet": 1,
+        "drawing_indices": [
+          5081,
+          5082
+        ],
+        "template_height_ft": 10,
+        "pdf_sha256": "2432288e1431fa755009a0fb5c34a5a3e37fe5b9bf815d4bd8764bc12704e15c"
+      },
+      "default_color_srgb": "#F2F0DC",
+      "anchor_uv": [
+        0.8845126990030762,
+        0.03703703703703709
+      ]
+    },
+    {
+      "id": "arrow_uturn_right",
+      "label": "U-turn \u00b7 mirrored",
+      "category": "symbol",
+      "physical_canvas_m": [
+        2.37658,
+        3.29184
+      ],
+      "pixels": [
+        1479,
+        2048
+      ],
+      "rgba": "rgba/arrow_uturn_right.png",
+      "mask": "mask/arrow_uturn_right.png",
+      "svg": "svg/arrow_uturn_right.svg",
+      "forward_uv": "positive_V; top of PNG",
+      "source": {
+        "kind": "mirrored_vector",
+        "parent": "arrow_uturn_left",
+        "note": "Right turn counterpart; template identifies right as similar"
+      },
+      "default_color_srgb": "#F2F0DC",
+      "anchor_uv": [
+        0.11548730099692384,
+        0.03703703703703709
+      ]
+    },
+    {
+      "id": "roundabout_approach_left",
+      "label": "Roundabout approach",
+      "category": "symbol",
+      "physical_canvas_m": [
+        2.15902,
+        3.0993
+      ],
+      "pixels": [
+        1427,
+        2048
+      ],
+      "rgba": "rgba/roundabout_approach_left.png",
+      "mask": "mask/roundabout_approach_left.png",
+      "svg": "svg/roundabout_approach_left.svg",
+      "forward_uv": "positive_V; top of PNG",
+      "source": {
+        "kind": "cleaned_reference_vector",
+        "agency": "FDOT",
+        "index": "711-001",
+        "sheet": 1,
+        "drawing_indices": [
+          5358,
+          5367,
+          5441
+        ],
+        "template_height_ft": 9.415094339622641,
+        "pdf_sha256": "2432288e1431fa755009a0fb5c34a5a3e37fe5b9bf815d4bd8764bc12704e15c"
+      },
+      "default_color_srgb": "#F2F0DC",
+      "anchor_uv": [
+        0.8762454875594801,
+        0.1762042348392553
+      ]
+    },
+    {
+      "id": "arrow_left_right",
+      "label": "Left + right",
+      "category": "symbol",
+      "physical_canvas_m": [
+        3.75335,
+        2.63347
+      ],
+      "pixels": [
+        2048,
+        1437
+      ],
+      "rgba": "rgba/arrow_left_right.png",
+      "mask": "mask/arrow_left_right.png",
+      "svg": "svg/arrow_left_right.svg",
+      "forward_uv": "positive_V; top of PNG",
+      "source": {
+        "kind": "composed_vector",
+        "parents": [
+          "arrow_left",
+          "arrow_right"
+        ],
+        "note": "Shared shaft composition; not a separately specified FDOT outline"
+      },
+      "default_color_srgb": "#F2F0DC",
+      "anchor_uv": [
+        0.5,
+        0.03703703703703709
+      ]
+    },
+    {
+      "id": "arrow_all",
+      "label": "Left + through + right",
+      "category": "symbol",
+      "physical_canvas_m": [
+        3.86629,
+        4.1971
+      ],
+      "pixels": [
+        1887,
+        2048
+      ],
+      "rgba": "rgba/arrow_all.png",
+      "mask": "mask/arrow_all.png",
+      "svg": "svg/arrow_all.svg",
+      "forward_uv": "positive_V; top of PNG",
+      "source": {
+        "kind": "composed_vector",
+        "parents": [
+          "arrow_left_through",
+          "arrow_right_through"
+        ],
+        "note": "Shared shaft composition; not a separately specified FDOT outline"
+      },
+      "default_color_srgb": "#F2F0DC",
+      "anchor_uv": [
+        0.5,
+        0.03703703703703698
+      ]
+    },
+    {
+      "id": "word_only",
+      "label": "ONLY",
+      "category": "symbol",
+      "physical_canvas_m": [
+        2.12224,
+        2.63347
+      ],
+      "pixels": [
+        1650,
+        2048
+      ],
+      "rgba": "rgba/word_only.png",
+      "mask": "mask/word_only.png",
+      "svg": "svg/word_only.svg",
+      "forward_uv": "positive_V; top of PNG",
+      "source": {
+        "kind": "cleaned_reference_vector",
+        "agency": "FDOT",
+        "index": "711-001",
+        "sheet": 1,
+        "drawing_indices": [
+          2722,
+          2785,
+          2817,
+          2857
+        ],
+        "template_height_ft": 8,
+        "pdf_sha256": "2432288e1431fa755009a0fb5c34a5a3e37fe5b9bf815d4bd8764bc12704e15c"
+      },
+      "default_color_srgb": "#F2F0DC",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "id": "word_stop",
+      "label": "STOP",
+      "category": "symbol",
+      "physical_canvas_m": [
+        2.26957,
+        2.63347
+      ],
+      "pixels": [
+        1765,
+        2048
+      ],
+      "rgba": "rgba/word_stop.png",
+      "mask": "mask/word_stop.png",
+      "svg": "svg/word_stop.svg",
+      "forward_uv": "positive_V; top of PNG",
+      "source": {
+        "kind": "cleaned_reference_vector",
+        "agency": "FDOT",
+        "index": "711-001",
+        "sheet": 1,
+        "drawing_indices": [
+          2900,
+          2970,
+          3063,
+          3066
+        ],
+        "template_height_ft": 8,
+        "pdf_sha256": "2432288e1431fa755009a0fb5c34a5a3e37fe5b9bf815d4bd8764bc12704e15c"
+      },
+      "default_color_srgb": "#F2F0DC",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "id": "word_bus",
+      "label": "BUS",
+      "category": "symbol",
+      "physical_canvas_m": [
+        1.71907,
+        2.63347
+      ],
+      "pixels": [
+        1337,
+        2048
+      ],
+      "rgba": "rgba/word_bus.png",
+      "mask": "mask/word_bus.png",
+      "svg": "svg/word_bus.svg",
+      "forward_uv": "positive_V; top of PNG",
+      "source": {
+        "kind": "cleaned_reference_vector",
+        "agency": "FDOT",
+        "index": "711-001",
+        "sheet": 1,
+        "drawing_indices": [
+          3132,
+          3183,
+          3246
+        ],
+        "template_height_ft": 8,
+        "pdf_sha256": "2432288e1431fa755009a0fb5c34a5a3e37fe5b9bf815d4bd8764bc12704e15c"
+      },
+      "default_color_srgb": "#F2F0DC",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "id": "word_merge",
+      "label": "MERGE",
+      "category": "symbol",
+      "physical_canvas_m": [
+        2.8475,
+        2.64933
+      ],
+      "pixels": [
+        2048,
+        1905
+      ],
+      "rgba": "rgba/word_merge.png",
+      "mask": "mask/word_merge.png",
+      "svg": "svg/word_merge.svg",
+      "forward_uv": "positive_V; top of PNG",
+      "source": {
+        "kind": "cleaned_reference_vector",
+        "agency": "FDOT",
+        "index": "711-001",
+        "sheet": 1,
+        "drawing_indices": [
+          2388,
+          2534,
+          2535,
+          2538,
+          2578
+        ],
+        "template_height_ft": 8,
+        "pdf_sha256": "2432288e1431fa755009a0fb5c34a5a3e37fe5b9bf815d4bd8764bc12704e15c"
+      },
+      "default_color_srgb": "#F2F0DC",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "id": "word_left",
+      "label": "LEFT",
+      "category": "symbol",
+      "physical_canvas_m": [
+        2.27937,
+        2.63347
+      ],
+      "pixels": [
+        1773,
+        2048
+      ],
+      "rgba": "rgba/word_left.png",
+      "mask": "mask/word_left.png",
+      "svg": "svg/word_left.svg",
+      "forward_uv": "positive_V; top of PNG",
+      "source": {
+        "kind": "cleaned_reference_vector",
+        "agency": "FDOT",
+        "index": "711-001",
+        "sheet": 1,
+        "drawing_indices": [
+          3947,
+          3948,
+          4110,
+          4111
+        ],
+        "template_height_ft": 8,
+        "pdf_sha256": "2432288e1431fa755009a0fb5c34a5a3e37fe5b9bf815d4bd8764bc12704e15c"
+      },
+      "default_color_srgb": "#F2F0DC",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "id": "word_right",
+      "label": "RIGHT",
+      "category": "symbol",
+      "physical_canvas_m": [
+        2.5272,
+        2.63347
+      ],
+      "pixels": [
+        1965,
+        2048
+      ],
+      "rgba": "rgba/word_right.png",
+      "mask": "mask/word_right.png",
+      "svg": "svg/word_right.svg",
+      "forward_uv": "positive_V; top of PNG",
+      "source": {
+        "kind": "cleaned_reference_vector",
+        "agency": "FDOT",
+        "index": "711-001",
+        "sheet": 1,
+        "drawing_indices": [
+          4119,
+          4194,
+          4346,
+          4347,
+          4348
+        ],
+        "template_height_ft": 8,
+        "pdf_sha256": "2432288e1431fa755009a0fb5c34a5a3e37fe5b9bf815d4bd8764bc12704e15c"
+      },
+      "default_color_srgb": "#F2F0DC",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "id": "bike_rider",
+      "label": "Helmeted cyclist",
+      "category": "symbol",
+      "physical_canvas_m": [
+        1.15487,
+        1.9751
+      ],
+      "pixels": [
+        1197,
+        2048
+      ],
+      "rgba": "rgba/bike_rider.png",
+      "mask": "mask/bike_rider.png",
+      "svg": "svg/bike_rider.svg",
+      "forward_uv": "positive_V; top of PNG",
+      "source": {
+        "kind": "cleaned_reference_vector",
+        "agency": "FDOT",
+        "index": "711-002",
+        "sheet": 1,
+        "drawing_indices": [
+          204,
+          209,
+          211,
+          212
+        ],
+        "template_height_ft": 6,
+        "pdf_sha256": "710507d59119059efc35c83fe702e2d58c696ede2952c62187334828bf7b6fd7"
+      },
+      "default_color_srgb": "#F2F0DC",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "id": "bike_arrow",
+      "label": "Bike lane arrow",
+      "category": "symbol",
+      "physical_canvas_m": [
+        0.75625,
+        1.9751
+      ],
+      "pixels": [
+        784,
+        2048
+      ],
+      "rgba": "rgba/bike_arrow.png",
+      "mask": "mask/bike_arrow.png",
+      "svg": "svg/bike_arrow.svg",
+      "forward_uv": "positive_V; top of PNG",
+      "source": {
+        "kind": "cleaned_reference_vector",
+        "agency": "FDOT",
+        "index": "711-002",
+        "sheet": 1,
+        "drawing_indices": [
+          161
+        ],
+        "template_height_ft": 6,
+        "pdf_sha256": "710507d59119059efc35c83fe702e2d58c696ede2952c62187334828bf7b6fd7"
+      },
+      "default_color_srgb": "#F2F0DC",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "id": "sharrow",
+      "label": "Shared-lane symbol",
+      "category": "symbol",
+      "physical_canvas_m": [
+        1.24329,
+        3.07238
+      ],
+      "pixels": [
+        829,
+        2048
+      ],
+      "rgba": "rgba/sharrow.png",
+      "mask": "mask/sharrow.png",
+      "svg": "svg/sharrow.svg",
+      "forward_uv": "positive_V; top of PNG",
+      "source": {
+        "kind": "cleaned_reference_vector",
+        "agency": "FDOT",
+        "index": "711-002",
+        "sheet": 1,
+        "drawing_indices": [
+          257,
+          270,
+          271
+        ],
+        "template_height_ft": 9.333333333333334,
+        "pdf_sha256": "710507d59119059efc35c83fe702e2d58c696ede2952c62187334828bf7b6fd7"
+      },
+      "default_color_srgb": "#F2F0DC",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "id": "hov_diamond",
+      "label": "Restricted-lane diamond",
+      "category": "symbol",
+      "physical_canvas_m": [
+        1.23139,
+        4.27939
+      ],
+      "pixels": [
+        589,
+        2048
+      ],
+      "rgba": "rgba/hov_diamond.png",
+      "mask": "mask/hov_diamond.png",
+      "svg": "svg/hov_diamond.svg",
+      "forward_uv": "positive_V; top of PNG",
+      "source": {
+        "kind": "cleaned_reference_vector",
+        "agency": "FDOT",
+        "index": "711-001",
+        "sheet": 1,
+        "drawing_indices": [
+          2277
+        ],
+        "template_height_ft": 13,
+        "pdf_sha256": "2432288e1431fa755009a0fb5c34a5a3e37fe5b9bf815d4bd8764bc12704e15c"
+      },
+      "default_color_srgb": "#F2F0DC",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "id": "line_white",
+      "label": "Solid white",
+      "category": "white_line",
+      "physical_canvas_m": [
+        0.1524,
+        1
+      ],
+      "pixels": [
+        312,
+        2048
+      ],
+      "rgba": "rgba/line_white.png",
+      "mask": "mask/line_white.png",
+      "svg": "svg/line_white.svg",
+      "forward_uv": "positive_V; top of PNG",
+      "source": {
+        "kind": "parameterized",
+        "reference": "MUTCD3A/3B + FDOT striping profiles"
+      },
+      "default_color_srgb": "#F2F0DC",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "recipe": {
+        "line_width_m": 0.1524,
+        "repeat_m": 1,
+        "continuous": true
+      }
+    },
+    {
+      "id": "line_yellow",
+      "label": "Solid yellow",
+      "category": "yellow_line",
+      "physical_canvas_m": [
+        0.1524,
+        1
+      ],
+      "pixels": [
+        312,
+        2048
+      ],
+      "rgba": "rgba/line_yellow.png",
+      "mask": "mask/line_yellow.png",
+      "svg": "svg/line_yellow.svg",
+      "forward_uv": "positive_V; top of PNG",
+      "source": {
+        "kind": "parameterized",
+        "reference": "MUTCD3A/3B + FDOT striping profiles"
+      },
+      "default_color_srgb": "#F2C332",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "recipe": {
+        "line_width_m": 0.1524,
+        "repeat_m": 1,
+        "continuous": true
+      }
+    },
+    {
+      "id": "double_white",
+      "label": "Double white",
+      "category": "white_line",
+      "physical_canvas_m": [
+        0.4064,
+        1
+      ],
+      "pixels": [
+        832,
+        2048
+      ],
+      "rgba": "rgba/double_white.png",
+      "mask": "mask/double_white.png",
+      "svg": "svg/double_white.svg",
+      "forward_uv": "positive_V; top of PNG",
+      "source": {
+        "kind": "parameterized",
+        "reference": "MUTCD3B; adjustable spacing"
+      },
+      "default_color_srgb": "#F2F0DC",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "recipe": {
+        "line_width_m": 0.1524,
+        "between_lines_m": 0.1016,
+        "continuous": true
+      }
+    },
+    {
+      "id": "double_yellow",
+      "label": "Double yellow",
+      "category": "yellow_line",
+      "physical_canvas_m": [
+        0.4064,
+        1
+      ],
+      "pixels": [
+        832,
+        2048
+      ],
+      "rgba": "rgba/double_yellow.png",
+      "mask": "mask/double_yellow.png",
+      "svg": "svg/double_yellow.svg",
+      "forward_uv": "positive_V; top of PNG",
+      "source": {
+        "kind": "parameterized",
+        "reference": "MUTCD3B; adjustable spacing"
+      },
+      "default_color_srgb": "#F2C332",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "recipe": {
+        "line_width_m": 0.1524,
+        "between_lines_m": 0.1016,
+        "continuous": true
+      }
+    },
+    {
+      "id": "broken_white",
+      "label": "Broken \u00b7 10/30 ft",
+      "category": "white_line",
+      "physical_canvas_m": [
+        0.1524,
+        12.192
+      ],
+      "pixels": [
+        26,
+        2048
+      ],
+      "rgba": "rgba/broken_white.png",
+      "mask": "mask/broken_white.png",
+      "svg": "svg/broken_white.svg",
+      "forward_uv": "positive_V; top of PNG",
+      "source": {
+        "kind": "parameterized",
+        "reference": "MUTCD3B/3D + FDOT213 layouts"
+      },
+      "default_color_srgb": "#F2F0DC",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "recipe": {
+        "paint_m": 3.048,
+        "gap_m": 9.144,
+        "width_m": 0.1524,
+        "repeat_axis": "V",
+        "phase": "paint centered in tile"
+      }
+    },
+    {
+      "id": "dotted_white",
+      "label": "Dotted \u00b7 2/4 ft",
+      "category": "white_line",
+      "physical_canvas_m": [
+        0.1524,
+        1.8288
+      ],
+      "pixels": [
+        171,
+        2048
+      ],
+      "rgba": "rgba/dotted_white.png",
+      "mask": "mask/dotted_white.png",
+      "svg": "svg/dotted_white.svg",
+      "forward_uv": "positive_V; top of PNG",
+      "source": {
+        "kind": "parameterized",
+        "reference": "MUTCD3B/3D + FDOT213 layouts"
+      },
+      "default_color_srgb": "#F2F0DC",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "recipe": {
+        "paint_m": 0.6096,
+        "gap_m": 1.2192,
+        "width_m": 0.1524,
+        "repeat_axis": "V",
+        "phase": "paint centered in tile"
+      }
+    },
+    {
+      "id": "lane_drop_white",
+      "label": "Lane drop \u00b7 3/9 ft",
+      "category": "white_line",
+      "physical_canvas_m": [
+        0.3048,
+        3.6576
+      ],
+      "pixels": [
+        171,
+        2048
+      ],
+      "rgba": "rgba/lane_drop_white.png",
+      "mask": "mask/lane_drop_white.png",
+      "svg": "svg/lane_drop_white.svg",
+      "forward_uv": "positive_V; top of PNG",
+      "source": {
+        "kind": "parameterized",
+        "reference": "MUTCD3B/3D + FDOT213 layouts"
+      },
+      "default_color_srgb": "#F2F0DC",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "recipe": {
+        "paint_m": 0.9144000000000001,
+        "gap_m": 2.7432000000000003,
+        "width_m": 0.3048,
+        "repeat_axis": "V",
+        "phase": "paint centered in tile"
+      }
+    },
+    {
+      "id": "roundabout_entry_edge",
+      "label": "Entry edge \u00b7 2/2 ft",
+      "category": "white_line",
+      "physical_canvas_m": [
+        0.3048,
+        1.2192
+      ],
+      "pixels": [
+        512,
+        2048
+      ],
+      "rgba": "rgba/roundabout_entry_edge.png",
+      "mask": "mask/roundabout_entry_edge.png",
+      "svg": "svg/roundabout_entry_edge.svg",
+      "forward_uv": "positive_V; top of PNG",
+      "source": {
+        "kind": "parameterized",
+        "reference": "MUTCD3B/3D + FDOT213 layouts"
+      },
+      "default_color_srgb": "#F2F0DC",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "recipe": {
+        "paint_m": 0.6096,
+        "gap_m": 0.6096,
+        "width_m": 0.3048,
+        "repeat_axis": "V",
+        "phase": "paint centered in tile"
+      }
+    },
+    {
+      "id": "stop_bar",
+      "label": "Stop bar",
+      "category": "symbol",
+      "physical_canvas_m": [
+        3.5,
+        0.6096
+      ],
+      "pixels": [
+        2048,
+        357
+      ],
+      "rgba": "rgba/stop_bar.png",
+      "mask": "mask/stop_bar.png",
+      "svg": "svg/stop_bar.svg",
+      "forward_uv": "positive_V; top of PNG",
+      "source": {
+        "kind": "parameterized",
+        "reference": "MUTCD3B.19"
+      },
+      "default_color_srgb": "#F2F0DC",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "recipe": {
+        "across_lane_width_m": 3.5,
+        "bar_depth_m": 0.6096,
+        "stretch_axis": "U"
+      }
+    },
+    {
+      "id": "yield_tooth",
+      "label": "Yield triangle",
+      "category": "symbol",
+      "physical_canvas_m": [
+        0.6096,
+        0.9144
+      ],
+      "pixels": [
+        1365,
+        2048
+      ],
+      "rgba": "rgba/yield_tooth.png",
+      "mask": "mask/yield_tooth.png",
+      "svg": "svg/yield_tooth.svg",
+      "forward_uv": "positive_V; top of PNG",
+      "source": {
+        "kind": "parameterized",
+        "reference": "MUTCD3B.19"
+      },
+      "default_color_srgb": "#F2F0DC",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "recipe": {
+        "width_m": 0.6096,
+        "height_m": 0.9144,
+        "tip": "toward approaching driver",
+        "spacing_m": 0.6096
+      }
+    },
+    {
+      "id": "yield_ahead",
+      "label": "Yield-ahead outline",
+      "category": "symbol",
+      "physical_canvas_m": [
+        1.2,
+        2.4
+      ],
+      "pixels": [
+        1024,
+        2048
+      ],
+      "rgba": "rgba/yield_ahead.png",
+      "mask": "mask/yield_ahead.png",
+      "svg": "svg/yield_ahead.svg",
+      "forward_uv": "positive_V; top of PNG",
+      "source": {
+        "kind": "interpretive",
+        "reference": "MUTCD yield-ahead symbol; proportions are prototype, not dimension-certified"
+      },
+      "default_color_srgb": "#F2F0DC",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "id": "crosswalk_bar_tile",
+      "label": "Crosswalk bar tile",
+      "category": "symbol",
+      "physical_canvas_m": [
+        1.2192,
+        3.048
+      ],
+      "pixels": [
+        819,
+        2048
+      ],
+      "rgba": "rgba/crosswalk_bar_tile.png",
+      "mask": "mask/crosswalk_bar_tile.png",
+      "svg": "svg/crosswalk_bar_tile.svg",
+      "forward_uv": "positive_V; top of PNG",
+      "source": {
+        "kind": "parameterized",
+        "reference": "MUTCD3C high-visibility crosswalk; adjustable"
+      },
+      "default_color_srgb": "#F2F0DC",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "recipe": {
+        "bar_width_m": 0.6096,
+        "gap_m": 0.6096,
+        "crosswalk_depth_m": 3.048,
+        "repeat_axis": "U"
+      }
+    },
+    {
+      "id": "crosswalk_transverse",
+      "label": "Transverse crosswalk",
+      "category": "symbol",
+      "physical_canvas_m": [
+        3.5,
+        3.048
+      ],
+      "pixels": [
+        2048,
+        1784
+      ],
+      "rgba": "rgba/crosswalk_transverse.png",
+      "mask": "mask/crosswalk_transverse.png",
+      "svg": "svg/crosswalk_transverse.svg",
+      "forward_uv": "positive_V; top of PNG",
+      "source": {
+        "kind": "parameterized",
+        "reference": "MUTCD3C; adjustable crosswalk"
+      },
+      "default_color_srgb": "#F2F0DC",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "recipe": {
+        "stroke_m": 0.1524,
+        "crosswalk_depth_m": 3.048,
+        "stretch_axis": "U"
+      }
+    },
+    {
+      "id": "gore_chevron",
+      "label": "Gore chevron",
+      "category": "symbol",
+      "physical_canvas_m": [
+        2,
+        1.2
+      ],
+      "pixels": [
+        2048,
+        1229
+      ],
+      "rgba": "rgba/gore_chevron.png",
+      "mask": "mask/gore_chevron.png",
+      "svg": "svg/gore_chevron.svg",
+      "forward_uv": "positive_V; top of PNG",
+      "source": {
+        "kind": "parameterized",
+        "reference": "MUTCD3B.25; clipped to neutral area"
+      },
+      "default_color_srgb": "#F2F0DC",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "recipe": {
+        "repeat_m": 1.2,
+        "clip_to_gore": true
+      }
+    },
+    {
+      "id": "bike_green_patch",
+      "label": "Bike conflict patch",
+      "category": "green_patch",
+      "physical_canvas_m": [
+        1,
+        1
+      ],
+      "pixels": [
+        2048,
+        2048
+      ],
+      "rgba": "rgba/bike_green_patch.png",
+      "mask": "mask/bike_green_patch.png",
+      "svg": "svg/bike_green_patch.svg",
+      "forward_uv": "positive_V; top of PNG",
+      "source": {
+        "kind": "parameterized",
+        "reference": "MUTCD3H.06; green supplements white markings"
+      },
+      "default_color_srgb": "#3C9559",
+      "anchor_uv": [
+        0.5,
+        0.5
+      ],
+      "recipe": {
+        "colorize": "#3C9559",
+        "stretch_to_conflict_area": true
+      }
+    }
+  ],
+  "references": [
+    {
+      "url": "https://fdotwww.blob.core.windows.net/sitefinity/docs/default-source/design/standardplans/2027/idx/711-001.pdf",
+      "index": "711-001-1 FY2026-27 sheet1"
+    },
+    {
+      "url": "https://fdotwww.blob.core.windows.net/sitefinity/docs/default-source/design/standardplans/2027/idx/711-002.pdf",
+      "index": "711-002 FY2026-27 sheet1"
+    },
+    {
+      "url": "https://mutcd.fhwa.dot.gov/pdfs/11th_Editionr1/mutcd11theditionr1hl.pdf"
+    }
+  ]
+}

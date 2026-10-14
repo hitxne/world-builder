@@ -1,0 +1,17 @@
+{
+  "blender": "5.1.0",
+  "checks": [
+    "scaled single-quad designation preserves world shape",
+    "raise brush on single plane",
+    "all generated terrain faces quads",
+    "source plane unchanged by sculpting",
+    "repeated regeneration does not accumulate seam vertices",
+    "matching road and terrain seam vertices",
+    "local brush retains unaffected faces",
+    "road elevation regeneration"
+  ],
+  "quads": 5469,
+  "maximum_seam_error": 2.384185791015625e-07,
+  "initial_rebuild_seconds": 0.35541822400000456,
+  "retained_faces_after_brush": 4571
+}

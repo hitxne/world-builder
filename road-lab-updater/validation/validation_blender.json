@@ -1,0 +1,19 @@
+{
+  "blender_version": "5.1.0",
+  "checks": [
+    "addon register",
+    "Edit Mode section selection",
+    "four-way junction detection",
+    "movement texture assignment",
+    "capacity rejection preserves committed settings",
+    "explicit expansion approval",
+    "four-way approach switching",
+    "road edit marking regeneration",
+    "global driving-side marking regeneration",
+    "straight alpha textures",
+    "nonempty projected marking mesh"
+  ],
+  "marking_faces": 3864,
+  "marking_vertices": 15456,
+  "warnings": []
+}

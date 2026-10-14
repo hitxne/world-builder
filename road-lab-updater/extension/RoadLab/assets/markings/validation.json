@@ -1,0 +1,11 @@
+{
+  "assets": 35,
+  "passed": [
+    "PNG modes and dimensions",
+    "alpha matches grayscale mask",
+    "nonempty paint",
+    "SVG parsing",
+    "positive physical dimensions",
+    "one significant connected paint component per arrow (isolated antialias pixels excluded)"
+  ]
+}

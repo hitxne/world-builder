@@ -1,32 +1,29 @@
-# Road Lab Blender Extension — updater foundation
+# RoadLab Blender extension and update repository
 
-This directory is an integration scaffold, **not** the complete Road Lab add-on. Do not install over an existing Road Lab installation until its real code and identifiers are migrated.
+The full RoadLab 0.17.0 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
 
-## What gets downloaded?
-Blender installs versioned extension ZIP files from a configured remote extension repository (its index.json feed). GitHub holds source code; a GitHub branch alone is not a Blender update server.
+## Install once
 
-## Release channels
-- Stable: `/stable/index.json` and vetted release ZIPs.
-- Beta: `/beta/index.json` and prerelease ZIPs.
-Publish to separate hosting paths, and test channel isolation before attempting simultaneous installation.
+1. Save your project. Disable the older **RoadLab** legacy addon in Preferences > Add-ons, then restart Blender. The legacy addon and extension register the same tools and must not run together. Existing project data is retained.
+2. Enable **Allow Online Access** in Preferences > System if it is disabled. Then Preferences > Get Extensions > Repositories > Add Remote Repository. Paste:
+   `https://raw.githubusercontent.com/hitxne/world-builder/feature/road-lab-updater/road-lab-updater/dist/stable/index.json`
+3. Name it RoadLab and enable **Check for Updates on Startup**. Refresh repositories, find **RoadLab**, and install it from this repository.
+4. RoadLab > Updates shows the startup check setting and opens Get Extensions. Blender checks for newer versions; use its Update action to install them. This is not a silent forced updater.
 
-## Local build
-Requires Blender 4.2+ on PATH and a POSIX shell:
+Do not first install this ZIP into a different local repository and then install a second copy from the remote feed. Install from the RoadLab remote repository so Blender can associate the addon with its update source.
+
+## Release workflow
+
+`extension/` is the canonical source for this branch. `extension/RoadLab/` contains the working addon; `extension/updates.py` integrates Blender repository settings. The addon data identifiers remain unchanged so previous .blend scenes keep their authoring data.
+
+For each release, increase **both** `extension/blender_manifest.toml`'s version and `extension/RoadLab/__init__.py`'s addon version. Test compatibility before committing. Blender detects updates only when the feed lists a higher compatible version.
+
+Push source changes to `feature/road-lab-updater`. The GitHub workflow validates/builds the ZIP and commits the generated `dist/stable/index.json` and archive to this branch. The public raw GitHub path hosts both. Generated feed commits do not retrigger the workflow. If branch protection blocks the workflow push, publish the generated files through a reviewed PR instead. No tokens ship in the addon.
+
+Build locally:
 
 ```sh
-bash road-lab-updater/tools/build_repository.sh
+BLENDER=/path/to/blender bash road-lab-updater/tools/build_repository.sh
 ```
 
-The script validates the extension, builds a ZIP, and generates `road-lab-updater/dist/stable/index.json`. This does **not** publish an update service.
-
-## Setup
-1. Replace the placeholder `extension/__init__.py` with the actual Road Lab source while preserving its registration, add-on preferences and data migration support.
-2. Review the manifest's id, version, maintainer, and licensing to match the actual add-on.
-3. Validate in Blender, test with old .blend projects, and build ZIPs.
-4. Publish ZIPs and generated index.json to HTTPS release hosting. If private, ensure Blender supports the chosen authentication approach; never embed long-lived tokens in distributed code.
-5. In Blender Preferences > Get Extensions > Repositories add the relevant repository URL; use Blender's extension manager to check for and install updates.
-
-Future releases become available inside Blender **only when** a higher compatible version is correctly packaged and published to the configured feed. Updates are not guaranteed merely from Git commits. Backups and a manual rollback archive are recommended.
-
-## Safety
-Do not overwrite or delete saved Blender project data. Test migrations and restart behavior. Keep stable releases separate from prereleases. Native Blender checks/installs are generally user-controlled rather than silent force-updates.
+Rollback: disable/remove the extension, then install a previous archived package after backing up the project. Repository checks do not edit project files.

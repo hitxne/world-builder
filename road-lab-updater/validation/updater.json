@@ -1,0 +1,17 @@
+{
+  "blender": "5.1.0",
+  "release": "0.17.0",
+  "passed": [
+    "manifest validation",
+    "extension build",
+    "install and enable as bl_ext package",
+    "lane selection and marking regression in extension namespace",
+    "quad terrain and matching seam regression in extension namespace",
+    "native HTTP feed install 0.17.0",
+    "native HTTP feed upgrade to test 0.17.1",
+    "lane and terrain operators present after update",
+    "idempotent repository setup",
+    "startup synchronization flag enabled"
+  ],
+  "note": "0.17.1 used only in a temporary local feed; published release remains 0.17.0"
+}

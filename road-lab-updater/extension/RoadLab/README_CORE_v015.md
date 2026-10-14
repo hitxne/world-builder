@@ -1,0 +1,15 @@
+# RoadLab 0.15 — adaptive terrain, terrain brushes and tool visibility
+
+Install the inner RoadLab_Addon_v0150.zip and enable RoadLab. Select the road in Object Mode, press T and use the standalone RoadLab toolbar icons, or open the collapsed Road tools sidebar section and choose an icon. The tools are no longer hidden in Scale's dropdown. Native Width and Ctrl+T Twist in Edit Mode now both affect RoadLab's output. Tilt blends through neighboring approaches and is limited to about ±34 degrees. Bank in Object Mode remains the regional sculpt alternative.
+
+Select the scene terrain in Object Mode to use Terrain Raise, Lower, Flatten or Smooth. Radius and strength appear in the tool header and Terrain tools sidebar. Wheel changes radius; releasing LMB commits the stroke; Esc restores the stroke's original elevation field. Flatten samples the initial cursor height.
+
+Terrain detail is adaptive. Road seams retain exact vertices. Grade transitions and sculpted regions receive samples; flat distant ground does not receive a uniform grid. Coplanar horizontal regions merge into simple large polygons, splitting regions with holes along existing edges. The four-corner flat source boundary remains aligned; no unnecessary outer grid strip is generated. N-gons are valid master-scene geometry; a game export still triangulates them.
+
+Brush elevation lives in a separate persistent road-local 1 m displacement field over the source terrain. The source plane remains editable and unchanged by the brush. Starting/moving a brush refines a constrained local mesh cavity; subsequent stamps in that area update local heights. Completing or flattening a stroke coarsens unneeded local detail. Faces outside the cavity and heights outside the brush support remain unchanged. Local remeshing still assembles the resulting Blender mesh; it is not a tiled streaming renderer. A brush touching a very large flat polygon may retriangulate that entire polygon.
+
+Terrain-contact controls: Detail spacing sets the base refinement scale; Height tolerance controls adaptive sampling error. It is a sampling target, not a certified global error bound. The 1 m deformation field limits very small brush detail. Road-to-terrain seams remain locked during terrain sculpting. Terrain may also be sculpted without roads.
+
+Sidewalks now limit inward offset using the actual concave pavement arc and its chord clearance. Width tapers when the requested sidewalk cannot fit around the bend; runs are skipped if the preceding stack already consumes the safe radius. Curbs and grass keep their existing offset behavior. This fixes the tested 2 m inside radius with curb + grass + 2.2 m sidewalk. It is a local curvature guard, not a complete nonadjacent-layer intersection solver. Existing layer controls and editable profiles remain.
+
+Tests in Blender 5.1.2 cover exact seams, closed/nested loops, local terrain refinement/coarsening, all four terrain brushes, source preservation, terrain without roads, toolbar top-level visibility, addon registration and tight-corner sidewalk winding. Native Windows mouse interaction and interactive undo still need user testing.

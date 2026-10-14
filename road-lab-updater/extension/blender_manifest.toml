@@ -1,9 +1,9 @@
 schema_version = "1.0.0"
 id = "road_lab"
-version = "0.1.0"
-name = "Road Lab"
+version = "0.17.0"
+name = "RoadLab"
 tagline = "Tools for procedural road and lane editing"
 maintainer = "Road Lab Team"
 type = "add-on"
-blender_version_min = "4.2.0"
+blender_version_min = "5.1.0"
 license = ["SPDX:LicenseRef-Proprietary"]

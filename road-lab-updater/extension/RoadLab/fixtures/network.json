@@ -1,0 +1,463 @@
+{
+  "version": 3,
+  "revision": 1,
+  "units": "m",
+  "fixture": "network",
+  "settings": {
+    "curb_height": 0.1524,
+    "sidewalk_width": 2.2,
+    "sample_spacing": 1.0,
+    "show_guides": false
+  },
+  "roads": [
+    {
+      "id": "road-main",
+      "name": "Divided local arterial",
+      "alignment": {
+        "kind": "polyline",
+        "points": [
+          [
+            -90,
+            0,
+            0
+          ],
+          [
+            90,
+            0,
+            1
+          ]
+        ]
+      },
+      "width_left": [
+        [
+          0,
+          5.16
+        ],
+        [
+          180,
+          5.16
+        ]
+      ],
+      "width_right": [
+        [
+          0,
+          8.82
+        ],
+        [
+          30,
+          8.82
+        ],
+        [
+          55,
+          5.16
+        ],
+        [
+          145,
+          5.16
+        ],
+        [
+          160,
+          8.82
+        ],
+        [
+          180,
+          8.82
+        ]
+      ],
+      "crossfall": 0.02,
+      "radius": [
+        [
+          0,
+          1
+        ]
+      ],
+      "level": 0,
+      "terrain_mode": "grade",
+      "curbs": true,
+      "sidewalk_width": 2.2,
+      "sidewalk_setback": 1.2,
+      "lanes": [
+        {
+          "id": "lane-main-east-inner",
+          "width": 3.66,
+          "offset": [
+            [
+              0,
+              -3.33
+            ]
+          ],
+          "direction": 1,
+          "start": 0,
+          "end": 180,
+          "type": "through",
+          "mode": "auto"
+        },
+        {
+          "id": "lane-main-east-added",
+          "width": 3.66,
+          "offset": [
+            [
+              0,
+              -6.99
+            ]
+          ],
+          "direction": 1,
+          "start": 160,
+          "end": 180,
+          "type": "through",
+          "mode": "auto"
+        },
+        {
+          "id": "lane-main-west-inner",
+          "width": 3.66,
+          "offset": [
+            [
+              0,
+              3.33
+            ]
+          ],
+          "direction": -1,
+          "start": 0,
+          "end": 180,
+          "type": "through",
+          "mode": "auto"
+        },
+        {
+          "id": "lane-main-east-exit",
+          "width": 3.66,
+          "offset": [
+            [
+              0,
+              -6.99
+            ]
+          ],
+          "direction": 1,
+          "start": 0,
+          "end": 30,
+          "type": "exit",
+          "mode": "auto"
+        }
+      ]
+    },
+    {
+      "id": "road-highway-north",
+      "name": "Northbound highway deck",
+      "alignment": {
+        "kind": "polyline",
+        "points": [
+          [
+            -26,
+            -85,
+            7.5
+          ],
+          [
+            -26,
+            85,
+            7.5
+          ]
+        ]
+      },
+      "width_left": [
+        [
+          0,
+          3.66
+        ]
+      ],
+      "width_right": [
+        [
+          0,
+          3.66
+        ]
+      ],
+      "crossfall": 0.02,
+      "level": 1,
+      "terrain_mode": "bridge",
+      "curbs": false,
+      "lanes": [
+        {
+          "id": "lane-highway-north-inner",
+          "width": 3.66,
+          "offset": [
+            [
+              0,
+              1.83
+            ]
+          ],
+          "direction": 1,
+          "start": 0,
+          "end": 170,
+          "type": "through",
+          "mode": "auto"
+        },
+        {
+          "id": "lane-highway-north-exit",
+          "width": 3.66,
+          "offset": [
+            [
+              0,
+              -1.83
+            ]
+          ],
+          "direction": 1,
+          "start": 0,
+          "end": 170,
+          "type": "exit",
+          "mode": "auto"
+        }
+      ]
+    },
+    {
+      "id": "road-highway-south",
+      "name": "Southbound highway deck",
+      "alignment": {
+        "kind": "polyline",
+        "points": [
+          [
+            -11,
+            -85,
+            7.5
+          ],
+          [
+            -11,
+            85,
+            7.5
+          ]
+        ]
+      },
+      "width_left": [
+        [
+          0,
+          3.66
+        ]
+      ],
+      "width_right": [
+        [
+          0,
+          3.66
+        ]
+      ],
+      "crossfall": 0.02,
+      "level": 1,
+      "terrain_mode": "bridge",
+      "curbs": false,
+      "lanes": [
+        {
+          "id": "lane-highway-south-entry",
+          "width": 3.66,
+          "offset": [
+            [
+              0,
+              1.83
+            ]
+          ],
+          "direction": -1,
+          "start": 0,
+          "end": 170,
+          "type": "entry",
+          "mode": "auto"
+        },
+        {
+          "id": "lane-highway-south-inner",
+          "width": 3.66,
+          "offset": [
+            [
+              0,
+              -1.83
+            ]
+          ],
+          "direction": -1,
+          "start": 0,
+          "end": 170,
+          "type": "through",
+          "mode": "auto"
+        }
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "ramp-highway-exit",
+      "name": "Highway lane continues into local lane",
+      "from_lane": "lane-highway-north-exit",
+      "from_station": 45,
+      "to_lane": "lane-main-east-added",
+      "to_station": 165,
+      "width": 3.66,
+      "handle_from": [
+        35,
+        0,
+        0
+      ],
+      "handle_to": [
+        -40,
+        0,
+        0
+      ],
+      "terrain_mode": "grade",
+      "grade_from": 12,
+      "level": 0,
+      "type": "continuation"
+    },
+    {
+      "id": "ramp-highway-entry",
+      "name": "Local lane continues into highway",
+      "from_lane": "lane-main-east-exit",
+      "from_station": 30,
+      "to_lane": "lane-highway-south-entry",
+      "to_station": 30,
+      "width": 3.66,
+      "handle_from": [
+        30,
+        0,
+        0
+      ],
+      "handle_to": [
+        -30,
+        0,
+        0
+      ],
+      "terrain_mode": "grade",
+      "grade_to": 85,
+      "level": 0,
+      "type": "continuation"
+    }
+  ],
+  "parking_lots": [
+    {
+      "id": "lot-retail",
+      "name": "Editable retail parking",
+      "vertices": [
+        [
+          18,
+          21
+        ],
+        [
+          70,
+          21
+        ],
+        [
+          82,
+          32
+        ],
+        [
+          78,
+          68
+        ],
+        [
+          28,
+          72
+        ],
+        [
+          18,
+          55
+        ]
+      ],
+      "grade": {
+        "elevation": 0.45,
+        "slope_x": 0.002,
+        "slope_y": 0.004,
+        "origin": [
+          18,
+          21
+        ]
+      },
+      "islands": [
+        {
+          "id": "island-long",
+          "vertices": [
+            [
+              32,
+              40
+            ],
+            [
+              58,
+              40
+            ],
+            [
+              62,
+              44
+            ],
+            [
+              58,
+              48
+            ],
+            [
+              32,
+              48
+            ],
+            [
+              28,
+              44
+            ]
+          ]
+        },
+        {
+          "id": "island-east",
+          "vertices": [
+            [
+              67,
+              53
+            ],
+            [
+              73,
+              53
+            ],
+            [
+              73,
+              62
+            ],
+            [
+              67,
+              62
+            ]
+          ]
+        }
+      ],
+      "rows": []
+    }
+  ],
+  "accesses": [
+    {
+      "id": "access-west",
+      "name": "West parking entrance",
+      "road_id": "road-main",
+      "lot_id": "lot-retail",
+      "station": 120,
+      "side": 1,
+      "width": 8,
+      "lot_edge": 0,
+      "fraction": 0.2,
+      "handle_length": 5
+    },
+    {
+      "id": "access-east",
+      "name": "East parking entrance",
+      "road_id": "road-main",
+      "lot_id": "lot-retail",
+      "station": 157,
+      "side": 1,
+      "width": 8,
+      "lot_edge": 0,
+      "fraction": 0.8,
+      "handle_length": 5
+    }
+  ],
+  "terrain": {
+    "enabled": true,
+    "bounds": [
+      -115,
+      115,
+      -100,
+      100
+    ],
+    "grid_spacing": 2,
+    "blend_distance": 18,
+    "clearance": 0.025,
+    "wave_amplitude": 1.1,
+    "base_height": -0.3
+  },
+  "validation": {
+    "max_road_grade": 0.12,
+    "max_terrain_slope": 0.6
+  }
+}
