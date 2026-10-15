@@ -75,9 +75,12 @@ def inherit_extensions(obj):
     records=point_settings.records(obj);ids={row['id'] for row in records}
     known=set(json.loads(obj.get('roadlab_lane_known_points',json.dumps(sorted(ids)))))
     new=ids-known;obj['roadlab_lane_known_points']=json.dumps(sorted(ids))
+    edges={frozenset((a,b)) for _,_,a,b in segments(obj)}
+    old_edges={frozenset(edge) for edge in json.loads(obj.get('roadlab_lane_known_edges',json.dumps([sorted(edge) for edge in edges])))}
+    added_edges=edges-old_edges;obj['roadlab_lane_known_edges']=json.dumps(sorted(sorted(edge) for edge in edges))
     if 'roadlab_lanes' not in obj:return
     configs=split_lane_assignments(obj,state(obj),new,records)
-    if not new:
+    if not new and not added_edges:
         if configs!=state(obj):obj['roadlab_lanes']=json.dumps(configs);point_settings.save(obj,records)
         return
     ps=point_settings.points(obj);lookup={row['id']:i for i,row in enumerate(records)}
@@ -89,7 +92,17 @@ def inherit_extensions(obj):
     while changed:
         changed=False;assigned={frozenset(c['endpoints']) for c in configs}
         for _,_,a,b in segs:
-            if frozenset((a,b)) in assigned or not ({a,b}&new):continue
+            if frozenset((a,b)) in assigned or not ({a,b}&new or frozenset((a,b)) in added_edges):continue
+            if not ({a,b}&new):
+                # Joining two configured ends may fill the gap only if both
+                # profiles agree in the new edge's direction of travel.
+                proposals=[]
+                for shared,other in ((a,b),(b,a)):
+                    parents=[c for c in configs if all(i in lookup for i in c['endpoints']) and any(position(i)==position(shared) for i in c['endpoints'])]
+                    if len(neighbors[position(shared)])!=2 or len(parents)!=1:break
+                    parent=parents[0];forward=([shared,other] if position(parent['endpoints'][1])==position(shared) else [other,shared])==[a,b]
+                    proposals.append((parent['incoming'] if forward else parent['outgoing'],parent['outgoing'] if forward else parent['incoming'],parent.get('median',0)))
+                if len(proposals)!=2 or proposals[0]!=proposals[1]:continue
             for shared,other in ((a,b),(b,a)):
                 p=position(shared)
                 if len(neighbors[p])!=2:continue
@@ -190,6 +203,12 @@ def paint_material(asset):
 
 
 def rebuild(obj,scene,force=False):
+    from . import road_core
+    previous=road_core._busy;road_core._busy=True
+    try:return _rebuild(obj,scene,force)
+    finally:road_core._busy=previous
+
+def _rebuild(obj,scene,force=False):
     if obj.get('roadlab_new_core'):inherit_extensions(obj)
     configs=state(obj);output=obj.get('roadlab_core_mesh')
     if output is None:return

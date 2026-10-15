@@ -12,17 +12,41 @@ def save(road,items):
 
 def sync(road):
     current=points(road);old=records(road);new=[]
-    by_coordinate=defaultdict(deque)
-    for item in old:by_coordinate[tuple(item['co'])].append(item)
-    for i,p in enumerate(current):
-        co=[round(v,6) for v in p.co[:3]]
-        if len(old)==len(current):item=dict(old[i])
+    coordinates=[tuple(round(v,6) for v in p.co[:3]) for p in current]
+    by_coordinate=defaultdict(list)
+    for i,item in enumerate(old):by_coordinate[tuple(item['co'])].append(i)
+    topology=json.loads(road.get('roadlab_point_topology','[]'))
+    old_lookup={item['id']:tuple(item['co']) for item in old};old_neighbors=defaultdict(set)
+    for ids,cyclic in topology:
+        for i in range(len(ids) if cyclic else len(ids)-1):
+            a,b=ids[i],ids[(i+1)%len(ids)]
+            if a in old_lookup and b in old_lookup:
+                old_neighbors[a].add(old_lookup[b]);old_neighbors[b].add(old_lookup[a])
+    neighbors=defaultdict(set);offset=0;shape=[]
+    for spline in road.data.splines:
+        count=len(spline.points);shape.append((offset,count,spline.use_cyclic_u))
+        for i in range(count if spline.use_cyclic_u else count-1):
+            a,b=offset+i,offset+(i+1)%count
+            neighbors[a].add(coordinates[b]);neighbors[b].add(coordinates[a])
+        offset+=count
+    # F may reverse and concatenate splines without changing the point count.
+    # Index identity is safe for point movement, but not for that permutation.
+    from collections import Counter
+    remap=len(old)!=len(current) or Counter(coordinates)==Counter(tuple(item['co']) for item in old)
+    used=set()
+    for i,co in enumerate(coordinates):
+        if not remap:item=dict(old[i])
         else:
-            matches=by_coordinate[tuple(co)]
-            if matches:item=dict(matches.popleft())
+            matches=[j for j in by_coordinate[co] if j not in used]
+            if matches:
+                j=max(matches,key=lambda j:(len(neighbors[i]&old_neighbors[old[j]['id']]),j==i))
+                used.add(j);item=dict(old[j])
             else:item={'id':uuid.uuid4().hex}
-        item['co']=co;new.append(item)
-    save(road,new);return new
+        item['co']=list(co);new.append(item)
+    save(road,new)
+    topology_json=json.dumps([([item['id'] for item in new[start:start+count]],cyclic) for start,count,cyclic in shape])
+    if road.get('roadlab_point_topology')!=topology_json:road['roadlab_point_topology']=topology_json
+    return new
 
 def width(road,index,default):
     items=records(road);p=points(road)[index]

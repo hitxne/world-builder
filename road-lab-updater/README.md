@@ -1,6 +1,6 @@
 # RoadLab Blender extension and update repository
 
-The full RoadLab 0.18.8 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
+The full RoadLab 0.18.9 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
 
 ## Install once
 
@@ -93,3 +93,9 @@ The older standalone triangulated examples are diagnostic mesh fixtures, now exp
 In curve Edit Mode, select a junction or adjacent street points and open the Lane tool. Under **Markings > Crosswalk**, enable the crossing, then adjust **A-end position** and **B-end position** independently to skew it. Positive offsets move away from the junction. Amber A/B labels identify the endpoints in the viewport. Preview updates live; Apply saves without closing.
 
 Existing curb and sidewalk layers lower at each endpoint and return to their own profile height over **Ramp run**. Moving either crossing endpoint moves its ramp. Cancelling the lane window restores saved ramps, and temporary previews are excluded from saved files. Add curb and sidewalk layers first on custom roads; the editable example includes both. Optional yellow tactile pads project onto these surfaces, falling back to assigned terrain. Their raised-dot appearance uses a bump shader, not modeled dome geometry.
+
+## Connecting roads with F (0.18.9)
+
+Joining or closing source splines preserves existing point identities and lane assignments, including when Blender reverses point order. New connecting edges inherit matching lane profiles from both ends; differing profiles remain unassigned for review rather than choosing one arbitrarily. Ordinary point movement preserves its settings.
+
+Crosswalk ramp guides sample the finished road edge instead of the source segment height, so lifting a junction preserves ramp and tactile-pad clearance over terrain. Direct road and marking rebuilds guard against re-entry from dependency-graph evaluation.

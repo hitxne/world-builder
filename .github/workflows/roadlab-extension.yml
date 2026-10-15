@@ -36,6 +36,10 @@ jobs:
         run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_editable_example_blender.py
       - name: Test crosswalk ramps and preview rollback
         run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_crosswalk_ramps_blender.py
+      - name: Test F joins and closed-loop lane preservation
+        run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_lane_join_blender.py
+      - name: Test raised crosswalk clearance
+        run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_raised_crosswalk_blender.py
       - name: Validate and build repository
         env:
           BLENDER: /tmp/roadlab-blender/blender

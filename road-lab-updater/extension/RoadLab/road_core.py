@@ -93,6 +93,14 @@ def values(road):
     return {name:input_value(mod,name) for name in ('road width','resolution','corner NW','corner NE','corner SW','corner SE')}
 
 def rebuild(road,force=False):
+    # Evaluating curb/sidewalk surfaces for decals can dispatch depsgraph handlers.
+    # A direct rebuild needs the same guard as the queued update path.
+    global _busy
+    previous=_busy;_busy=True
+    try:return _rebuild(road,force)
+    finally:_busy=previous
+
+def _rebuild(road,force=False):
     mod=modifier(road)
     if not mod:return
     if road.mode=='EDIT':road.update_from_editmode()

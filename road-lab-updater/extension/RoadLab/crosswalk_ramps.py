@@ -21,6 +21,31 @@ def bind(road,guide):
 
 def rebuild(road,scene,plans):
     verts=[];faces=[];weights=[];seen=set()
+    # Junction surfaces need not follow the source segment's linear Z profile.
+    # Use the finished road edge as the ramp datum, including each stripe end.
+    helper=road.get('roadlab_core_mesh');boundary=[];tree=None
+    if helper is not None:
+        from mathutils.bvhtree import BVHTree
+        from .surface_network import perimeter
+        matrix=road.matrix_world.inverted()@helper.matrix_world
+        points=[matrix@v.co for v in helper.data.vertices];polygons=[list(p.vertices) for p in helper.data.polygons]
+        tree=BVHTree.FromPolygons(points,polygons)
+        for loop in perimeter(points,polygons):
+            boundary.extend((points[i],points[j]) for i,j in zip(loop,loop[1:]+loop[:1]))
+    def road_height(co):
+        if tree is not None:
+            hits=[];origin=co.z+100
+            for _ in range(32):
+                hit=tree.ray_cast(Vector((co.x,co.y,origin)),Vector((0,0,-1)),200)[0]
+                if hit is None:break
+                hits.append(hit.z);origin=hit.z-.001
+            if hits:return (co.x,co.y,min(hits,key=lambda z:abs(z-co.z)))
+        nearest=None
+        for a,b in boundary:
+            delta=b.xy-a.xy;t=max(0.,min(1.,(co.xy-a.xy).dot(delta)/max(delta.length_squared,1e-12)))
+            q=a+(b-a)*t;distance=(co.xy-q.xy).length_squared
+            if nearest is None or distance<nearest[0]:nearest=(distance,q.z)
+        return (co.x,co.y,nearest[1] if nearest else co.z)
     for mark in plans:
         if 'crosswalk_ends' not in mark:continue
         identity=(tuple(mark.get('source_endpoints',[])),mark['role'][1])
@@ -28,7 +53,7 @@ def rebuild(road,scene,plans):
         seen.add(identity);a,b=map(Vector,mark['crosswalk_ends']);tangent=(b-a).normalized();normal=Vector((tangent.y,-tangent.x,0))
         half=mark['size'][1]/2;run=mark.get('ramp_run',1.8);start=len(verts)
         for center,weight in ((a-tangent*run,0),(a,1),(b,1),(b+tangent*run,0)):
-            for sign in (-1,1):verts.append(tuple(center+normal*(sign*half)));weights.append(weight)
+            for sign in (-1,1):verts.append(road_height(center+normal*(sign*half)));weights.append(weight)
         faces.extend((start+2*i,start+2*i+1,start+2*i+3,start+2*i+2) for i in range(3))
     guide=road.get('roadlab_crosswalk_guide')
     if guide is None and not faces:return
