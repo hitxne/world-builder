@@ -1,6 +1,6 @@
 # RoadLab Blender extension and update repository
 
-The full RoadLab 0.18.3 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
+The full RoadLab 0.18.4 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
 
 ## Install once
 
@@ -57,3 +57,9 @@ Completed releases are always published to the automatic updater on `feature/roa
 ## Clear junction controls (0.18.3)
 
 Choose **Edit road from** using direction names computed from the actual connected roads. North is map +Y and East is +X, independent of the viewport. The chosen arm is highlighted orange while the lane window is open. Arriving at junction and Leaving junction replace ambiguous incoming/outgoing headings. Apply saves the chosen arm; reopen to edit another. Guides disappear on Apply, Cancel, or disabling the extension.
+
+## Focused lane workflow (0.18.4)
+
+The lane window has three pages: **Lanes**, **Markings**, and **Road size**. Detail sections start collapsed on each opening. Lanes shows one travel direction at a time, with the lane count, movement choices, widths, and optional entry details. Markings groups arrows, lane lines, and stop lines separately. Road size holds total width, median, section direction, and the confirmed clear action. Junction stop-line controls refer to arrivals at the selected junction; controls for the far end are available by selecting that street section.
+
+Switching junction roads preserves pending edits. Apply validates every edited road before writing any setup and saves them together. If roads need more width, a single expansion confirmation lists the affected roads. Cancel leaves committed road setups unchanged.

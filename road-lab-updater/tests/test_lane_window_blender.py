@@ -57,5 +57,46 @@ assert labels[0][0]!=labels[1][0]
 before=ps.selected(bpy.context,road)
 e.show_approach_preview(op,road);assert e._approach_preview is not None
 e.clear_approach_preview();assert e._approach_preview is None and ps.selected(bpy.context,road)==before
+# Switching arms retains edits without committing until Apply.
+road.rotation_euler.z=0;bpy.context.view_layer.update()
+select({1});op=window();op.active_approach='0';op.drafts_json='{}'
+d=scene.roadlab_lane_draft;d.road_width=11.5;d.incoming[0].movement='LEFT';d.incoming.add().movement='THROUGH'
+op.approach='1';e.approach_changed(op,bpy.context);d.road_width=8.5;d.spacing=23
+op.approach='0';e.approach_changed(op,bpy.context)
+assert len(d.incoming)==2 and d.incoming[0].movement=='LEFT' and d.road_width==11.5
+assert not e.state(road)
+batch=list(e.save_active_approach(op,bpy.context).values())
+assert bpy.ops.roadlab.lane_apply(batch_json=json.dumps(batch))=={'FINISHED'}
+assert len(e.state(road))==2
+assert {c['spacing'] for c in e.state(road)}=={18,23}
+# Invalid edits in a later arm must not partly overwrite earlier valid arms.
+before=road['roadlab_lanes'];saved_widths=[x.get('width') for x in ps.records(road)]
+bad=json.loads(json.dumps(batch));bad[1]['incoming']=[];bad[1]['outgoing']=[]
+try:bpy.ops.roadlab.lane_apply(batch_json=json.dumps(bad))
+except RuntimeError:pass
+assert road['roadlab_lanes']==before and [x.get('width') for x in ps.records(road)]==saved_widths
+# Width expansion still requires approval; all draft arms are applied together.
+narrow=json.loads(json.dumps(batch));narrow[0]['road_width']=1
+try:bpy.ops.roadlab.lane_apply(batch_json=json.dumps(narrow))
+except RuntimeError:pass
+assert road['roadlab_lanes']==before
+assert bpy.ops.roadlab.lane_apply(batch_json=json.dumps(narrow),expand=True)=={'FINISHED'}
+# Draw each page and its expanded sections using the real RNA draft.
+class Layout:
+ def __init__(self):self.text=[];self.enabled=True
+ def label(self,**kw):self.text.append(kw.get('text',''))
+ def prop(self,*args,**kw):pass
+ def prop_enum(self,*args,**kw):pass
+ def template_list(self,*args,**kw):pass
+ def separator(self):pass
+ def row(self,**kw):return self
+ def box(self):return self
+ def operator(self,*args,**kw):return SimpleNamespace()
+for page in ('LANES','MARKINGS','ROAD'):
+ d.page=page
+ for flag in ('show_incoming','show_outgoing','show_arrows','show_dividers','show_stops','show_size','show_lane_details','show_saved'):setattr(d,flag,True)
+ for direction in ('incoming','outgoing'):
+  d.travel=direction;layout=Layout();e.draw_lanes(layout,bpy.context,True);e.draw_lanes(layout,bpy.context,False)
+assert e._approach_preview is None
 bpy.ops.object.mode_set(mode='OBJECT')
 print('LANE_WINDOW_GUIDANCE_PASS',json.dumps(checks),flush=True)

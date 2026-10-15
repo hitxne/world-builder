@@ -50,6 +50,13 @@ class ROADLAB_LaneDraft(bpy.types.PropertyGroup):
     show_incoming:BoolProperty(default=False)
     show_outgoing:BoolProperty(default=False)
     show_markings:BoolProperty(default=False)
+    page:EnumProperty(items=[('LANES','Lanes','Lane counts and allowed movements'),('MARKINGS','Markings','Arrows, dividers and stop lines'),('ROAD','Road size','Width, median and section direction')],default='LANES')
+    travel:EnumProperty(items=[('incoming','Arriving','Traffic toward the junction or section end'),('outgoing','Leaving','Traffic away from the junction or section end')],default='incoming')
+    show_arrows:BoolProperty(default=False)
+    show_dividers:BoolProperty(default=False)
+    show_stops:BoolProperty(default=False)
+    show_lane_details:BoolProperty(default=False)
+    show_saved:BoolProperty(default=False)
     incoming_index:IntProperty(default=0,min=0)
     outgoing_index:IntProperty(default=0,min=0)
     incoming:CollectionProperty(type=ROADLAB_Lane)
@@ -261,55 +268,79 @@ def validate_approach(obj,endpoints,incoming,outgoing):
     if errors:raise ValueError('; '.join(errors))
 
 
+DRAFT_FIELDS=('segment_key','targets_json','reverse','road_width','median','spacing','arrow_approach','solid_approach','transition_length','stop_setback','control_incoming','control_outgoing')
+
+def draft_snapshot(d):
+    return dict({k:getattr(d,k) for k in DRAFT_FIELDS},incoming=rows(d.incoming),outgoing=rows(d.outgoing))
+
+def restore_draft(d,data):
+    for k in DRAFT_FIELDS:setattr(d,k,data[k])
+    for field in ('incoming','outgoing'):
+        getattr(d,field).clear()
+        for row in data[field]:
+            item=getattr(d,field).add();item.width=row['width'];item.movement=row['movement'];item.entry=row.get('entry','CONTINUOUS')
+        setattr(d,field+'_index',0)
+
+def checked_drafts(context,drafts):
+    from math import isfinite
+    obj=road(context);lookup={x['id']:i for i,x in enumerate(point_settings.records(obj))}
+    valid={frozenset((a,b)) for _,_,a,b in segments(obj)};result=[]
+    for data in drafts:
+        targets=json.loads(data['targets_json'])
+        if data['segment_key']!=obj.name or not targets or any(frozenset(t) not in valid for t in targets):raise ValueError('Road topology changed; reopen the lane editor')
+        if not len(data['incoming'])+len(data['outgoing']):raise ValueError('Add at least one lane')
+        needed=lane_logic.road_width(entries(data['incoming'],'i'),entries(data['outgoing'],'o'),data['median'])[1]
+        if not isfinite(data['road_width']):raise ValueError('Road width must be finite')
+        for row in data['incoming']+data['outgoing']:lane_markings.arrow_id(row['movement'].split('_'))
+        for t in targets:validate_approach(obj,t[::-1] if data['reverse'] else t,entries(data['incoming'],'i'),entries(data['outgoing'],'o'))
+        result.append((data,targets,sorted({lookup[v] for t in targets for v in t}),needed))
+    return obj,result
+
 class ROADLAB_OT_lane_apply(bpy.types.Operator):
     bl_idname='roadlab.lane_apply';bl_label='Apply lanes and markings';bl_options={'REGISTER','UNDO'}
     expand:BoolProperty(name='Expand road to fit',default=False)
+    batch_json:StringProperty(default='',options={'HIDDEN'})
+    def drafts(self,context):return json.loads(self.batch_json) if self.batch_json else [draft_snapshot(context.scene.roadlab_lane_draft)]
     def required(self,context):
         d=context.scene.roadlab_lane_draft
         return lane_logic.road_width(entries(rows(d.incoming),'i'),entries(rows(d.outgoing),'o'),d.median)[1]
     def invoke(self,context,event):
         self.expand=False
         try:
-            obj,indices,targets=draft_target(context)
-            from .road_core import values
-            available=context.scene.roadlab_lane_draft.road_width;needed=self.required(context)
-            if needed>available+1e-6:
+            obj,checked=checked_drafts(context,self.drafts(context))
+            if any(needed>data['road_width']+1e-6 for data,_,_,needed in checked):
                 self.expand=True
-                return context.window_manager.invoke_props_dialog(self,width=350,confirm_text='Expand road & apply')
+                return context.window_manager.invoke_props_dialog(self,width=390,confirm_text='Expand roads & apply')
         except ValueError as e:self.report({'ERROR'},str(e));return {'CANCELLED'}
         return self.execute(context)
     def draw(self,context):
-        self.layout.label(text=f'Lanes require {self.required(context):.2f} m')
-        self.layout.label(text=f'Requested road width: {context.scene.roadlab_lane_draft.road_width:.2f} m')
-        self.layout.label(text='Keep current road: cancel this change.')
-        self.layout.label(text='Expand road & apply, or Cancel to keep it.')
+        self.layout.label(text='More space is needed for these lanes',icon='INFO')
+        for data,_,_,needed in checked_drafts(context,self.drafts(context))[1]:
+            if needed>data['road_width']+1e-6:self.layout.label(text=f"{data.get('label','Selected road')}: {data['road_width']:.1f} m → {needed:.1f} m")
+        self.layout.label(text='Cancel keeps the roads unchanged.')
     def execute(self,context):
         try:
-            obj,indices,targets=draft_target(context);draft=context.scene.roadlab_lane_draft
-            if not len(draft.incoming)+len(draft.outgoing):raise ValueError('Add at least one lane')
-            from .road_core import values
-            needed=self.required(context);available=draft.road_width
-            if needed>available+1e-6 and not self.expand:raise ValueError('Road too narrow. Enable expansion to apply these lanes.')
-            for row in [*rows(draft.incoming),*rows(draft.outgoing)]:lane_markings.arrow_id(row['movement'].split('_'))
-            for t in targets:validate_approach(obj,t[::-1] if draft.reverse else t,entries(rows(draft.incoming),'i'),entries(rows(draft.outgoing),'o'))
-            from math import isfinite
-            if not isfinite(available):raise ValueError('Road width must be finite')
-            desired=max(available,needed) if self.expand else available
-            items=point_settings.sync(obj)
-            for i in indices:items[i]['width']=desired
-            point_settings.save(obj,items);draft.road_width=desired
-            configs=[c for c in state(obj) if all(frozenset(c['endpoints'])!=frozenset(t) for t in targets)]
-            for t in targets:
-                endpoints=t[::-1] if draft.reverse else t
-                configs.append({'endpoints':endpoints,'incoming':rows(draft.incoming),'outgoing':rows(draft.outgoing),'median':draft.median,'spacing':draft.spacing,**{k:getattr(draft,k) for k in ('arrow_approach','solid_approach','transition_length','stop_setback','control_incoming','control_outgoing')}})
-            obj['roadlab_lanes']=json.dumps(configs)
+            obj,checked=checked_drafts(context,self.drafts(context))
+            if any(needed>data['road_width']+1e-6 for data,_,_,needed in checked) and not self.expand:raise ValueError('Road too narrow. Enable expansion to apply these lanes.')
+            # Validate every edited arm before changing any road data.
+            items=point_settings.sync(obj);configs=state(obj);widths={}
+            for data,targets,indices,needed in checked:
+                desired=max(data['road_width'],needed) if self.expand else data['road_width']
+                for i in indices:widths[i]=max(widths.get(i,0),desired)
+                configs=[c for c in configs if all(frozenset(c['endpoints'])!=frozenset(t) for t in targets)]
+                for t in targets:
+                    configs.append(dict(endpoints=t[::-1] if data['reverse'] else t,incoming=data['incoming'],outgoing=data['outgoing'],**{k:data[k] for k in ('median','spacing','arrow_approach','solid_approach','transition_length','stop_setback','control_incoming','control_outgoing')}))
+            for i,width in widths.items():items[i]['width']=width
+            point_settings.save(obj,items);obj['roadlab_lanes']=json.dumps(configs)
+            context.scene.roadlab_lane_draft.road_width=max(context.scene.roadlab_lane_draft.road_width,self.required(context)) if self.expand else context.scene.roadlab_lane_draft.road_width
             from .selected_points import notify
             notify(context,obj);rebuild(obj,context.scene)
         except ValueError as e:self.report({'ERROR'},str(e));return {'CANCELLED'}
         return {'FINISHED'}
 
 class ROADLAB_OT_lane_remove(bpy.types.Operator):
-    bl_idname='roadlab.lane_remove';bl_label='Remove selected segment markings';bl_options={'REGISTER','UNDO'}
+    bl_idname='roadlab.lane_remove';bl_label='Clear saved lane setup';bl_options={'REGISTER','UNDO'}
+    def invoke(self,context,event):return context.window_manager.invoke_confirm(self,event)
     def execute(self,context):
         try:
             obj,indices,targets=draft_target(context);obj['roadlab_lanes']=json.dumps([c for c in state(obj) if all(frozenset(c['endpoints'])!=frozenset(t) for t in targets)]);rebuild(obj,context.scene,True)
@@ -331,30 +362,52 @@ def section(l,d,flag,label,summary=''):
 def draw_lanes(l,context,junction=False):
     d=context.scene.roadlab_lane_draft
     required=lane_logic.road_width(entries(rows(d.incoming),'i'),entries(rows(d.outgoing),'o'),d.median)[1]
-    box=section(l,d,'show_size','Road size',f'{d.road_width:.1f} m')
-    if box:
-        box.prop(d,'road_width');box.prop(d,'median')
-        box.label(text=f'Width needed by lanes: {required:.2f} m')
-        box.label(text='Extra width remains shoulder space')
-        if not junction:box.prop(d,'reverse')
-    if required>d.road_width+1e-6:l.label(text=f'Needs {required:.2f} m — expansion approval on Apply',icon='INFO')
-    for field in ('incoming','outgoing'):
-        items=getattr(d,field);label=('Arriving at junction' if field=='incoming' else 'Leaving junction') if junction else ('Toward section end' if field=='incoming' else 'Toward section start');box=section(l,d,'show_'+field,label,f'{len(items)} / 7')
+    l.prop(d,'page',expand=True)
+    if d.page=='LANES':
+        row=l.row(align=True)
+        row.prop_enum(d,'travel','incoming',text='Arriving' if junction else 'Toward end')
+        row.prop_enum(d,'travel','outgoing',text='Leaving' if junction else 'Toward start')
+        field=d.travel;items=getattr(d,field)
+        label=('Arriving at junction' if field=='incoming' else 'Leaving junction') if junction else ('Toward section end' if field=='incoming' else 'Toward section start')
+        box=section(l,d,'show_'+field,label,f'{len(items)} lanes')
         if box:
-            box.label(text=('Toward this junction' if field=='incoming' else 'Away from this junction') if junction else ('Along selected direction' if field=='incoming' else 'Against selected direction'))
-            row=box.row(align=True);row.label(text='Driver’s left → right')
+            row=box.row(align=True);row.label(text='Lane count')
             for delta,icon in [(-1,'REMOVE'),(1,'ADD')]:
                 button=row.row();button.enabled=len(items)<7 if delta>0 else len(items)>0
-                op=button.operator('roadlab.lane_count',text='Remove lane' if delta<0 else 'Add lane',icon=icon);op.direction=field;op.delta=delta
-            header=box.row();header.label(text='Lane');header.label(text='Allowed movement');header.label(text='Width (m)')
-            box.template_list('ROADLAB_UL_lanes',field,d,field,d,field+'_index',rows=3,maxrows=3)
-            if items and getattr(d,field+'_index')<len(items):box.prop(items[getattr(d,field+'_index')],'entry')
-    box=section(l,d,'show_markings','Markings')
-    if box:
-        box.prop(d,'spacing');box.prop(d,'arrow_approach');box.prop(d,'solid_approach');box.prop(d,'transition_length')
-        box.prop(d,'control_incoming',text='Arrivals here' if junction else 'At section end');box.prop(d,'control_outgoing',text='Arrivals at other end' if junction else 'At section start');box.prop(d,'stop_setback')
-        box.label(text='Stop bars apply at junctions on controlled arrivals')
-        box.label(text='Added-lane dots mark entry; geometry is unchanged')
+                op=button.operator('roadlab.lane_count',text='',icon=icon);op.direction=field;op.delta=delta
+            if items:
+                box.label(text='Lane order: driver’s left → right')
+                header=box.row();header.label(text='Lane');header.label(text='Movement');header.label(text='Width (m)')
+                box.template_list('ROADLAB_UL_lanes',field,d,field,d,field+'_index',rows=min(7,max(1,len(items))),maxrows=7)
+                if getattr(d,field+'_index')<len(items):
+                    detail=section(box,d,'show_lane_details','Selected lane details')
+                    if detail:
+                        detail.prop(items[getattr(d,field+'_index')],'entry',text='Entry')
+                        detail.label(text='Added lane paints entry dots.')
+                        detail.label(text='Edit the road shape separately.')
+            else:box.label(text='No lanes in this direction. Use + to add one.')
+        l.label(text=f"Road total: {len(d.incoming)} arriving · {len(d.outgoing)} leaving" if junction else f"Road total: {len(d.incoming)} toward end · {len(d.outgoing)} toward start")
+    elif d.page=='MARKINGS':
+        box=section(l,d,'show_arrows','Direction arrows')
+        if box:box.prop(d,'arrow_approach',text='Before junction (m)');box.prop(d,'spacing',text='Repeat spacing (m)');box.label(text='Set distance to 0 to turn off automatic arrows.')
+        box=section(l,d,'show_dividers','Lane lines')
+        if box:box.prop(d,'solid_approach',text='Solid before junction (m)');box.prop(d,'transition_length',text='Added-lane dots (m)')
+        box=section(l,d,'show_stops','Stop line')
+        if box:
+            box.prop(d,'control_incoming',text='Arrivals here' if junction else 'At section end')
+            if not junction:box.prop(d,'control_outgoing',text='At section start')
+            if d.control_incoming in {'STOP','SIGNAL'} or (not junction and d.control_outgoing in {'STOP','SIGNAL'}):box.prop(d,'stop_setback',text='Setback (m)')
+            box.label(text='Stop and signal controls paint an arrival stop line.')
+    else:
+        box=section(l,d,'show_size','Width and median',f'{d.road_width:.1f} m')
+        if box:
+            box.prop(d,'road_width',text='Total width (m)');box.prop(d,'median',text='Median width (m)')
+            box.label(text=f'Lanes need {required:.1f} m including shoulders.')
+            box.label(text='Extra width becomes shoulder space.')
+            if not junction:box.prop(d,'reverse',text='Swap travel directions')
+        box=section(l,d,'show_saved','Saved setup')
+        if box:box.operator('roadlab.lane_remove',text='Clear saved lane setup',icon='TRASH')
+    if required>d.road_width+1e-6:l.label(text=f'Apply will ask to widen this road to {required:.1f} m.',icon='INFO')
 
 
 
@@ -409,10 +462,21 @@ def show_approach_preview(operator,obj):
     _approach_preview=bpy.types.SpaceView3D.draw_handler_add(draw,(),'WINDOW','POST_VIEW')
 
 
+def save_active_approach(self,context):
+    drafts=json.loads(getattr(self,'drafts_json','{}'));key=getattr(self,'active_approach','')
+    if key:
+        data=draft_snapshot(context.scene.roadlab_lane_draft)
+        choices=json.loads(self.choices_json);data['label']=approach_labels(approach_geometry(road(context),choices))[int(key)][0]
+        drafts[key]=data;self.drafts_json=json.dumps(drafts)
+    return drafts
+
 def approach_changed(self,context):
     choices=json.loads(self.choices_json)
     if choices and self.is_junction:
-        set_draft(context,road(context),[choices[int(self.approach)]],normalize=True)
+        drafts=save_active_approach(self,context);key=self.approach
+        if key in drafts:restore_draft(context.scene.roadlab_lane_draft,drafts[key])
+        else:set_draft(context,road(context),[choices[int(key)]],normalize=True)
+        self.active_approach=key
         for area in context.screen.areas if context.screen else []:
             if area.type=='VIEW_3D':area.tag_redraw()
 
@@ -420,19 +484,23 @@ def approach_changed(self,context):
 class ROADLAB_OT_lane_window(bpy.types.Operator):
     bl_idname='roadlab.lane_window';bl_label='Lane editor';bl_options={'REGISTER','UNDO'}
     choices_json:StringProperty(default='[]',options={'HIDDEN'})
+    drafts_json:StringProperty(default='{}',options={'HIDDEN'})
+    active_approach:StringProperty(default='',options={'HIDDEN'})
     has_selection:BoolProperty(default=False,options={'HIDDEN'})
     selection_hint:StringProperty(default='',options={'HIDDEN'})
     is_junction:BoolProperty(default=False,options={'HIDDEN'})
     junction_label:StringProperty(default='Junction',options={'HIDDEN'})
     approach:EnumProperty(name='Approach',items=approach_items,update=approach_changed)
     def invoke(self,context,event):
-        clear_approach_preview()
+        clear_approach_preview();self.drafts_json='{}';self.active_approach=''
+        d=context.scene.roadlab_lane_draft;d.page='LANES';d.travel='incoming'
+        for flag in ('show_size','show_incoming','show_outgoing','show_markings','show_arrows','show_dividers','show_stops','show_lane_details','show_saved'):setattr(d,flag,False)
         try:
             obj,targets,junction=selection_targets(context);context.scene.wb_native.road=obj;self.has_selection=True;self.choices_json=json.dumps(targets);self.is_junction=junction
             set_draft(context,obj,[targets[0]] if junction else targets,normalize=junction)
             if junction:
                 from .junction_layout import from_selection
-                self.junction_label=from_selection(context)['kind'].replace('_',' ').title();self.approach='0'
+                self.junction_label=from_selection(context)['kind'].replace('_',' ').title();self.approach='0';self.active_approach='0'
                 if getattr(context,'area',None) and context.area.type=='VIEW_3D':show_approach_preview(self,obj)
         except (ValueError,AttributeError) as e:
             self.has_selection=False;self.selection_hint=str(e);self.choices_json='[]';self.is_junction=False
@@ -453,18 +521,18 @@ class ROADLAB_OT_lane_window(bpy.types.Operator):
             l.label(text=f'{self.junction_label} · {len(json.loads(self.choices_json))} roads')
             l.prop(self,'approach',text='Edit road from')
             l.label(text='Selected road is orange in the viewport',icon='INFO')
-            l.label(text='North = +Y · East = +X (map axes)')
-            l.label(text='Edit one road here, Apply, then reopen for another road.')
+            l.label(text='Switch roads freely. Apply saves your edited roads together.')
         else:
             l.label(text=f'{len(json.loads(self.choices_json))} selected street segment(s)')
             obj,indices,targets=draft_target(context);lookup={x['id']:i for i,x in enumerate(point_settings.records(obj))};ps=point_settings.points(obj);endpoint=targets[0][0] if context.scene.roadlab_lane_draft.reverse else targets[-1][1];co=obj.matrix_world@Vector(ps[lookup[endpoint]].co[:3]);l.label(text=f'Incoming toward ({co.x:.1f}, {co.y:.1f})')
-        l.label(text='Driving side: '+context.scene.roadlab_map_settings.traffic_side.title())
-        draw_lanes(l,context,self.is_junction);l.label(text='Apply saves this section / approach')
-        l.operator('roadlab.lane_remove')
+        draw_lanes(l,context,self.is_junction)
+        l.separator();l.label(text='Traffic keeps '+context.scene.roadlab_map_settings.traffic_side.lower()+' · map setting')
     def cancel(self,context):clear_approach_preview()
     def execute(self,context):
         clear_approach_preview()
-        if self.has_selection:bpy.ops.roadlab.lane_apply('INVOKE_DEFAULT')
+        if self.has_selection:
+            drafts=save_active_approach(self,context) if self.is_junction else {}
+            bpy.ops.roadlab.lane_apply('INVOKE_DEFAULT',batch_json=json.dumps(list(drafts.values())) if drafts else '')
         return {'FINISHED'}
 
 
