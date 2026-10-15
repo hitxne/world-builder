@@ -1,0 +1,17 @@
+{
+  "blender": "5.1.0",
+  "passed": [
+    "registration",
+    "surface projection",
+    "off-road footprint rejection",
+    "automatic lane settings untouched",
+    "road elevation follows",
+    "copied road ownership",
+    "renamed road ownership",
+    "Object mode toolbar",
+    "Edit mode toolbar",
+    "top orthographic entry",
+    "view restoration",
+    "remove last stamp"
+  ]
+}

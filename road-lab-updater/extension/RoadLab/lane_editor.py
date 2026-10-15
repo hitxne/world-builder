@@ -34,9 +34,10 @@ def state(obj):return json.loads(obj.get('roadlab_lanes','[]'))
 
 def entries(rows,prefix):return [lane_logic.Lane(f'{prefix}{i}',x['width'],frozenset(x['movement'].split('_'))) for i,x in enumerate(rows)]
 
-def rows(collection):return [{'width':x.width,'movement':x.movement} for x in collection]
+def rows(collection):return [{'width':x.width,'movement':x.movement,'entry':getattr(x,'entry','CONTINUOUS')} for x in collection]
 
 class ROADLAB_Lane(bpy.types.PropertyGroup):
+    entry:EnumProperty(name='Lane entry',items=[('CONTINUOUS','Continuous','Normal lane divider'),('ADDED','Added lane','Short dotted divider in the entry section; does not change road geometry')],default='CONTINUOUS')
     width:FloatProperty(name='Width (m)',min=.5,default=3.5)
     movement:EnumProperty(name='Movement',items=MOVEMENTS,default='THROUGH')
 
@@ -54,6 +55,11 @@ class ROADLAB_LaneDraft(bpy.types.PropertyGroup):
     outgoing:CollectionProperty(type=ROADLAB_Lane)
     median:FloatProperty(name='Median (m)',min=0.,default=0.)
     spacing:FloatProperty(name='Arrow spacing (m)',min=5.,default=18.)
+    solid_approach:FloatProperty(name='Solid approach (m)',min=0.,default=20.)
+    transition_length:FloatProperty(name='Entry dots (m)',min=0.,default=30.)
+    stop_setback:FloatProperty(name='Stop setback (m)',min=0.,default=1.22)
+    control_incoming:EnumProperty(name='Forward-end control',items=[('NONE','Uncontrolled','No stop bar'),('STOP','Stop','Place a stop bar on incoming lanes'),('SIGNAL','Traffic signals','Place a stop bar; traffic simulation remains separate'),('YIELD','Yield','No stop bar')],default='NONE')
+    control_outgoing:EnumProperty(name='Reverse-end control',items=[('NONE','Uncontrolled','No stop bar'),('STOP','Stop','Place a stop bar on incoming lanes'),('SIGNAL','Traffic signals','Place a stop bar; traffic simulation remains separate'),('YIELD','Yield','No stop bar')],default='NONE')
     reverse:BoolProperty(name='Reverse section direction',description='Swap which end incoming lanes travel toward; the map driving side stays unchanged')
 
 
@@ -111,7 +117,7 @@ def rebuild(obj,scene,force=False):
                     if 1e-6<t<1-1e-6 and (candidate-Vector(junction)).length<1e-5:cuts.append((length*t,junction))
             cuts.sort(key=lambda cut:cut[0])
             for (_,start),(_,finish) in zip(cuts,cuts[1:]):
-                plans+=lane_markings.plan(start,finish,entries(config['incoming'],'i'),entries(config['outgoing'],'o'),width,side,config['median'],clearance(start,width),clearance(finish,width),config['spacing'])
+                plans+=lane_markings.plan(start,finish,entries(config['incoming'],'i'),entries(config['outgoing'],'o'),width,side,config['median'],clearance(start,width),clearance(finish,width),config['spacing'],**{k:config.get(k,v) for k,v in [('solid_approach',20.),('transition_length',30.),('stop_setback',1.22),('control_incoming','NONE'),('control_outgoing','NONE')]},emerging_incoming=[i for i,row in enumerate(config['incoming']) if row.get('entry')=='ADDED'],emerging_outgoing=[i for i,row in enumerate(config['outgoing']) if row.get('entry')=='ADDED'])
         except ValueError as error:warnings.append(str(error))
     mesh=output.data;vs=[v.co.copy() for v in mesh.vertices];polys=[tuple(p.vertices) for p in mesh.polygons]
     bvh=BVHTree.FromPolygons(vs,polys);top=max((v.z for v in vs),default=0)+100;bottom=min((v.z for v in vs),default=0)-100
@@ -138,7 +144,7 @@ def rebuild(obj,scene,force=False):
             if bvh.ray_cast(Vector((center.x,center.y,top)),Vector((0,0,-1)),top-bottom)[0] is None:continue
             base=len(verts);verts.extend(projected[i] for i in face);uvs.extend(pu[i] for i in face);faces.append(tuple(range(base,base+4)));materials.append(index)
     data=bpy.data.meshes.new('RoadLab Lane Markings');data.from_pydata(verts,[],faces);data.update();uv=data.uv_layers.new(name='UVMap')
-    for loop in data.loops:uv.data[loop.index].uv=uvs[loop.vertex_index]
+    uv.data.foreach_set('uv',[c for loop in data.loops for c in uvs[loop.vertex_index]])
     for asset in slots:data.materials.append(paint_material(asset))
     for p,index in zip(data.polygons,materials):p.material_index=index
     target=obj.get('roadlab_marking_object')
@@ -189,14 +195,16 @@ def set_draft(context,obj,targets,normalize=False):
     config=next((c for c in state(obj) if frozenset(c['endpoints'])==frozenset(targets[0])),None)
     if config:d.reverse=config['endpoints'][0]!=targets[0][0];d.median=config['median'];d.spacing=config['spacing']
     else:d.median=0.;d.spacing=18.
+    for field,value in [('solid_approach',20.),('transition_length',30.),('stop_setback',1.22),('control_incoming','NONE'),('control_outgoing','NONE')]:setattr(d,field,config.get(field,value) if config else value)
     for field in ('incoming','outgoing'):
         for row in (config[field] if config else [{'width':3.5,'movement':'THROUGH'}]):
-            item=getattr(d,field).add();item.width=row['width'];item.movement=row['movement']
+            item=getattr(d,field).add();item.width=row['width'];item.movement=row['movement'];item.entry=row.get('entry','CONTINUOUS')
     if normalize and d.reverse:
         incoming,outgoing=rows(d.incoming),rows(d.outgoing);d.incoming.clear();d.outgoing.clear()
         for field,values in (('incoming',outgoing),('outgoing',incoming)):
             for row in values:
-                item=getattr(d,field).add();item.width=row['width'];item.movement=row['movement']
+                item=getattr(d,field).add();item.width=row['width'];item.movement=row['movement'];item.entry=row.get('entry','CONTINUOUS')
+        d.control_incoming,d.control_outgoing=d.control_outgoing,d.control_incoming
         d.reverse=False
 
 
@@ -286,7 +294,7 @@ class ROADLAB_OT_lane_apply(bpy.types.Operator):
             configs=[c for c in state(obj) if all(frozenset(c['endpoints'])!=frozenset(t) for t in targets)]
             for t in targets:
                 endpoints=t[::-1] if draft.reverse else t
-                configs.append({'endpoints':endpoints,'incoming':rows(draft.incoming),'outgoing':rows(draft.outgoing),'median':draft.median,'spacing':draft.spacing})
+                configs.append({'endpoints':endpoints,'incoming':rows(draft.incoming),'outgoing':rows(draft.outgoing),'median':draft.median,'spacing':draft.spacing,**{k:getattr(draft,k) for k in ('solid_approach','transition_length','stop_setback','control_incoming','control_outgoing')}})
             obj['roadlab_lanes']=json.dumps(configs)
             from .selected_points import notify
             notify(context,obj);rebuild(obj,context.scene)
@@ -333,8 +341,14 @@ def draw_lanes(l,context,junction=False):
                 op=button.operator('roadlab.lane_count',text='Remove lane' if delta<0 else 'Add lane',icon=icon);op.direction=field;op.delta=delta
             header=box.row();header.label(text='Lane');header.label(text='Allowed movement');header.label(text='Width (m)')
             box.template_list('ROADLAB_UL_lanes',field,d,field,d,field+'_index',rows=3,maxrows=3)
+            if items and getattr(d,field+'_index')<len(items):box.prop(items[getattr(d,field+'_index')],'entry')
     box=section(l,d,'show_markings','Markings')
-    if box:box.prop(d,'spacing');box.label(text='Arrows and lines follow the lane settings')
+    if box:
+        box.prop(d,'spacing');box.prop(d,'solid_approach');box.prop(d,'transition_length')
+        box.prop(d,'control_incoming');box.prop(d,'control_outgoing');box.prop(d,'stop_setback')
+        box.label(text='Stop bars apply at junctions on controlled arrivals')
+        box.label(text='Added-lane dots mark entry; geometry is unchanged')
+
 
 
 _approach_enum_cache={}

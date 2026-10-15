@@ -17,7 +17,7 @@ def arrow_id(movements,side='RIGHT'):
     except KeyError:raise ValueError('No marking for this movement combination')
     return 'arrow_uturn_right' if asset=='arrow_uturn_left' and side=='LEFT' else asset
 
-def plan(a,b,incoming,outgoing,width,side='RIGHT',median=0.,trim_start=0.,trim_end=0.,spacing=18.):
+def plan(a,b,incoming,outgoing,width,side='RIGHT',median=0.,trim_start=0.,trim_end=0.,spacing=18.,solid_approach=20.,transition_length=30.,emerging_incoming=(),emerging_outgoing=(),control_incoming="NONE",control_outgoing="NONE",stop_setback=1.22):
     """Incoming travels a -> b. Lane order is each driver's left -> right.
 
     End clearances are supplied by the topology adapter. Never draw through a
@@ -35,11 +35,33 @@ def plan(a,b,incoming,outgoing,width,side='RIGHT',median=0.,trim_start=0.,trim_e
     center=sign*(no-ni)/2
     start=trim_start;end=length-trim_end
     if end<=start:return []
+    if not all(isfinite(x) and x>=0 for x in (solid_approach,transition_length,stop_setback)):raise ValueError('Invalid approach marking dimensions')
+    if control_incoming not in ('NONE','STOP','SIGNAL','YIELD') or control_outgoing not in ('NONE','STOP','SIGNAL','YIELD'):raise ValueError('Invalid approach control')
     assets=manifest();result=[]
     def add(asset,station,lateral,direction=1,size=None):
         if size is None:size=assets[asset]['physical_canvas_m']
         result.append({'asset':asset,'center':[a[0]+forward[0]*station+right[0]*lateral,a[1]+forward[1]*station+right[1]*lateral,a[2]+(b[2]-a[2])*station/length], 'forward':[direction*forward[0],direction*forward[1]],'size':list(size)})
-    for lanes,direction,total in ((incoming,1,ni),(outgoing,-1,no)):
+    def line_interval(asset,lo,hi,offset,direction):
+        if hi-lo<1e-6:return
+        if asset=='line_white':add(asset,(lo+hi)/2,offset,direction,(.1524,hi-lo));return
+        period=assets[asset]['physical_canvas_m'][1]
+        # Anchor phase in travel direction, so short end tiles don't reverse the pattern.
+        distance=0.
+        while distance<hi-lo-1e-6:
+            span=min(period,hi-lo-distance)
+            station=lo+distance+span/2 if direction==1 else hi-distance-span/2
+            add(asset,station,offset,direction,(.1524,span));result[-1]['v_range']=[0,span/period];distance+=span
+    for lanes,direction,total,emerging,control,junction in ((incoming,1,ni,set(emerging_incoming),control_incoming,trim_end>0),(outgoing,-1,no,set(emerging_outgoing),control_outgoing,trim_start>0)):
+        bar=None
+        lo,hi=start,end
+        if lanes and junction and control in ('STOP','SIGNAL'):
+            depth=.6096
+            bar=end-stop_setback-depth/2 if direction==1 else start+stop_setback+depth/2
+            if bar-depth/2>=start and bar+depth/2<=end:
+                add('stop_bar',bar,center+sign*direction*(median/2+total/2),direction,(total,depth))
+                if direction==1:hi=bar-depth/2
+                else:lo=bar+depth/2
+            else:bar=None
         cursor=0
         for lane in lanes:
             distance=cursor+lane.width/2 if side=='RIGHT' else total-cursor-lane.width/2
@@ -49,18 +71,21 @@ def plan(a,b,incoming,outgoing,width,side='RIGHT',median=0.,trim_start=0.,trim_e
             scale=min(1.,(lane.width/2-.15)/(w*max(anchor,1-anchor)))
             if scale<=0:continue
             w*=scale;h*=scale
-            station=end-h/2-1 if direction==1 else start+h/2+1
-            while station-h/2>=start and station+h/2<=end:
+            station=hi-h/2-1 if direction==1 else lo+h/2+1
+            while station-h/2>=lo and station+h/2<=hi:
                 anchor=assets[asset]['anchor_uv'][0]
                 add(asset,station,offset+direction*(.5-anchor)*w,direction,(w,h));station-=direction*spacing
         cursor=0
-        for lane in lanes[:-1]:
+        for index,lane in enumerate(lanes[:-1]):
             cursor+=lane.width;distance=cursor if side=='RIGHT' else total-cursor
             offset=center+sign*direction*(median/2+distance)
-            # Physical 10/30 ft tile; partial end tiles retain UV phase.
-            period=assets['broken_white']['physical_canvas_m'][1];s=start
-            while s<end:
-                span=min(period,end-s);add('broken_white',s+span/2,offset,direction,(.1524,span));result[-1]['v_range']=[0,span/period];s+=period
+            travel_length=max(0.,hi-lo)
+            solid=min(solid_approach,travel_length) if junction else 0.
+            dotted=min(transition_length,travel_length-solid) if index in emerging or index+1 in emerging else 0.
+            spans=[('dotted_white',0.,dotted),('broken_white',dotted,travel_length-solid),('line_white',travel_length-solid,travel_length)]
+            for asset,u,v in spans:
+                if direction==1:line_interval(asset,lo+u,lo+v,offset,direction)
+                else:line_interval(asset,hi-v,hi-u,offset,direction)
         if lanes:
             add('line_white',(start+end)/2,center+sign*direction*(median/2+total),direction,(.1524,end-start))
     if bool(incoming)!=bool(outgoing):

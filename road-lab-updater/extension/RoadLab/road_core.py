@@ -160,6 +160,10 @@ def rebuild(road,force=False):
 
 
 def refresh_markings(road):
+    from . import marking_stamp
+    try:
+        marking_stamp.rebuild(road);road['roadlab_manual_marking_error']=''
+    except Exception as error:road['roadlab_manual_marking_error']=str(error)
     if 'roadlab_lanes' not in road:return
     from . import lane_editor
     for scene in road.users_scene:

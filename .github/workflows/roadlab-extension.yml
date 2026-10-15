@@ -24,6 +24,8 @@ jobs:
           curl --fail --location https://download.blender.org/release/Blender5.1/blender-5.1.0-linux-x64.tar.xz --output /tmp/blender.tar.xz
           mkdir /tmp/roadlab-blender
           tar -xf /tmp/blender.tar.xz --strip-components=1 -C /tmp/roadlab-blender
+      - name: Test marking approach logic
+        run: python road-lab-updater/tests/test_marking_approaches.py
       - name: Validate and build repository
         env:
           BLENDER: /tmp/roadlab-blender/blender

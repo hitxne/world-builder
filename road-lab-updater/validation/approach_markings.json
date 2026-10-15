@@ -1,0 +1,25 @@
+{
+  "version": "0.18.0",
+  "blender": "5.1.0",
+  "portable_regressions_passed": 23,
+  "checks": [
+    "incoming-only stop bars",
+    "no bars on uncontrolled/yield/dead ends",
+    "solid approach intervals",
+    "short dotted added-lane entry",
+    "short blocks without negative segments",
+    "both traffic sides",
+    "rotation and height interpolation",
+    "automatic lane capacity and regeneration",
+    "manual stamp projection and footprint rejection",
+    "manual stamps follow edited source segment",
+    "Object and Edit mode stamp toolbar",
+    "orthographic entry and prior-view restoration",
+    "fresh extension install"
+  ],
+  "limits": [
+    "lane entry marking does not generate taper geometry",
+    "stop setback is not yet calculated from crosswalk geometry",
+    "GUI mouse clicking is not recorded in a desktop video"
+  ]
+}
