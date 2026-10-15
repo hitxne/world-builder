@@ -5,13 +5,13 @@ from .native_extension import socket,set_input,road_modifier
 
 def extrusion_group():
     name='WB_EXTENSION_BORDER_EXTRUSION';g=bpy.data.node_groups.get(name)
-    if g and g.get('wb_schema',0)>=14 and any(s.name=='Layer prefix' for s in g.interface.items_tree):return g
+    if g and g.get('wb_schema',0)>=15 and any(s.name=='Layer prefix' for s in g.interface.items_tree):return g
     if g and g.library:g=g.copy();g.name=name+'_v08'
     if g:g.nodes.clear()
     else:g=bpy.data.node_groups.new(name,'GeometryNodeTree')
-    g['wb_schema']=14
+    g['wb_schema']=15
     socket(g,'Geometry','INPUT','NodeSocketGeometry')
-    for n,k,d in [('Safe sidewalk offset','NodeSocketBool',False),('Grass surface','NodeSocketBool',False),('Terrain base','NodeSocketObject',None),('Vertex controls','NodeSocketObject',None),('Layer prefix','NodeSocketString',''),('Use vertex controls','NodeSocketBool',False),('Use layer order','NodeSocketBool',False),('Junction cleanup','NodeSocketBool',True),('Precise viewport cleanup','NodeSocketBool',False),('Editing preview','NodeSocketBool',False),('Road surfaces','NodeSocketCollection',None),('Enabled','NodeSocketBool',True),('Road','NodeSocketObject',None),('Profile curve','NodeSocketObject',None),('Path curve','NodeSocketObject',None),('Use custom path','NodeSocketBool',False),('Profile width scale','NodeSocketFloat',1.),('Profile height scale','NodeSocketFloat',1.),('Setback','NodeSocketFloat',0.),('Height offset','NodeSocketFloat',0.),('Crosswalk areas','NodeSocketObject',None),('Crossing road','NodeSocketObject',None),('Lower at crossing','NodeSocketBool',False),('Transition length','NodeSocketFloat',3.),('Material','NodeSocketMaterial',None)]:
+    for n,k,d in [('Flatten curb at crossing','NodeSocketBool',False),('Safe sidewalk offset','NodeSocketBool',False),('Grass surface','NodeSocketBool',False),('Terrain base','NodeSocketObject',None),('Vertex controls','NodeSocketObject',None),('Layer prefix','NodeSocketString',''),('Use vertex controls','NodeSocketBool',False),('Use layer order','NodeSocketBool',False),('Junction cleanup','NodeSocketBool',True),('Precise viewport cleanup','NodeSocketBool',False),('Editing preview','NodeSocketBool',False),('Road surfaces','NodeSocketCollection',None),('Enabled','NodeSocketBool',True),('Road','NodeSocketObject',None),('Profile curve','NodeSocketObject',None),('Path curve','NodeSocketObject',None),('Use custom path','NodeSocketBool',False),('Profile width scale','NodeSocketFloat',1.),('Profile height scale','NodeSocketFloat',1.),('Setback','NodeSocketFloat',0.),('Height offset','NodeSocketFloat',0.),('Crosswalk areas','NodeSocketObject',None),('Crossing road','NodeSocketObject',None),('Lower at crossing','NodeSocketBool',False),('Transition length','NodeSocketFloat',3.),('Material','NodeSocketMaterial',None)]:
         item=socket(g,n,'INPUT',k,d)
         if n in ('Profile width scale','Profile height scale','Transition length'):item.min_value=.01
     socket(g,'Geometry','OUTPUT','NodeSocketGeometry')
@@ -22,9 +22,32 @@ def extrusion_group():
     border=N.new('GeometryNodeSeparateGeometry');border.domain='POINT';L.new(road.outputs['Geometry'],border.inputs['Geometry']);L.new(test.outputs['Result'],border.inputs['Selection'])
     path=N.new('GeometryNodeObjectInfo');path.transform_space='RELATIVE';L.new(inp.outputs['Path curve'],path.inputs['Object'])
     choose_path=N.new('GeometryNodeSwitch');choose_path.input_type='GEOMETRY';L.new(inp.outputs['Use custom path'],choose_path.inputs['Switch']);L.new(border.outputs['Selection'],choose_path.inputs['False']);L.new(path.outputs['Geometry'],choose_path.inputs['True'])
-    resample=N.new('GeometryNodeResampleCurve');resample.inputs['Mode'].default_value='Length';resample.inputs['Length'].default_value=.25;L.new(choose_path.outputs['Output'],resample.inputs['Curve'])
+    # Keep pavement polygon corners when spacing the sweep. Uniform resampling
+    # cuts across them and produces alternating inward offsets on tight arcs.
+    path_position=N.new('GeometryNodeInputPosition');path_index=N.new('GeometryNodeInputIndex')
+    next_index=N.new('GeometryNodeOffsetPointInCurve');next_index.inputs['Offset'].default_value=1;L.new(path_index.outputs['Index'],next_index.inputs['Point Index'])
+    path_next=N.new('GeometryNodeSampleIndex');path_next.data_type='FLOAT_VECTOR';path_next.domain='POINT';L.new(choose_path.outputs['Output'],path_next.inputs['Geometry']);L.new(path_position.outputs['Position'],path_next.inputs['Value']);L.new(next_index.outputs['Point Index'],path_next.inputs['Index'])
+    path_length=N.new('ShaderNodeVectorMath');path_length.operation='DISTANCE';L.new(path_position.outputs['Position'],path_length.inputs[0]);L.new(path_next.outputs['Value'],path_length.inputs[1])
+    path_cuts=N.new('ShaderNodeMath');path_cuts.operation='DIVIDE';path_cuts.inputs[1].default_value=.25;L.new(path_length.outputs['Value'],path_cuts.inputs[0])
+    cut_count=N.new('ShaderNodeMath');cut_count.operation='FLOOR';L.new(path_cuts.outputs[0],cut_count.inputs[0])
+    subdivided=N.new('GeometryNodeSubdivideCurve');L.new(choose_path.outputs['Output'],subdivided.inputs['Curve']);L.new(cut_count.outputs[0],subdivided.inputs['Cuts'])
+    # A polyline offset uses the angle bisector and its miter length. A unit
+    # normal alone pulls every original arc knot inward by a different amount.
+    directions=[]
+    for step in (-1,1):
+        neighbor=N.new('GeometryNodeOffsetPointInCurve');neighbor.inputs['Offset'].default_value=step;L.new(path_index.outputs['Index'],neighbor.inputs['Point Index'])
+        sample=N.new('GeometryNodeSampleIndex');sample.data_type='FLOAT_VECTOR';sample.domain='POINT';L.new(subdivided.outputs['Curve'],sample.inputs['Geometry']);L.new(path_position.outputs['Position'],sample.inputs['Value']);L.new(neighbor.outputs['Point Index'],sample.inputs['Index'])
+        delta=N.new('ShaderNodeVectorMath');delta.operation='SUBTRACT';L.new(path_position.outputs['Position'] if step<0 else sample.outputs['Value'],delta.inputs[0]);L.new(sample.outputs['Value'] if step<0 else path_position.outputs['Position'],delta.inputs[1])
+        flat=N.new('ShaderNodeVectorMath');flat.operation='MULTIPLY';flat.inputs[1].default_value=(1,1,0);L.new(delta.outputs['Vector'],flat.inputs[0])
+        unit=N.new('ShaderNodeVectorMath');unit.operation='NORMALIZE';L.new(flat.outputs['Vector'],unit.inputs[0]);directions.append(unit.outputs['Vector'])
+    dot=N.new('ShaderNodeVectorMath');dot.operation='DOT_PRODUCT';L.new(directions[0],dot.inputs[0]);L.new(directions[1],dot.inputs[1])
+    half=N.new('ShaderNodeMath');half.operation='MULTIPLY_ADD';half.inputs[1].default_value=.5;half.inputs[2].default_value=.5;L.new(dot.outputs['Value'],half.inputs[0])
+    safe_cos=N.new('ShaderNodeMath');safe_cos.operation='MAXIMUM';safe_cos.inputs[1].default_value=.04;L.new(half.outputs[0],safe_cos.inputs[0])
+    cosine=N.new('ShaderNodeMath');cosine.operation='SQRT';L.new(safe_cos.outputs[0],cosine.inputs[0])
+    reciprocal=N.new('ShaderNodeMath');reciprocal.operation='DIVIDE';reciprocal.inputs[0].default_value=1;L.new(cosine.outputs[0],reciprocal.inputs[1])
+    miter_store=N.new('GeometryNodeStoreNamedAttribute');miter_store.data_type='FLOAT';miter_store.domain='POINT';miter_store.inputs['Name'].default_value='roadlab_offset_miter';L.new(subdivided.outputs['Curve'],miter_store.inputs['Geometry']);L.new(reciprocal.outputs[0],miter_store.inputs['Value'])
     edge_position=N.new('GeometryNodeInputPosition');edge_z=N.new('ShaderNodeSeparateXYZ');L.new(edge_position.outputs['Position'],edge_z.inputs['Vector'])
-    edge_store=N.new('GeometryNodeStoreNamedAttribute');edge_store.data_type='FLOAT';edge_store.domain='POINT';edge_store.inputs['Name'].default_value='wb_edge_elevation';L.new(edge_z.outputs['Z'],edge_store.inputs['Value']);L.new(resample.outputs['Curve'],edge_store.inputs['Geometry'])
+    edge_store=N.new('GeometryNodeStoreNamedAttribute');edge_store.data_type='FLOAT';edge_store.domain='POINT';edge_store.inputs['Name'].default_value='wb_edge_elevation';L.new(edge_z.outputs['Z'],edge_store.inputs['Value']);L.new(miter_store.outputs['Geometry'],edge_store.inputs['Geometry'])
     source_normal=N.new('GeometryNodeInputNormal');normal_store=N.new('GeometryNodeStoreNamedAttribute');normal_store.data_type='FLOAT_VECTOR';normal_store.domain='POINT';normal_store.inputs['Name'].default_value='wb_edge_normal';L.new(edge_store.outputs['Geometry'],normal_store.inputs['Geometry']);L.new(source_normal.outputs['Normal'],normal_store.inputs['Value'])
     position_store=N.new('GeometryNodeStoreNamedAttribute');position_store.data_type='FLOAT_VECTOR';position_store.domain='POINT';position_store.inputs['Name'].default_value='wb_edge_position';L.new(normal_store.outputs['Geometry'],position_store.inputs['Geometry']);L.new(edge_position.outputs['Position'],position_store.inputs['Value'])
     profile=N.new('GeometryNodeObjectInfo');profile.transform_space='ORIGINAL';L.new(inp.outputs['Profile curve'],profile.inputs['Object'])
@@ -79,7 +102,9 @@ def extrusion_group():
     active_guard=N.new('FunctionNodeBooleanMath');active_guard.operation='AND';L.new(inp.outputs['Safe sidewalk offset'],active_guard.inputs[0]);L.new(offset_limit.outputs['Exists'],active_guard.inputs[1])
     maximum=N.new('GeometryNodeSwitch');maximum.input_type='FLOAT';maximum.inputs['False'].default_value=1e6;L.new(active_guard.outputs[0],maximum.inputs['Switch']);L.new(offset_limit.outputs['Attribute'],maximum.inputs['True'])
     safe_x=N.new('ShaderNodeMath');safe_x.operation='MINIMUM';L.new(wanted.outputs[0],safe_x.inputs[0]);L.new(maximum.outputs[0],safe_x.inputs[1]);safe_x.label='Taper sidewalk before an inward offset folds'
-    x_delta=N.new('ShaderNodeMath');x_delta.operation='SUBTRACT';L.new(safe_x.outputs[0],x_delta.inputs[0]);L.new(old_x.outputs[0],x_delta.inputs[1])
+    miter_attr=N.new('GeometryNodeInputNamedAttribute');miter_attr.data_type='FLOAT';miter_attr.inputs['Name'].default_value='roadlab_offset_miter'
+    miter_x=N.new('ShaderNodeMath');miter_x.operation='MULTIPLY';L.new(safe_x.outputs[0],miter_x.inputs[0]);L.new(miter_attr.outputs['Attribute'],miter_x.inputs[1])
+    x_delta=N.new('ShaderNodeMath');x_delta.operation='SUBTRACT';L.new(miter_x.outputs[0],x_delta.inputs[0]);L.new(old_x.outputs[0],x_delta.inputs[1])
     x_vector=N.new('ShaderNodeVectorMath');x_vector.operation='SCALE';L.new(normal_attr.outputs['Attribute'],x_vector.inputs[0]);L.new(x_delta.outputs[0],x_vector.inputs['Scale'])
     z_vector=N.new('ShaderNodeCombineXYZ');L.new(fields['zpos'],z_vector.inputs['Z'])
     vertex_offset=N.new('ShaderNodeVectorMath');vertex_offset.operation='ADD';L.new(x_vector.outputs['Vector'],vertex_offset.inputs[0]);L.new(z_vector.outputs['Vector'],vertex_offset.inputs[1])
@@ -120,7 +145,11 @@ def extrusion_group():
     difference=N.new('ShaderNodeMath');difference.operation='SUBTRACT';L.new(target.outputs['Output'],difference.inputs[0]);vertex_top_switch=N.new('GeometryNodeSwitch');vertex_top_switch.input_type='FLOAT';L.new(inp.outputs['Use vertex controls'],vertex_top_switch.inputs['Switch']);L.new(top_reference.outputs[0],vertex_top_switch.inputs['False']);L.new(vertex_top.outputs[0],vertex_top_switch.inputs['True']);L.new(vertex_top_switch.outputs['Output'],difference.inputs[1])
     lower=N.new('ShaderNodeMath');lower.operation='MINIMUM';lower.inputs[1].default_value=0;L.new(difference.outputs[0],lower.inputs[0])
     multiply=N.new('ShaderNodeMath');multiply.operation='MULTIPLY';L.new(lower.outputs[0],multiply.inputs[0]);L.new(enabled.outputs['Output'],multiply.inputs[1])
-    offset=N.new('ShaderNodeCombineXYZ');L.new(multiply.outputs[0],offset.inputs['Z'])
+    curb_floor=N.new('ShaderNodeMath');curb_floor.operation='SUBTRACT';L.new(edge_attr.outputs['Attribute'],curb_floor.inputs[0]);L.new(split.outputs['Z'],curb_floor.inputs[1])
+    below_base=N.new('ShaderNodeMath');below_base.operation='MINIMUM';below_base.inputs[1].default_value=0;L.new(curb_floor.outputs[0],below_base.inputs[0])
+    curb_drop=N.new('ShaderNodeMath');curb_drop.operation='MAXIMUM';L.new(multiply.outputs[0],curb_drop.inputs[0]);L.new(below_base.outputs[0],curb_drop.inputs[1])
+    curb_choice=N.new('GeometryNodeSwitch');curb_choice.input_type='FLOAT';L.new(inp.outputs['Flatten curb at crossing'],curb_choice.inputs['Switch']);L.new(multiply.outputs[0],curb_choice.inputs['False']);L.new(curb_drop.outputs[0],curb_choice.inputs['True'])
+    offset=N.new('ShaderNodeCombineXYZ');L.new(curb_choice.outputs['Output'],offset.inputs['Z'])
     deform=N.new('GeometryNodeSetPosition');L.new(vertex_shape.outputs['Geometry'],deform.inputs['Geometry']);L.new(offset.outputs['Vector'],deform.inputs['Offset'])
     # Resolve concave offset folds as one solid; never apply a modifier to a native road.
     union=N.new('GeometryNodeMeshBoolean');union.operation='UNION';union.solver='EXACT';union.inputs['Self Intersection'].default_value=True;L.new(deform.outputs['Geometry'],union.inputs['Mesh 2'])
@@ -170,8 +199,9 @@ def extrusion_group():
     grass_clip=N.new('GeometryNodeDeleteGeometry');grass_clip.domain='FACE';L.new(grass_deform.outputs['Geometry'],grass_clip.inputs['Geometry']);L.new(grass_road_ray.outputs['Is Hit'],grass_clip.inputs['Selection'])
     surface_choice=N.new('GeometryNodeSwitch');surface_choice.input_type='GEOMETRY';L.new(inp.outputs['Grass surface'],surface_choice.inputs['Switch']);L.new(cleaned.outputs['Output'],surface_choice.inputs['False']);L.new(grass_clip.outputs['Geometry'],surface_choice.inputs['True'])
     mat=N.new('GeometryNodeSetMaterial');L.new(inp.outputs['Material'],mat.inputs['Material']);L.new(surface_choice.outputs['Output'],mat.inputs['Geometry'])
+    flat_shading=N.new('GeometryNodeSetShadeSmooth');flat_shading.domain='FACE';flat_shading.inputs['Shade Smooth'].default_value=False;L.new(mat.outputs['Geometry'],flat_shading.inputs['Geometry'])
     # Native terrain receives tagged physical surfaces and their final boundary curves.
-    surfaces=N.new('GeometryNodeStoreNamedAttribute');surfaces.data_type='INT';surfaces.domain='POINT';surfaces.inputs['Name'].default_value='parts';surfaces.inputs['Value'].default_value=1;L.new(mat.outputs['Geometry'],surfaces.inputs['Geometry'])
+    surfaces=N.new('GeometryNodeStoreNamedAttribute');surfaces.data_type='INT';surfaces.domain='POINT';surfaces.inputs['Name'].default_value='parts';surfaces.inputs['Value'].default_value=1;L.new(flat_shading.outputs['Geometry'],surfaces.inputs['Geometry'])
     face_normal=N.new('GeometryNodeInputNormal');face_z=N.new('ShaderNodeSeparateXYZ');L.new(face_normal.outputs['Normal'],face_z.inputs['Vector'])
     face_up=N.new('ShaderNodeMath');face_up.operation='GREATER_THAN';face_up.inputs[1].default_value=.1;L.new(face_z.outputs['Z'],face_up.inputs[0])
     tops=N.new('GeometryNodeSeparateGeometry');tops.domain='FACE';L.new(surfaces.outputs['Geometry'],tops.inputs['Geometry']);L.new(face_up.outputs[0],tops.inputs['Selection'])
@@ -181,7 +211,7 @@ def extrusion_group():
     rim_id=N.new('GeometryNodeStoreNamedAttribute');rim_id.data_type='INT';rim_id.domain='POINT';rim_id.inputs['Name'].default_value='edgeID';rim_id.inputs['Value'].default_value=0;L.new(tagged_rim.outputs['Geometry'],rim_id.inputs['Geometry'])
     final=N.new('GeometryNodeJoinGeometry');L.new(surfaces.outputs['Geometry'],final.inputs['Geometry']);L.new(rim_id.outputs['Geometry'],final.inputs['Geometry'])
     enabled_geometry=N.new('GeometryNodeSwitch');enabled_geometry.input_type='GEOMETRY';source_size=N.new('GeometryNodeAttributeDomainSize');source_size.component='MESH';L.new(deform.outputs['Geometry'],source_size.inputs['Geometry']);has_faces=N.new('ShaderNodeMath');has_faces.operation='GREATER_THAN';L.new(source_size.outputs['Face Count'],has_faces.inputs[0]);live=N.new('FunctionNodeBooleanMath');live.operation='AND';L.new(inp.outputs['Enabled'],live.inputs[0]);L.new(has_faces.outputs[0],live.inputs[1]);L.new(live.outputs['Boolean'],enabled_geometry.inputs['Switch']);L.new(final.outputs['Geometry'],enabled_geometry.inputs['True']);L.new(enabled_geometry.outputs['Output'],out.inputs['Geometry'])
-    layout=[(inp,(0,400)),(road,(280,400)),(attr,(280,0)),(test,(520,0)),(border,(760,400)),(path,(760,800)),(choose_path,(1000,400)),(resample,(1240,400)),(edge_store,(1480,400)),(edge_position,(1000,0)),(edge_z,(1240,0)),(profile,(760,-500)),(negate,(760,-900)),(scale,(1000,-700)),(height_offset,(760,-1200)),(shift,(1000,-1100)),(orient,(1240,-500)),(sweep,(1720,400)),(profile_position,(1000,-1450)),(max_profile,(1240,-1450)),(heights,(1480,-800)),(top_height,(1720,-800)),(top_offset,(1960,-800)),(edge_attr,(1960,-1150)),(top_reference,(2200,-800)),(cross,(1960,1000)),(position,(1720,1450)),(split,(1960,1450)),(proximity,(2200,1000)),(closest,(2440,1000)),(ramp,(2440,600)),(origin,(1960,1800)),(ray,(2200,1800)),(hit_z,(2440,1800)),(target,(2680,1300)),(weight,(2680,600)),(enabled,(2920,600)),(difference,(2920,1300)),(lower,(3160,1300)),(multiply,(3400,1000)),(offset,(3640,1000)),(deform,(3880,400)),(mat,(4120,400)),(enabled_geometry,(4360,400)),(out,(4600,400))]
+    layout=[(inp,(0,400)),(road,(280,400)),(attr,(280,0)),(test,(520,0)),(border,(760,400)),(path,(760,800)),(choose_path,(1000,400)),(edge_store,(1480,400)),(edge_position,(1000,0)),(edge_z,(1240,0)),(profile,(760,-500)),(negate,(760,-900)),(scale,(1000,-700)),(height_offset,(760,-1200)),(shift,(1000,-1100)),(orient,(1240,-500)),(sweep,(1720,400)),(profile_position,(1000,-1450)),(max_profile,(1240,-1450)),(heights,(1480,-800)),(top_height,(1720,-800)),(top_offset,(1960,-800)),(edge_attr,(1960,-1150)),(top_reference,(2200,-800)),(cross,(1960,1000)),(position,(1720,1450)),(split,(1960,1450)),(proximity,(2200,1000)),(closest,(2440,1000)),(ramp,(2440,600)),(origin,(1960,1800)),(ray,(2200,1800)),(hit_z,(2440,1800)),(target,(2680,1300)),(weight,(2680,600)),(enabled,(2920,600)),(difference,(2920,1300)),(lower,(3160,1300)),(multiply,(3400,1000)),(offset,(3640,1000)),(deform,(3880,400)),(mat,(4120,400)),(enabled_geometry,(4360,400)),(out,(4600,400))]
     for node,location in layout:node.location=location
     edge_store.label='Remember native road edge height';top_reference.label='Profile top elevation';lower.label='Lower only; leave elevated crossings clear';enabled_geometry.label='Optional extrusion'
     return g
@@ -200,6 +230,7 @@ def add_extrusion(scene,road,kind):
     profile=bpy.data.objects.new('WB_Profile_'+kind,curve);profiles.objects.link(profile);profile.hide_render=True;profile.hide_set(True);profile['wb_native_feature']='profile'
     obj=bpy.data.objects.new('WB_'+kind+'_'+road.name,bpy.data.meshes.new('WB_'+kind));collection.objects.link(obj);obj['wb_native_feature']=kind
     mod=obj.modifiers.new('WB optional '+kind+' extrusion','NODES');mod.node_group=extrusion_group();set_input(mod,'Road',road);set_input(mod,'Profile curve',profile);set_input(mod,'Precise viewport cleanup',scene.wb_native.precise_cleanup);set_input(mod,'Material',material({'curb':'concrete','sidewalk':'sidewalk','grass':'grass'}[kind]));
+    if kind=='curb':set_input(mod,'Flatten curb at crossing',True)
     if kind=='sidewalk':set_input(mod,'Safe sidewalk offset',True)
     if kind=='grass':
         from .grass_surface import configure
@@ -207,4 +238,14 @@ def add_extrusion(scene,road,kind):
     from .native_layers import add_layer
     add_layer(scene,road,obj,kind)
     from .native_contacts import connect_surfaces
-    connect_surfaces(scene);return obj,profile
+    connect_surfaces(scene)
+    if kind=='sidewalk':simplify_sidewalk(obj)
+    return obj,profile
+
+
+def simplify_sidewalk(obj):
+    """Dissolve redundant coplanar panels; preserve real bends and ramp creases."""
+    modifier=obj.modifiers.get('RoadLab Planar Slabs')
+    if modifier is None:modifier=obj.modifiers.new('RoadLab Planar Slabs','DECIMATE')
+    modifier.decimate_type='DISSOLVE';modifier.angle_limit=.00174533
+    modifier.use_dissolve_boundaries=True;modifier.delimit={'MATERIAL','SEAM'}

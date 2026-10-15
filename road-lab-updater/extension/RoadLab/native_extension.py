@@ -320,6 +320,7 @@ class WB_PT_road_shape(NativeSection,bpy.types.Panel):
         layout.operator('wb.edit_road_curve',icon='EDITMODE_HLT')
         if context.mode=='EDIT_CURVE' and context.edit_object==context.scene.wb_native.road:
             layout.operator('wb.add_road_branch',icon='CURVE_PATH')
+            if context.edit_object.get('roadlab_new_core'):layout.operator('roadlab.connect_points',text='Connect selected points (F)',icon='AUTOMERGE_ON')
 
 
 class WB_PT_road_junctions(NativeSection,bpy.types.Panel):

@@ -1,6 +1,6 @@
 # RoadLab Blender extension and update repository
 
-The full RoadLab 0.18.9 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
+The full RoadLab 0.18.10 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
 
 ## Install once
 
@@ -99,3 +99,9 @@ Existing curb and sidewalk layers lower at each endpoint and return to their own
 Joining or closing source splines preserves existing point identities and lane assignments, including when Blender reverses point order. New connecting edges inherit matching lane profiles from both ends; differing profiles remain unassigned for review rather than choosing one arbitrarily. Ordinary point movement preserves its settings.
 
 Crosswalk ramp guides sample the finished road edge instead of the source segment height, so lifting a junction preserves ramp and tactile-pad clearance over terrain. Direct road and marking rebuilds guard against re-entry from dependency-graph evaluation.
+
+## Concrete sidewalks and interior connections (0.18.10)
+
+Sidewalks preserve perimeter corners, use corrected polyline offsets, and shade concrete faces flat. A non-destructive **RoadLab Planar Slabs** modifier dissolves nearly coplanar faces (0.1-degree tolerance) while retaining bends and ramp creases. The default editable example drops from 46,384 to 2,021 evaluated sidewalk vertices. This produces planar slab polygons rather than a dense uniform grid; terrain remains quad-based. Curb profiles flatten into crossing grade instead of translating their toe below the terrain. Existing layers upgrade when opening a file or enabling the extension.
+
+With a RoadLab source curve selected in Edit Mode, select two points and press **F** or use **Connect selected points (F)** under Road defaults. Endpoint pairs use Blender's native join. If either point is inside a street, RoadLab adds a connecting spline while preserving the through street and its lane assignments. This shortcut only overrides F for RoadLab core curves. New junction movement permissions remain editable in the Lane tool.

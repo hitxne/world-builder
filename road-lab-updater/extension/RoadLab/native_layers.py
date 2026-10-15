@@ -287,6 +287,12 @@ def upgrade_layers(_unused):
     migrate_saved_data()
     for scene in bpy.data.scenes:
         if any(o.get('wb_native_feature') in KINDS for o in scene.objects):migrate_scene(scene)
+        from .native_extrusion import extrusion_group,simplify_sidewalk
+        for obj in scene.objects:
+            if obj.get('wb_native_feature') in ('curb','sidewalk'):
+                for mod in obj.modifiers:
+                    if mod.type=='NODES' and mod.node_group and mod.node_group.name.startswith('WB_EXTENSION_BORDER_EXTRUSION'):mod.node_group=extrusion_group()
+            if obj.get('wb_native_feature')=='sidewalk':simplify_sidewalk(obj)
 
 def deferred_upgrade():
     """Addon registration runs under Blender's restricted data context."""

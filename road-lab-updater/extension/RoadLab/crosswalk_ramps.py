@@ -14,10 +14,11 @@ def bind(road,guide):
     for layer in layers(road):
         for mod in layer.object.modifiers:
             if mod.type=='NODES' and mod.node_group and mod.node_group.name.startswith('WB_EXTENSION_BORDER_EXTRUSION'):
-                if mod.node_group.get('wb_schema',0)<14:
+                if mod.node_group.get('wb_schema',0)<15:
                     from .native_extrusion import extrusion_group
                     mod.node_group=extrusion_group()
                 set_input(mod,'Crosswalk areas',guide)
+                set_input(mod,'Flatten curb at crossing',layer.kind=='curb')
 
 def rebuild(road,scene,plans):
     verts=[];faces=[];weights=[];seen=set()
