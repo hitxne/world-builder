@@ -1,0 +1,17 @@
+{
+  "blender": "5.1.0",
+  "version": "0.18.1",
+  "checks": [
+    "blank scene",
+    "single plane terrain designation",
+    "default grass material",
+    "Create Road operator",
+    "road selected after creation",
+    "terrain modifier attached",
+    "quad terrain",
+    "point elevation updates terrain",
+    "source plane preserved",
+    "second road preserves first"
+  ],
+  "maximum_seam_error": 5.960464477539063e-08
+}

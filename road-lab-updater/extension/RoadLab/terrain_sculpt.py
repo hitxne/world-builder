@@ -44,6 +44,9 @@ class ROADLAB_OT_use_terrain(bpy.types.Operator):
             if not obj.get('roadlab_terrain_field') and bake!=Matrix.Identity(4):
                 if obj.data.users>1 or obj.data.library is not None:obj.data=obj.data.copy()
                 obj.data.transform(bake,shape_keys=True);obj.matrix_world=Matrix.Translation(origin);obj.data.update()
+            if not obj.data.materials:
+                from . import material
+                obj.data.materials.append(material('grass'))
             context.scene.wb_native.terrain=obj;obj.roadlab_core_terrain_enabled=True
             core_terrain._STATE.pop(obj.as_pointer(),None);core_terrain.rebuild(context.scene,True)
         except (ValueError,RuntimeError) as e:self.report({'ERROR'},str(e));return {'CANCELLED'}

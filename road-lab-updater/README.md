@@ -1,6 +1,6 @@
 # RoadLab Blender extension and update repository
 
-The full RoadLab 0.18.0 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
+The full RoadLab 0.18.1 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
 
 ## Install once
 
@@ -35,3 +35,11 @@ With a RoadLab road selected in Object or Edit Mode, choose **Marking Stamp** in
 Lane window > Markings now exposes arrow spacing, solid approach length, entry-dot length, arrival control at each end, and stop setback. The selected lane's **Lane entry** field distinguishes Continuous from Added lane. Stop and Traffic signals draw a 0.61 m stop bar across arriving lanes at junctions; Yield and Uncontrolled do not. Ordinary lane dividers remain broken away from junctions, become solid in the configured approach section, and use short entry dots for designated added lanes.
 
 The entry setting controls paint, not a generated widening taper. Crosswalk geometry is not yet used to calculate stop setback automatically; position the stop bar with the setback control when adding a crosswalk. Marking rules are based on FHWA MUTCD 11th Edition, Revision 1, Sections 3A.04, 3B.07, 3B.11, and 3B.19. Traffic-signal timing and NPC simulation remain separate future work.
+
+## Start from a blank scene (0.18.1)
+
+Delete the default cube. Add a mesh plane and scale it to the desired map size (S, 100 makes the default plane 200 m wide). In Object Mode, select the plane, press N, open RoadLab > Scene, and click **Use selected mesh as terrain**. An unmaterialed plane gets the default grass material; existing materials are preserved.
+
+Click **Create Road** in the same Scene panel. It creates a 30 m editable alignment at the 3D cursor, selects the new road, and connects its grading to the designated terrain. Press Tab to edit. Select an endpoint and E to extend; G to move; G then Z to change elevation. Terrain follows after placement. Road defaults holds width and sample spacing. Use Add road branch in Edit Mode for junctions in the same network.
+
+Select the terrain in Object Mode to use Raise, Lower, Flatten and Smooth with adjustable radius and strength. Use Material Preview to see decal textures.

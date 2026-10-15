@@ -256,10 +256,32 @@ class WB_PT_core_status(bpy.types.Panel):
                     else:box.label(text=f"{x['corner']}: requested {x['requested']:.2f}, applied {x['applied']:.2f} m")
 
 
+class ROADLAB_OT_new_road(bpy.types.Operator):
+    bl_idname='roadlab.new_road';bl_label='Create Road';bl_options={'REGISTER','UNDO'}
+    bl_description='Create an editable road at the 3D cursor and connect it to the assigned terrain'
+    @classmethod
+    def poll(cls,context):return context.mode=='OBJECT'
+    def execute(self,context):
+        from . import road_core,core_terrain
+        from mathutils import Vector
+        center=context.scene.cursor.location
+        data=bpy.data.curves.new('RoadLab Alignment','CURVE');data.dimensions='3D'
+        spline=data.splines.new('POLY');spline.points.add(1)
+        for point,x in zip(spline.points,(-15.,15.)):point.co=(x,0.,0.,1.)
+        obj=bpy.data.objects.new('RoadLab Road',data);context.collection.objects.link(obj);obj.location=center+Vector((0,0,.02))
+        context.view_layer.update()
+        context.scene.wb_native.road=obj;road_core.attach(obj)
+        if context.scene.wb_native.terrain:core_terrain.rebuild(context.scene,True)
+        bpy.ops.object.select_all(action='DESELECT');obj.select_set(True);context.view_layer.objects.active=obj
+        self.report({'INFO'},'Road created. Tab to edit; E to extend; G then Z to change elevation.')
+        return {'FINISHED'}
+
+
 class WB_PT_native(bpy.types.Panel):
     bl_label='Scene';bl_idname='WB_PT_native';bl_space_type='VIEW_3D';bl_region_type='UI';bl_category='RoadLab';bl_order=-10;bl_options={'DEFAULT_CLOSED'}
     def draw(self,context):
         layout=self.layout;s=context.scene.wb_native
+        layout.operator('roadlab.new_road',icon='CURVE_PATH')
         layout.operator('wb.bind_roadlab',icon='LINKED')
         if context.scene.get('roadlab_sample'):layout.operator('wb.link_roadlab_nodes',icon='FILE_FOLDER')
         layout.prop(s,'road');layout.prop(s,'terrain')
@@ -451,7 +473,7 @@ class WB_PT_viewport(NativeSection,bpy.types.Panel):
         layout.prop(s,'edit_preview');layout.prop(s,'precise_cleanup')
 
 
-classes=(WBNativeSettings,WB_OT_edit_road_curve,WB_OT_bind_native,WB_OT_link_node_library,WB_OT_add_road_branch,WB_OT_import_materials,WB_OT_find_textures,WB_OT_native_curbs,WB_OT_edit_native_profile,WB_PT_core_status,WB_PT_native,WB_PT_road_shape,WB_PT_road_junctions,WB_PT_junction_limits,WB_PT_road_elevation,WB_PT_road_curve_detail,WB_PT_road_appearance,WB_PT_road_uv,WB_PT_layer_stack,WB_PT_native_terrain,WB_PT_layer_profile,WB_PT_layer_crossing,WB_PT_viewport)
+classes=(WBNativeSettings,ROADLAB_OT_new_road,WB_OT_edit_road_curve,WB_OT_bind_native,WB_OT_link_node_library,WB_OT_add_road_branch,WB_OT_import_materials,WB_OT_find_textures,WB_OT_native_curbs,WB_OT_edit_native_profile,WB_PT_core_status,WB_PT_native,WB_PT_road_shape,WB_PT_road_junctions,WB_PT_junction_limits,WB_PT_road_elevation,WB_PT_road_curve_detail,WB_PT_road_appearance,WB_PT_road_uv,WB_PT_layer_stack,WB_PT_native_terrain,WB_PT_layer_profile,WB_PT_layer_crossing,WB_PT_viewport)
 
 def register():
     for cls in classes:bpy.utils.register_class(cls)
