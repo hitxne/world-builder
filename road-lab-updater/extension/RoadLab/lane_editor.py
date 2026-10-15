@@ -64,8 +64,8 @@ def split_lane_assignments(obj,configs,new_ids,records):
             if 'width' not in records[lookup[ident]]:records[lookup[ident]]['width']=wa+(wb-wa)*distance/max(total,1e-9)
         for index,(x,y) in enumerate(zip(path,path[1:])):
             child=json.loads(json.dumps(config));child['endpoints']=[x,y]
-            if index>0:child['control_outgoing']='NONE'
-            if index<len(path)-2:child['control_incoming']='NONE'
+            if index>0:child['control_outgoing']='NONE';child['crosswalk_outgoing']=False
+            if index<len(path)-2:child['control_incoming']='NONE';child['crosswalk_incoming']=False
             result.append(child)
     return result
 
@@ -101,7 +101,7 @@ def inherit_extensions(obj):
                 if len(candidates)!=1:continue
                 parent=candidates[0];copy=json.loads(json.dumps(parent))
                 copy['endpoints']=[shared,other] if position(parent['endpoints'][1])==p else [other,shared]
-                copy['control_incoming']=copy['control_outgoing']='NONE';configs.append(copy)
+                copy['control_incoming']=copy['control_outgoing']='NONE';copy['crosswalk_incoming']=copy['crosswalk_outgoing']=False;configs.append(copy)
                 if 'width' not in records[lookup[other]] and 'width' in records[lookup[shared]]:records[lookup[other]]['width']=records[lookup[shared]]['width']
                 assigned.add(frozenset((a,b)));changed=True;break
     obj['roadlab_lanes']=json.dumps(configs);point_settings.save(obj,records)
@@ -138,6 +138,15 @@ class ROADLAB_LaneDraft(bpy.types.PropertyGroup):
     show_arrows:BoolProperty(default=False)
     show_dividers:BoolProperty(default=False)
     show_stops:BoolProperty(default=False)
+    show_crosswalks:BoolProperty(default=False)
+    crosswalk_incoming:BoolProperty(name='Crosswalk at this end',default=False)
+    crosswalk_outgoing:BoolProperty(name='Crosswalk at other end',default=False)
+    crosswalk_depth:FloatProperty(name='Crosswalk width (m)',default=3.048,min=.5,max=10.)
+    crosswalk_gap:FloatProperty(name='Gap from junction (m)',default=1.,min=0.,max=30.)
+    crosswalk_ramp:FloatProperty(name='Ramp run (m)',default=1.9,min=.3,max=10.,description='Distance from the street edge to full curb/sidewalk height')
+    crosswalk_a:FloatProperty(name='A-end position (m)',default=0.,min=-10.,max=30.,description='Move this sidewalk end away from the junction; opposite end stays fixed')
+    crosswalk_b:FloatProperty(name='B-end position (m)',default=0.,min=-10.,max=30.,description='Move the opposite sidewalk end away from the junction; first end stays fixed')
+    crosswalk_tactile:BoolProperty(name='Yellow tactile pads',default=False)
     show_lane_details:BoolProperty(default=False)
     show_saved:BoolProperty(default=False)
     incoming_index:IntProperty(default=0,min=0)
@@ -162,6 +171,16 @@ def paint_material(asset):
         for node in mat.node_tree.nodes if mat.node_tree else []:
             if node.type=='TEX_IMAGE':node.extension='REPEAT' if asset in ('broken_white','dotted_white') else 'CLIP'
         return mat
+    if asset=='tactile_pad':
+        mat=bpy.data.materials.new(name);mat.use_nodes=True;mat.diffuse_color=(.95,.55,.025,1)
+        nodes=mat.node_tree.nodes;links=mat.node_tree.links;shader=nodes.get('Principled BSDF');shader.inputs['Base Color'].default_value=mat.diffuse_color;shader.inputs['Roughness'].default_value=.78
+        uv=nodes.new('ShaderNodeTexCoord');scale=nodes.new('ShaderNodeVectorMath');scale.operation='MULTIPLY';scale.inputs[1].default_value=(50.8,10.1667,0);links.new(uv.outputs['UV'],scale.inputs[0])
+        fract=nodes.new('ShaderNodeVectorMath');fract.operation='FRACTION';links.new(scale.outputs['Vector'],fract.inputs[0])
+        center=nodes.new('ShaderNodeVectorMath');center.operation='SUBTRACT';center.inputs[1].default_value=(.5,.5,0);links.new(fract.outputs['Vector'],center.inputs[0])
+        distance=nodes.new('ShaderNodeVectorMath');distance.operation='LENGTH';links.new(center.outputs['Vector'],distance.inputs[0])
+        mask=nodes.new('ShaderNodeMath');mask.operation='LESS_THAN';mask.inputs[1].default_value=.2;links.new(distance.outputs['Value'],mask.inputs[0])
+        bump=nodes.new('ShaderNodeBump');bump.inputs['Distance'].default_value=.005;links.new(mask.outputs[0],bump.inputs['Height']);links.new(bump.outputs['Normal'],shader.inputs['Normal'])
+        return mat
     row=lane_markings.manifest()[asset];mat=bpy.data.materials.new(name);mat.use_nodes=True
     nodes=mat.node_tree.nodes;p=nodes.get('Principled BSDF');tex=nodes.new('ShaderNodeTexImage');tex.image=bpy.data.images.load(str(lane_markings.ROOT/row['rgba']),check_existing=True);tex.image.alpha_mode='STRAIGHT';tex.extension='REPEAT' if asset in ('broken_white','dotted_white') else 'CLIP'
     mat.node_tree.links.new(tex.outputs['Color'],p.inputs['Base Color']);mat.node_tree.links.new(tex.outputs['Alpha'],p.inputs['Alpha']);p.inputs['Roughness'].default_value=.85
@@ -175,7 +194,7 @@ def rebuild(obj,scene,force=False):
     configs=state(obj);output=obj.get('roadlab_core_mesh')
     if output is None:return
     side=scene.roadlab_map_settings.traffic_side
-    signature=hashlib.sha256(json.dumps(['branch-preservation-v4',[(row.get('co'),row.get('connection_mode')) for row in point_settings.records(obj) if row.get('connection_mode')],obj.get('roadlab_hidden_lane_markings','[]'),configs,obj.get('roadlab_core_signature'),output.data.as_pointer(),side],sort_keys=True).encode()).hexdigest()
+    signature=hashlib.sha256(json.dumps(['editable-crossings-v5',getattr(scene.wb_native.terrain,'get',lambda *args:None)('roadlab_core_terrain_signature'),[(row.get('co'),row.get('connection_mode')) for row in point_settings.records(obj) if row.get('connection_mode')],obj.get('roadlab_hidden_lane_markings','[]'),configs,obj.get('roadlab_core_signature'),output.data.as_pointer(),side],sort_keys=True).encode()).hexdigest()
     existing=obj.get('roadlab_marking_object')
     owned=existing is not None and (existing.get('roadlab_markings_owner_object')==obj or existing.get('roadlab_markings_owner')==obj.name)
     if not force and owned and obj.get('roadlab_marking_signature')==signature:
@@ -207,7 +226,7 @@ def rebuild(obj,scene,force=False):
     def available(start,finish):
         neighbors=nodes.get(key(finish),set())
         return lane_logic.available_movements(key(start),key(finish),neighbors) if len(neighbors)>=3 else None
-    plans=[];warnings=[];hidden=set(json.loads(obj.get('roadlab_hidden_lane_markings','[]')))
+    plans=[];crossing_definitions=[];warnings=[];hidden=set(json.loads(obj.get('roadlab_hidden_lane_markings','[]')))
     for config in configs:
         a,b=config['endpoints']
         if a not in lookup or b not in lookup or frozenset((a,b)) not in valid:
@@ -225,7 +244,12 @@ def rebuild(obj,scene,force=False):
                     if 1e-6<t<1-1e-6 and (candidate-Vector(junction)).length<1e-5:cuts.append((length*t,junction))
             cuts.sort(key=lambda cut:cut[0])
             for part,((_,start),(_,finish)) in enumerate(zip(cuts,cuts[1:])):
-                segment_plans=lane_markings.plan(start,finish,entries(config['incoming'],'i'),entries(config['outgoing'],'o'),width,side,config['median'],clearance(start,width,finish),clearance(finish,width,start),config['spacing'],**{k:('STOP' if (k=='control_incoming' and key(finish) in stop_nodes) or (k=='control_outgoing' and key(start) in stop_nodes) else config.get(k,v)) for k,v in [('arrow_approach',35.),('solid_approach',20.),('transition_length',30.),('stop_setback',1.22),('control_incoming','NONE'),('control_outgoing','NONE')]},allowed_incoming=available(start,finish),allowed_outgoing=available(finish,start),junction_start=len(nodes.get(key(start),[]))>=3 or key(start) in stop_nodes,junction_end=len(nodes.get(key(finish),[]))>=3 or key(finish) in stop_nodes,emerging_incoming=[i for i,row in enumerate(config['incoming']) if row.get('entry')=='ADDED'],emerging_outgoing=[i for i,row in enumerate(config['outgoing']) if row.get('entry')=='ADDED'])
+                paint_settings={k:config.get(k,v) for k,v in [('crosswalk_incoming',False),('crosswalk_outgoing',False),('crosswalk_depth',3.048),('crosswalk_gap',1.),('crosswalk_ramp',1.9),('crosswalk_a',0.),('crosswalk_b',0.),('crosswalk_tactile',False),('arrow_approach',35.),('solid_approach',20.),('transition_length',30.),('stop_setback',1.22),('control_incoming','NONE'),('control_outgoing','NONE')]}
+                if key(finish)!=key(pb):paint_settings['crosswalk_incoming']=False;paint_settings['control_incoming']='NONE'
+                if key(start)!=key(pa):paint_settings['crosswalk_outgoing']=False;paint_settings['control_outgoing']='NONE'
+                if key(finish) in stop_nodes:paint_settings['control_incoming']='STOP'
+                if key(start) in stop_nodes:paint_settings['control_outgoing']='STOP'
+                segment_plans=lane_markings.plan(start,finish,entries(config['incoming'],'i'),entries(config['outgoing'],'o'),width,side,config['median'],clearance(start,width,finish),clearance(finish,width,start),config['spacing'],**paint_settings,allowed_incoming=available(start,finish),allowed_outgoing=available(finish,start),junction_start=len(nodes.get(key(start),[]))>=3 or key(start) in stop_nodes,junction_end=len(nodes.get(key(finish),[]))>=3 or key(finish) in stop_nodes,emerging_incoming=[i for i,row in enumerate(config['incoming']) if row.get('entry')=='ADDED'],emerging_outgoing=[i for i,row in enumerate(config['outgoing']) if row.get('entry')=='ADDED'])
                 for co,other in ((start,finish),(finish,start)):
                     if key(co) not in bends or key(co) in stop_nodes:continue
                     neighbor=max(nodes[key(co)],key=lambda n:(Vector(n)-Vector(co)).normalized().dot((Vector(other)-Vector(co)).normalized()))
@@ -239,18 +263,36 @@ def rebuild(obj,scene,force=False):
                         arm.append(dict(family=family,flow=1 if Vector((*mark['forward'],0)).dot(u)>0 else -1,asset=mark['asset'],fraction=.5+lateral/(Vector(bends[key(co)][2][neighbor][-1])-Vector(bends[key(co)][2][neighbor][0])).length,width=mark['size'][0]))
                     bend_arms[(key(co),neighbor)]=arm
                 for mark in segment_plans:
+                    if mark['role'][0]=='crosswalk':
+                        mark['source_endpoints']=config['endpoints'];crossing_definitions.append(mark)
                     mark['id']=hashlib.sha256(json.dumps([config['endpoints'],part,mark['role']],sort_keys=True).encode()).hexdigest()
                     if mark['id'] not in hidden:plans.append(mark)
         except ValueError as error:warnings.append(str(error))
     connectors,notes=lane_bends.connect(bends,bend_arms,hidden);plans.extend(connectors);warnings.extend(notes)
     obj['roadlab_generated_marking_catalog']=json.dumps(plans)
+    from . import crosswalk_ramps
+    crosswalk_ramps.rebuild(obj,scene,crossing_definitions)
     mesh=output.data;vs=[v.co.copy() for v in mesh.vertices];polys=[tuple(p.vertices) for p in mesh.polygons]
     bvh=BVHTree.FromPolygons(vs,polys);top=max((v.z for v in vs),default=0)+100;bottom=min((v.z for v in vs),default=0)-100
-    def surface(x,y,expected):
+    terrain=scene.wb_native.terrain;terrain_tree=None
+    if terrain is not None and any(m.get('on_terrain') for m in plans):
+        helper=terrain.get('roadlab_core_terrain_mesh')
+        mesh=helper.data if helper else terrain.data;matrix=obj.matrix_world.inverted()@(helper.matrix_world if helper else terrain.matrix_world)
+        if mesh.polygons:
+            terrain_vertices=[matrix@v.co for v in mesh.vertices]
+            terrain_tree=BVHTree.FromPolygons(terrain_vertices,[tuple(p.vertices) for p in mesh.polygons])
+            top=max(top,max(v.z for v in terrain_vertices)+100);bottom=min(bottom,min(v.z for v in terrain_vertices)-100)
+    pad_tree=crosswalk_ramps.surface_tree(obj) if any(m.get('on_terrain') for m in plans) else None
+    def surface(x,y,expected,on_terrain=False):
+        if on_terrain and pad_tree is not None:
+            hit,normal,face,distance=pad_tree.ray_cast(Vector((x,y,top)),Vector((0,0,-1)),top-bottom)
+            if hit is not None:
+                if normal.z<0:normal=-normal
+                return (hit.x,hit.y,hit.z+.003)
         # At overpasses choose the nearest road elevation, not the topmost deck.
         hits=[];origin=top
         for _ in range(32):
-            hit,normal,face,distance=bvh.ray_cast(Vector((x,y,origin)),Vector((0,0,-1)),origin-bottom)
+            hit,normal,face,distance=(terrain_tree if on_terrain and terrain_tree is not None else bvh).ray_cast(Vector((x,y,origin)),Vector((0,0,-1)),origin-bottom)
             if hit is None:break
             hits.append((abs(hit.z-expected),hit,normal));origin=hit.z-.001
         if not hits:return None
@@ -262,11 +304,12 @@ def rebuild(obj,scene,force=False):
         if marking['asset'] not in slots:slots.append(marking['asset'])
         index=slots.index(marking['asset']);pv,pf,pu=lane_markings.patch_grid(marking);projected=[]
         for x,y,z in pv:
-            projected.append(surface(x,y,z))
+            projected.append(surface(x,y,z,marking.get('on_terrain',False)))
         for face in pf:
             if any(projected[i] is None for i in face):continue
             center=Vector(tuple(sum(pv[i][j] for i in face)/4 for j in range(3)))
-            if bvh.ray_cast(Vector((center.x,center.y,top)),Vector((0,0,-1)),top-bottom)[0] is None:continue
+            tree=terrain_tree if marking.get('on_terrain') and terrain_tree is not None else bvh
+            if tree.ray_cast(Vector((center.x,center.y,top)),Vector((0,0,-1)),top-bottom)[0] is None:continue
             base=len(verts);verts.extend(projected[i] for i in face);uvs.extend(pu[i] for i in face);faces.append(tuple(range(base,base+4)));materials.append(index)
     data=bpy.data.meshes.new('RoadLab Lane Markings');data.from_pydata(verts,[],faces);data.update();uv=data.uv_layers.new(name='UVMap')
     uv.data.foreach_set('uv',[c for loop in data.loops for c in uvs[loop.vertex_index]])
@@ -321,7 +364,7 @@ def set_draft(context,obj,targets,normalize=False):
     config=next((c for c in state(obj) if frozenset(c['endpoints'])==frozenset(targets[0])),None)
     if config:d.reverse=config['endpoints'][0]!=targets[0][0];d.median=config['median'];d.spacing=config['spacing']
     else:d.median=0.;d.spacing=18.
-    for field,value in [('arrow_approach',35.),('solid_approach',20.),('lane_transition',30.),('transition_length',30.),('stop_setback',1.22),('control_incoming','NONE'),('control_outgoing','NONE')]:setattr(d,field,config.get(field,value) if config else value)
+    for field,value in [('crosswalk_incoming',False),('crosswalk_outgoing',False),('crosswalk_depth',3.048),('crosswalk_gap',1.),('crosswalk_ramp',1.9),('crosswalk_a',0.),('crosswalk_b',0.),('crosswalk_tactile',False),('arrow_approach',35.),('solid_approach',20.),('lane_transition',30.),('transition_length',30.),('stop_setback',1.22),('control_incoming','NONE'),('control_outgoing','NONE')]:setattr(d,field,config.get(field,value) if config else value)
     for field in ('incoming','outgoing'):
         for row in (config[field] if config else [{'width':3.5,'movement':'THROUGH'}]):
             item=getattr(d,field).add();item.width=row['width'];item.movement=row['movement'];item.entry=row.get('entry','CONTINUOUS')
@@ -331,6 +374,8 @@ def set_draft(context,obj,targets,normalize=False):
             for row in values:
                 item=getattr(d,field).add();item.width=row['width'];item.movement=row['movement'];item.entry=row.get('entry','CONTINUOUS')
         d.control_incoming,d.control_outgoing=d.control_outgoing,d.control_incoming
+        d.crosswalk_incoming,d.crosswalk_outgoing=d.crosswalk_outgoing,d.crosswalk_incoming
+        d.crosswalk_a,d.crosswalk_b=d.crosswalk_b,d.crosswalk_a
         d.reverse=False
 
 
@@ -380,7 +425,7 @@ def validate_approach(obj,endpoints,incoming,outgoing):
     if errors:raise ValueError('; '.join(errors))
 
 
-DRAFT_FIELDS=('segment_key','targets_json','reverse','road_width','median','spacing','arrow_approach','solid_approach','lane_transition','transition_length','stop_setback','control_incoming','control_outgoing')
+DRAFT_FIELDS=('segment_key','targets_json','reverse','road_width','median','spacing','crosswalk_incoming','crosswalk_outgoing','crosswalk_depth','crosswalk_gap','crosswalk_ramp','crosswalk_a','crosswalk_b','crosswalk_tactile','arrow_approach','solid_approach','lane_transition','transition_length','stop_setback','control_incoming','control_outgoing')
 
 def draft_snapshot(d):
     return dict({k:getattr(d,k) for k in DRAFT_FIELDS},incoming=rows(d.incoming),outgoing=rows(d.outgoing))
@@ -441,7 +486,7 @@ class ROADLAB_OT_lane_apply(bpy.types.Operator):
                 for i in indices:widths[i]=max(widths.get(i,0),desired)
                 configs=[c for c in configs if all(frozenset(c['endpoints'])!=frozenset(t) for t in targets)]
                 for t in targets:
-                    configs.append(dict(endpoints=t[::-1] if data['reverse'] else t,incoming=data['incoming'],outgoing=data['outgoing'],**{k:data[k] for k in ('median','spacing','arrow_approach','solid_approach','lane_transition','transition_length','stop_setback','control_incoming','control_outgoing')}))
+                    configs.append(dict(endpoints=t[::-1] if data['reverse'] else t,incoming=data['incoming'],outgoing=data['outgoing'],**{k:data[k] for k in ('median','spacing','crosswalk_incoming','crosswalk_outgoing','crosswalk_depth','crosswalk_gap','crosswalk_ramp','crosswalk_a','crosswalk_b','crosswalk_tactile','arrow_approach','solid_approach','lane_transition','transition_length','stop_setback','control_incoming','control_outgoing')}))
             for data,_,_,_ in checked:
                 if data.get('_connection_node') is not None:
                     for row in items:
@@ -511,6 +556,17 @@ def draw_lanes(l,context,junction=False,connection_mode=None):
             box.prop(d,'solid_approach',text='Solid before junction (m)')
             box.prop(d,'lane_transition',text='Lane merge length (m)')
             box.prop(d,'transition_length',text='Added-lane dots (m)')
+        box=section(l,d,'show_crosswalks','Crosswalk')
+        if box:
+            box.prop(d,'crosswalk_incoming',text='Crosswalk here' if junction else 'At section end')
+            if not junction:box.prop(d,'crosswalk_outgoing',text='At section start')
+            if d.crosswalk_incoming or (not junction and d.crosswalk_outgoing):
+                box.prop(d,'crosswalk_depth',text='Crossing width (m)');box.prop(d,'crosswalk_gap',text='Gap from junction (m)')
+                box.prop(d,'crosswalk_a',text='A-end position (m)');box.prop(d,'crosswalk_b',text='B-end position (m)');box.prop(d,'crosswalk_tactile')
+                box.label(text='Positive moves away from the junction.')
+                box.prop(d,'crosswalk_ramp',text='Ramp run (m)')
+                box.label(text='Ramps adapt existing curb and sidewalk layers.')
+                box.label(text='Pads follow the sidewalk or assigned terrain.')
         box=section(l,d,'show_stops','Stop line')
         if box:
             if connection_mode is not None:
@@ -536,6 +592,7 @@ def draw_lanes(l,context,junction=False,connection_mode=None):
 
 _approach_enum_cache={}
 _approach_preview=None
+_crosswalk_labels=None
 
 def approach_geometry(obj,choices):
     lookup={x['id']:i for i,x in enumerate(point_settings.records(obj))};ps=point_settings.points(obj)
@@ -559,7 +616,9 @@ def approach_items(self,context):
     return _approach_enum_cache[key]
 
 def clear_approach_preview():
-    global _approach_preview
+    global _approach_preview,_crosswalk_labels
+    if _crosswalk_labels is not None:
+        bpy.types.SpaceView3D.draw_handler_remove(_crosswalk_labels,'WINDOW');_crosswalk_labels=None
     if _approach_preview is not None:
         bpy.types.SpaceView3D.draw_handler_remove(_approach_preview,'WINDOW');_approach_preview=None
     for screen in bpy.data.screens:
@@ -567,7 +626,7 @@ def clear_approach_preview():
             if area.type=='VIEW_3D':area.tag_redraw()
 
 def show_approach_preview(operator,obj):
-    global _approach_preview
+    global _approach_preview,_crosswalk_labels
     clear_approach_preview()
     def draw():
         import gpu
@@ -583,6 +642,26 @@ def show_approach_preview(operator,obj):
                 shader.bind();shader.uniform_float('color',(1.,.55,.05,1.) if i==selected else (.15,.65,.85,.5));batch.draw(shader)
         finally:gpu.state.line_width_set(1);gpu.state.depth_test_set('NONE')
     _approach_preview=bpy.types.SpaceView3D.draw_handler_add(draw,(),'WINDOW','POST_VIEW')
+    def labels():
+        import blf
+        from bpy_extras.view3d_utils import location_3d_to_region_2d
+        session=_lane_preview
+        if session is None or session.get('proxy') is None:return
+        try:
+            choices=json.loads(operator.choices_json);target=choices[int(operator.approach)] if operator.is_junction else None
+            seen=set()
+            for mark in json.loads(session['proxy'].get('roadlab_generated_marking_catalog','[]')):
+                if 'crosswalk_ends' not in mark:continue
+                if target is not None and frozenset(mark.get('source_endpoints',[]))!=frozenset(target):continue
+                ident=(tuple(mark.get('source_endpoints',[])),mark['role'][1])
+                if ident in seen:continue
+                seen.add(ident)
+                for text,co in zip(('A','B'),mark['crosswalk_ends']):
+                    pixel=location_3d_to_region_2d(bpy.context.region,bpy.context.space_data.region_3d,obj.matrix_world@Vector(co))
+                    if pixel is None:continue
+                    blf.size(0,18);blf.color(0,1.,.6,.1,1.);blf.position(0,pixel.x+8,pixel.y+8,0);blf.draw(0,text)
+        except (ReferenceError,AttributeError,ValueError):return
+    _crosswalk_labels=bpy.types.SpaceView3D.draw_handler_add(labels,(),'WINDOW','POST_PIXEL')
 
 
 def save_active_approach(self,context):
@@ -619,6 +698,8 @@ def stop_lane_preview():
     proxy=session.get('proxy')
     if proxy is not None:
         try:
+            from . import crosswalk_ramps
+            crosswalk_ramps.cleanup(proxy)
             marking=proxy.get('roadlab_marking_object')
             if marking is not None:
                 mesh=marking.data;bpy.data.objects.remove(marking,do_unlink=True)
@@ -647,10 +728,13 @@ def preview_batch(operator,scene):
             data=json.loads(json.dumps(current));data['targets_json']=json.dumps([target]);data['reverse']=False
             saved=next((c for c in state(obj) if frozenset(c['endpoints'])==frozenset(target)),None)
             if saved:
-                for field in ('median','spacing','arrow_approach','solid_approach','lane_transition','transition_length','stop_setback','control_incoming','control_outgoing'):data[field]=saved.get(field,data[field])
+                for field in ('median','spacing','crosswalk_incoming','crosswalk_outgoing','crosswalk_depth','crosswalk_gap','crosswalk_ramp','crosswalk_a','crosswalk_b','crosswalk_tactile','arrow_approach','solid_approach','lane_transition','transition_length','stop_setback','control_incoming','control_outgoing'):data[field]=saved.get(field,data[field])
                 reverse=saved['endpoints']!=target
                 data['incoming']=saved['outgoing' if reverse else 'incoming'];data['outgoing']=saved['incoming' if reverse else 'outgoing']
-                if reverse:data['control_incoming'],data['control_outgoing']=data['control_outgoing'],data['control_incoming']
+                if reverse:
+                    data['control_incoming'],data['control_outgoing']=data['control_outgoing'],data['control_incoming']
+                    data['crosswalk_incoming'],data['crosswalk_outgoing']=saved.get('crosswalk_outgoing',False),saved.get('crosswalk_incoming',False)
+                    data['crosswalk_a'],data['crosswalk_b']=saved.get('crosswalk_b',0.),saved.get('crosswalk_a',0.)
             else:data['incoming'],data['outgoing']=data['outgoing'],data['incoming']
             batch.append(data)
         for data in batch:data['_connection_node']=json.loads(node);data['_connection_mode']=operator.connection_mode
@@ -662,7 +746,7 @@ def tick_lane_preview():
     try:
         operator=session['operator'];obj=session['road'];scene=session['scene']
         batch=preview_batch(operator,scene)
-        signature=json.dumps([batch,obj.get('roadlab_core_signature'),scene.roadlab_map_settings.traffic_side],sort_keys=True)
+        signature=json.dumps([batch,obj.get('roadlab_core_signature'),getattr(scene.wb_native.terrain,'get',lambda *args:None)('roadlab_core_terrain_signature'),scene.roadlab_map_settings.traffic_side],sort_keys=True)
         if signature==session['signature']:return .12
         session['signature']=signature
         context=type('PreviewContext',(),{'scene':scene,'edit_object':obj,'active_object':obj})()
@@ -674,11 +758,13 @@ def tick_lane_preview():
         configs=state(obj)
         for data,targets,indices,needed in checked:
             configs=[c for c in configs if all(frozenset(c['endpoints'])!=frozenset(t) for t in targets)]
-            for t in targets:configs.append(dict(endpoints=t[::-1] if data['reverse'] else t,incoming=data['incoming'],outgoing=data['outgoing'],**{k:data[k] for k in ('median','spacing','arrow_approach','solid_approach','lane_transition','transition_length','stop_setback','control_incoming','control_outgoing')}))
+            for t in targets:configs.append(dict(endpoints=t[::-1] if data['reverse'] else t,incoming=data['incoming'],outgoing=data['outgoing'],**{k:data[k] for k in ('median','spacing','crosswalk_incoming','crosswalk_outgoing','crosswalk_depth','crosswalk_gap','crosswalk_ramp','crosswalk_a','crosswalk_b','crosswalk_tactile','arrow_approach','solid_approach','lane_transition','transition_length','stop_setback','control_incoming','control_outgoing')}))
         proxy=session['proxy']
         if proxy is None:
             proxy=obj.copy();proxy.name='RoadLab Preview Source';session['proxy']=proxy
             if 'roadlab_marking_object' in proxy:del proxy['roadlab_marking_object']
+            if 'roadlab_crosswalk_guide' in proxy:del proxy['roadlab_crosswalk_guide']
+            proxy['roadlab_preview_source']=obj
             proxy['roadlab_new_core']=False
         proxy['roadlab_lanes']=json.dumps(configs)
         preview_records=point_settings.records(obj)
@@ -787,7 +873,7 @@ class ROADLAB_OT_lane_window(bpy.types.Operator):
     def invoke(self,context,event):
         stop_lane_preview();clear_approach_preview();self.drafts_json='{}';self.active_approach='';self.expansion_text='[]';self.apply_status='';self.connection_node=''
         d=context.scene.roadlab_lane_draft;d.page='LANES';d.travel='incoming'
-        for flag in ('show_size','show_incoming','show_outgoing','show_markings','show_arrows','show_dividers','show_stops','show_lane_details','show_saved'):setattr(d,flag,False)
+        for flag in ('show_size','show_incoming','show_outgoing','show_markings','show_arrows','show_dividers','show_stops','show_crosswalks','show_lane_details','show_saved'):setattr(d,flag,False)
         try:
             obj,targets,junction=selection_targets(context);context.scene.wb_native.road=obj;self.has_selection=True;self.choices_json=json.dumps(targets);self.is_junction=junction
             set_draft(context,obj,[targets[0]] if junction else targets,normalize=junction)
@@ -799,10 +885,11 @@ class ROADLAB_OT_lane_window(bpy.types.Operator):
                     self.connection_mode=next((row.get('connection_mode','CONTINUOUS') for row in point_settings.records(obj) if tuple(row['co'])==co),'CONTINUOUS')
                 else:self.junction_label=from_selection(context)['kind'].replace('_',' ').title()
                 self.approach='0';self.active_approach='0'
-                if getattr(context,'area',None) and context.area.type=='VIEW_3D':show_approach_preview(self,obj)
         except (ValueError,AttributeError) as e:
             self.has_selection=False;self.selection_hint=str(e);self.choices_json='[]';self.is_junction=False
-        if self.has_selection:start_lane_preview(self,context)
+        if self.has_selection:
+            start_lane_preview(self,context)
+            if getattr(context,'area',None) and context.area.type=='VIEW_3D':show_approach_preview(self,obj)
         return context.window_manager.invoke_props_dialog(self,width=520,confirm_text='Done' if self.has_selection else 'Close')
     def check(self,context):return True
     def draw(self,context):

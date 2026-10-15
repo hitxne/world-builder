@@ -50,4 +50,19 @@ class ApproachTests(unittest.TestCase):
    self.assertFalse(any(m['asset']=='arrow_through' for m in ms))
    self.assertTrue(any(m['asset']=='arrow_right' and m['role'][2]==1 for m in ms))
 
+ def test_crosswalk_endpoints_move_independently_and_stop_line_stays_behind(self):
+  def crossing(**kw):return plan((0,0,0),(0,100,0),[Lane('i')],[Lane('o')],8.,trim_end=10,crosswalk_incoming=True,crosswalk_tactile=True,control_incoming='STOP',**kw)
+  original=crossing();moved=crossing(crosswalk_a=4)
+  first=next(m for m in original if m['role'][0]=='crosswalk');second=next(m for m in moved if m['role'][0]=='crosswalk')
+  self.assertEqual(first['crosswalk_ends'][1],second['crosswalk_ends'][1])
+  self.assertAlmostEqual(first['crosswalk_ends'][0][1]-second['crosswalk_ends'][0][1],4.)
+  self.assertNotEqual(first['forward'],second['forward'])
+  self.assertEqual(len([m for m in moved if m['asset']=='tactile_pad']),2)
+  bar=next(m for m in moved if m['asset']=='stop_bar')
+  self.assertLess(bar['center'][1]+bar['size'][1]/2,min(p[1] for p in second['crosswalk_ends']))
+ def test_midblock_crosswalk_needs_no_junction(self):
+  ms=plan((0,0,0),(0,100,0),[Lane('i')],[Lane('o')],8.,crosswalk_incoming=True)
+  self.assertTrue(any(m['role'][0]=='crosswalk' for m in ms))
+  self.assertFalse(any(m['asset'].startswith('arrow_') for m in ms))
+
 if __name__=='__main__':unittest.main()

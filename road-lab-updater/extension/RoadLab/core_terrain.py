@@ -142,7 +142,7 @@ def surface(terrain,roads,blend,spacing,state=None):
 
 def attach(terrain):
     group=bpy.data.node_groups.new('ROADLAB_TERRAIN_CONTACT','GeometryNodeTree');group.interface.new_socket(name='Geometry',in_out='INPUT',socket_type='NodeSocketGeometry');group.interface.new_socket(name='Geometry',in_out='OUTPUT',socket_type='NodeSocketGeometry')
-    collection=bpy.data.collections.get('RoadLab Core References')
+    collection=next((c for c in bpy.context.scene.collection.children if c.name.split('.')[0]=='RoadLab Core References'),None)
     if collection is None:collection=bpy.data.collections.new('RoadLab Core References');bpy.context.scene.collection.children.link(collection)
     helper=bpy.data.objects.new('RoadLab Graded Terrain Reference',bpy.data.meshes.new('RoadLab Graded Terrain'));collection.objects.link(helper);helper.hide_render=True;helper.hide_set(True);terrain['roadlab_core_terrain_mesh']=helper
     info=group.nodes.new('GeometryNodeObjectInfo');info.transform_space='RELATIVE';info.inputs['Object'].default_value=helper
@@ -192,6 +192,9 @@ def rebuild(scene,force=False):
     old=helper.data;helper.data=mesh;helper.matrix_world=terrain.matrix_world.copy()
     if old!=mesh and old.users==0:bpy.data.meshes.remove(old)
     _STATE[terrain.as_pointer()]=state;terrain['roadlab_core_terrain_signature']=signature;terrain['roadlab_core_terrain_error']='';terrain['roadlab_core_terrain_report']=json.dumps(report);terrain.update_tag()
+    from . import lane_editor
+    for road in roads:
+        if any(c.get('crosswalk_tactile') and (c.get('crosswalk_incoming') or c.get('crosswalk_outgoing')) for c in lane_editor.state(road)):lane_editor.rebuild(road,scene)
 
 
 def settings_changed(obj,context):

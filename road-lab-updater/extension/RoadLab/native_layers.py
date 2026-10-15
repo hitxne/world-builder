@@ -41,7 +41,7 @@ def default(layer,field):
 def ensure_model(scene,road):
     model=model_for(road)
     if model:return model
-    c=bpy.data.collections.get('WB_VERTEX_CONTROLS')
+    c=next((c for c in scene.collection.children if c.name.split('.')[0]=='WB_VERTEX_CONTROLS'),None)
     if c is None:c=bpy.data.collections.new('WB_VERTEX_CONTROLS');scene.collection.children.link(c)
     mesh=bpy.data.meshes.new('WB_Vertex_Settings_'+road.name);mesh.from_pydata([tuple(p.co[:3]) for p in points(road)],[],[]);mesh.update()
     model=bpy.data.objects.new('WB_Vertex_Settings_'+road.name,mesh);c.objects.link(model);model.hide_render=True;model.hide_set(True);model['wb_layer_model']=True;model['wb_road']=road

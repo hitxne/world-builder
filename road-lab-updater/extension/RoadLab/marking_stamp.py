@@ -118,6 +118,7 @@ def alpha_hit(mark,point):
 
     if not (0<=u<=1 and 0<=v<=1):return False
     v0,v1=mark.get('v_range',[0,1]);v=v0+(v1-v0)*v
+    if mark['asset']=='tactile_pad':return True
     from .lane_editor import paint_material
     material=paint_material(mark['asset']);image=next(n.image for n in material.node_tree.nodes if n.type=='TEX_IMAGE')
     width,height=image.size

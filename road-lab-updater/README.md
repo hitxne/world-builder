@@ -1,6 +1,6 @@
 # RoadLab Blender extension and update repository
 
-The full RoadLab 0.18.7 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
+The full RoadLab 0.18.8 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
 
 ## Install once
 
@@ -34,7 +34,7 @@ With a RoadLab road selected in Object or Edit Mode, choose **Marking Stamp** in
 
 Lane window > Markings now exposes arrow spacing, solid approach length, entry-dot length, arrival control at each end, and stop setback. The selected lane's **Lane entry** field distinguishes Continuous from Added lane. Stop and Traffic signals draw a 0.61 m stop bar across arriving lanes at junctions; Yield and Uncontrolled do not. Ordinary lane dividers remain broken away from junctions, become solid in the configured approach section, and use short entry dots for designated added lanes.
 
-The entry setting controls paint, not a generated widening taper. Crosswalk geometry is not yet used to calculate stop setback automatically; position the stop bar with the setback control when adding a crosswalk. Marking rules are based on FHWA MUTCD 11th Edition, Revision 1, Sections 3A.04, 3B.07, 3B.11, and 3B.19. Traffic-signal timing and NPC simulation remain separate future work.
+The entry setting controls paint, not a generated widening taper. Enabled crosswalks move the stop bar behind the furthest crossing endpoint; the setback control adds clearance. Marking rules are based on FHWA MUTCD 11th Edition, Revision 1, Sections 3A.04, 3B.07, 3B.11, and 3B.19. Traffic-signal timing and NPC simulation remain separate future work.
 
 ## Start from a blank scene (0.18.1)
 
@@ -81,3 +81,15 @@ Endpoint extensions inherit an existing street profile when the continuation is 
 Adding a branch preserves the existing lane profiles and center, edge, and divider lines. If a new junction makes a saved movement unavailable, only its unsupported directional arrows are suppressed; the lane window flags the movement for review. Applying a new lane setup still validates its movements.
 
 Subdividing a marked source edge transfers its profile and interpolated width to the resulting edges, preserving travel orientation and the controls at the two original endpoints. Collinear subdivisions already affected by earlier versions are repaired when markings regenerate. Ambiguous or removed routes still require explicit reassignment. New branches remain unassigned rather than copying an arbitrary road profile.
+
+## Editable example entry point (0.18.8)
+
+Use **RoadLab > Scene > Load example** for an editable road curve on a connected terrain plane. This opens a separate Blender scene and preserves the previous scene. The curve is selected; Tab enters curve Edit Mode with six authoring points. Move an endpoint with G, then Z to raise it and see terrain grading follow. Terrain remains an editable source plane, with a derived quad grading surface. The asphalt display is generated geometry; the hidden reference mesh is not the editing object.
+
+The older standalone triangulated examples are diagnostic mesh fixtures, now explicitly labeled under **RoadLab Debug > Mesh test fixtures**. They are not the editable road-and-terrain workflow. Road and terrain reference collections are scoped to their scene, so repeated example loads do not add helpers to an earlier scene.
+
+## Crosswalk positions and ramps
+
+In curve Edit Mode, select a junction or adjacent street points and open the Lane tool. Under **Markings > Crosswalk**, enable the crossing, then adjust **A-end position** and **B-end position** independently to skew it. Positive offsets move away from the junction. Amber A/B labels identify the endpoints in the viewport. Preview updates live; Apply saves without closing.
+
+Existing curb and sidewalk layers lower at each endpoint and return to their own profile height over **Ramp run**. Moving either crossing endpoint moves its ramp. Cancelling the lane window restores saved ramps, and temporary previews are excluded from saved files. Add curb and sidewalk layers first on custom roads; the editable example includes both. Optional yellow tactile pads project onto these surfaces, falling back to assigned terrain. Their raised-dot appearance uses a bump shader, not modeled dome geometry.

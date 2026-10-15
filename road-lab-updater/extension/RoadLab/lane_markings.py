@@ -17,7 +17,7 @@ def arrow_id(movements,side='RIGHT'):
     except KeyError:raise ValueError('No marking for this movement combination')
     return 'arrow_uturn_right' if asset=='arrow_uturn_left' and side=='LEFT' else asset
 
-def plan(a,b,incoming,outgoing,width,side='RIGHT',median=0.,trim_start=0.,trim_end=0.,spacing=18.,solid_approach=20.,transition_length=30.,emerging_incoming=(),emerging_outgoing=(),control_incoming="NONE",control_outgoing="NONE",stop_setback=1.22,arrow_approach=35.,junction_start=None,junction_end=None,allowed_incoming=None,allowed_outgoing=None):
+def plan(a,b,incoming,outgoing,width,side='RIGHT',median=0.,trim_start=0.,trim_end=0.,spacing=18.,solid_approach=20.,transition_length=30.,emerging_incoming=(),emerging_outgoing=(),control_incoming="NONE",control_outgoing="NONE",stop_setback=1.22,arrow_approach=35.,junction_start=None,junction_end=None,allowed_incoming=None,allowed_outgoing=None,crosswalk_incoming=False,crosswalk_outgoing=False,crosswalk_depth=3.048,crosswalk_gap=1.,crosswalk_tactile=False,crosswalk_a=0.,crosswalk_b=0.,crosswalk_ramp=1.9):
     """Incoming travels a -> b. Lane order is each driver's left -> right.
 
     End clearances are supplied by the topology adapter. Never draw through a
@@ -53,6 +53,35 @@ def plan(a,b,incoming,outgoing,width,side='RIGHT',median=0.,trim_start=0.,trim_e
             span=min(period,hi-lo-distance)
             station=lo+distance+span/2 if direction==1 else hi-distance-span/2
             add(asset,station,offset,direction,(.1524,span),role=role+[asset,tile]);result[-1]['v_range']=[0,span/period];distance+=span;tile+=1
+    for enabled,direction,junction in ((crosswalk_incoming,1,junction_end),(crosswalk_outgoing,-1,junction_start)):
+        if not enabled:continue
+        if crosswalk_depth<=0 or crosswalk_gap<0:raise ValueError('Invalid crosswalk dimensions')
+        if end-start<=crosswalk_depth+crosswalk_gap+1:continue
+        station=end-crosswalk_gap-crosswalk_depth/2 if direction==1 else start+crosswalk_gap+crosswalk_depth/2
+        # Each sidewalk endpoint has its own setback, measured away from the junction.
+        sa=station-direction*crosswalk_a;sb=station-direction*crosswalk_b
+        ax=a[0]+forward[0]*sa-right[0]*width/2;ay=a[1]+forward[1]*sa-right[1]*width/2
+        bx=a[0]+forward[0]*sb+right[0]*width/2;by=a[1]+forward[1]*sb+right[1]*width/2
+        distance=hypot(bx-ax,by-ay);tx,ty=(bx-ax)/distance,(by-ay)/distance
+        bar_forward=(ty,-tx);bar_width=.6096;period=1.2192
+        inset=.15+crosswalk_depth/2*abs(crosswalk_a-crosswalk_b)/max(distance,1e-9)
+        available=max(0.,distance-2*inset);count=int((available+period-bar_width)/period)
+        if count<1:continue
+        used=count*bar_width+(count-1)*(period-bar_width)
+        for index in range(count):
+            t=((distance-used)/2+bar_width/2+index*period)/distance;z=a[2]+(b[2]-a[2])*(sa+(sb-sa)*t)/length
+            add('line_white',station,0,size=(bar_width,crosswalk_depth),role=['crosswalk',direction,index])
+            result[-1]['center']=[ax+(bx-ax)*t,ay+(by-ay)*t,z];result[-1]['forward']=list(bar_forward)
+            result[-1]['ramp_run']=crosswalk_ramp
+            result[-1]['crosswalk_ends']=[[ax,ay,a[2]+(b[2]-a[2])*sa/length],[bx,by,a[2]+(b[2]-a[2])*sb/length]]
+        if crosswalk_tactile:
+            for side_sign,(x,y,s) in ((-1,(ax,ay,sa)),(1,(bx,by,sb))):
+                add('tactile_pad',station,0,size=(crosswalk_depth,.61),role=['tactile',direction,side_sign])
+                result[-1]['center']=[x+side_sign*tx*(.08+.61/2),y+side_sign*ty*(.08+.61/2),a[2]+(b[2]-a[2])*s/length]
+                result[-1]['forward']=[side_sign*tx,side_sign*ty];result[-1]['on_terrain']=True
+        reach=crosswalk_depth/2*abs(bar_forward[0]*forward[0]+bar_forward[1]*forward[1])
+        if direction==1:end=min(sa,sb)-reach
+        else:start=max(sa,sb)+reach
     for lanes,direction,total,emerging,control,junction in ((incoming,1,ni,set(emerging_incoming),control_incoming,junction_end),(outgoing,-1,no,set(emerging_outgoing),control_outgoing,junction_start)):
         bar=None
         lo,hi=start,end

@@ -178,7 +178,7 @@ def attach(road):
     previous=modifier(road);saved=values(road) if previous else {}
     from .native_contacts import input_value
     saved_material=input_value(previous,'material') if previous else None
-    c=bpy.data.collections.get('RoadLab Core References')
+    c=next((c for c in bpy.context.scene.collection.children if c.name.split('.')[0]=='RoadLab Core References'),None)
     if c is None:c=bpy.data.collections.new('RoadLab Core References');bpy.context.scene.collection.children.link(c)
     output=bpy.data.objects.new('RoadLab Core Pavement Reference',bpy.data.meshes.new('RoadLab Core Mesh'));c.objects.link(output);output.hide_set(True);output.hide_render=True
     data=bpy.data.curves.new('RoadLab Finished Perimeter','CURVE');data.dimensions='3D';outline=bpy.data.objects.new('RoadLab Finished Perimeter',data);c.objects.link(outline);outline.hide_set(True);outline.hide_render=True

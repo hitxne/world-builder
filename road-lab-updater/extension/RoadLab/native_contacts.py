@@ -9,7 +9,7 @@ def input_value(mod,name):
 
 
 def collection(scene,name):
-    c=bpy.data.collections.get(name)
+    c=next((c for c in scene.collection.children if c.name.split('.')[0]==name),None)
     if c is None:c=bpy.data.collections.new(name);scene.collection.children.link(c)
     c['wb_owned_contacts']=True;return c
 
@@ -20,7 +20,7 @@ def connect_surfaces(scene):
         if obj not in roads:refs.objects.unlink(obj)
     for obj in roads:
         if obj.name not in refs.objects:refs.objects.link(obj)
-    features=bpy.data.collections.get('ROADLAB_FEATURES')
+    features=next((c for c in scene.collection.children if c.name.split('.')[0]=='ROADLAB_FEATURES'),None)
     if features is None:return
     from .native_extrusion import extrusion_group
     group=extrusion_group()

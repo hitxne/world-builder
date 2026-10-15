@@ -32,6 +32,10 @@ jobs:
         run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_lane_connections_blender.py
       - name: Test lane preservation when adding streets
         run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_lane_branch_preservation_blender.py
+      - name: Test editable road and terrain example
+        run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_editable_example_blender.py
+      - name: Test crosswalk ramps and preview rollback
+        run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_crosswalk_ramps_blender.py
       - name: Validate and build repository
         env:
           BLENDER: /tmp/roadlab-blender/blender

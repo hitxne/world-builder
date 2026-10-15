@@ -1,4 +1,4 @@
-bl_info={'name':'RoadLab','author':'World Builder','version':(0,18,7),'blender':(5,1,0),'location':'View3D > Sidebar > RoadLab','category':'Object'}
+bl_info={'name':'RoadLab','author':'World Builder','version':(0,18,8),'blender':(5,1,0),'location':'View3D > Sidebar > RoadLab','category':'Object'}
 import bpy,json,math
 from pathlib import Path
 from bpy.props import StringProperty,FloatProperty,BoolProperty,EnumProperty,FloatVectorProperty,CollectionProperty,PointerProperty
@@ -270,7 +270,7 @@ class WB_OT_add_planter(bpy.types.Operator):
   except Exception as e:self.report({'ERROR'},str(e));return {'CANCELLED'}
   return {'FINISHED'}
 class WB_OT_load(bpy.types.Operator):
- bl_idname='wb.load_pilot';bl_label='Load example (replaces WB output)';bl_options={'REGISTER','UNDO'}
+ bl_idname='wb.load_pilot';bl_label='Generate mesh test fixture';bl_options={'REGISTER','UNDO'}
  def execute(self,context):
   try:
    g=model.loads((Path(__file__).parent/'fixtures'/(context.scene.wb_controls.fixture+'.json')).read_text());regenerate(context.scene,g,force=True);sync_controls(context.scene,g)
@@ -315,13 +315,13 @@ class WB_OT_diagnostics(bpy.types.Operator,ExportHelper):
   Path(self.filepath).write_text(json.dumps(diagnostics.inspect_scene(context.scene),indent=2));return {'FINISHED'}
 
 class WB_PT_panel(bpy.types.Panel):
- bl_label='Examples';bl_idname='WB_PT_panel';bl_space_type='VIEW_3D';bl_region_type='UI';bl_category='RoadLab';bl_options={'DEFAULT_CLOSED'}
+ bl_label='Mesh test fixtures';bl_idname='WB_PT_panel';bl_space_type='VIEW_3D';bl_region_type='UI';bl_category='RoadLab Debug';bl_options={'DEFAULT_CLOSED'}
  @classmethod
  def poll(cls,context):
   from .native_extension import is_roadlab_scene
   return not is_roadlab_scene(context.scene)
  def draw(self,context):
-  l=self.layout;s=context.scene.wb_controls;box=l.box();box.label(text='Scene setup');box.prop(s,'fixture');box.operator('wb.load_pilot');box.operator('wb.curve_profile')
+  l=self.layout;s=context.scene.wb_controls;l.label(text='Standalone mesh tests; no road/terrain editing.',icon='INFO');box=l.box();box.label(text='Test setup');box.prop(s,'fixture');box.operator('wb.load_pilot');box.operator('wb.curve_profile')
   if not context.scene.wb_graph:return
   box=l.box();box.label(text='Road defaults');box.prop(s,'curb_height');box.prop(s,'sidewalk_width');box.prop(s,'spacing',text='Curve sample spacing (m)')
   g=json.loads(context.scene.wb_graph)
@@ -346,14 +346,14 @@ class WB_PT_panel(bpy.types.Panel):
   box=l.box();box.label(text='Scene files');row=box.row();row.operator('wb.import_graph');row.operator('wb.export_graph');box.operator('wb.export_diagnostics')
   for message in json.loads(context.scene.get('wb_validation','[]')):l.label(text=message,icon='ERROR')
 class WB_PT_approach(bpy.types.Panel):
- bl_label='Intersection approaches';bl_parent_id='WB_PT_panel';bl_idname='WB_PT_approach';bl_space_type='VIEW_3D';bl_region_type='UI';bl_category='RoadLab';bl_options={'DEFAULT_CLOSED'}
+ bl_label='Intersection approaches';bl_parent_id='WB_PT_panel';bl_idname='WB_PT_approach';bl_space_type='VIEW_3D';bl_region_type='UI';bl_category='RoadLab Debug';bl_options={'DEFAULT_CLOSED'}
  def draw(self,context):
   l=self.layout;s=context.scene.wb_controls;l.prop(s,'approach_index');i=int(s.approach_index)
   if i<len(s.approaches):
    a=s.approaches[i]
    for key in ('bearing','offset','half_width','length'):l.prop(a,key)
 class WB_PT_endpoint(bpy.types.Panel):
- bl_label='Crosswalk endpoints';bl_parent_id='WB_PT_panel';bl_idname='WB_PT_endpoint';bl_space_type='VIEW_3D';bl_region_type='UI';bl_category='RoadLab';bl_options={'DEFAULT_CLOSED'}
+ bl_label='Crosswalk endpoints';bl_parent_id='WB_PT_panel';bl_idname='WB_PT_endpoint';bl_space_type='VIEW_3D';bl_region_type='UI';bl_category='RoadLab Debug';bl_options={'DEFAULT_CLOSED'}
  def draw(self,context):
   l=self.layout;s=context.scene.wb_controls;l.prop(s,'endpoint_index');i=int(s.endpoint_index)
   if i<len(s.endpoints):
@@ -362,7 +362,7 @@ class WB_PT_endpoint(bpy.types.Panel):
    if e.mode=='manual':l.prop(e,'position');l.prop(e,'rotation')
    l.operator('wb.capture_endpoint');l.label(text='Off-curb manual anchors show warnings')
 class WB_PT_auxiliary(bpy.types.Panel):
- bl_label='Turn lanes and driveways';bl_parent_id='WB_PT_panel';bl_idname='WB_PT_auxiliary';bl_space_type='VIEW_3D';bl_region_type='UI';bl_category='RoadLab';bl_options={'DEFAULT_CLOSED'}
+ bl_label='Turn lanes and driveways';bl_parent_id='WB_PT_panel';bl_idname='WB_PT_auxiliary';bl_space_type='VIEW_3D';bl_region_type='UI';bl_category='RoadLab Debug';bl_options={'DEFAULT_CLOSED'}
  def draw(self,context):
   l=self.layout;s=context.scene.wb_controls
   for a in s.auxiliary:

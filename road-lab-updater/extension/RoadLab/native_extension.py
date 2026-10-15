@@ -256,6 +256,16 @@ class WB_PT_core_status(bpy.types.Panel):
                     else:box.label(text=f"{x['corner']}: requested {x['requested']:.2f}, applied {x['applied']:.2f} m")
 
 
+class ROADLAB_OT_load_example(bpy.types.Operator):
+    bl_idname='roadlab.load_example';bl_label='Load example';bl_options={'REGISTER','UNDO'}
+    bl_description='Open an editable road curve and connected terrain plane in a separate scene'
+    def execute(self,context):
+        from .examples import load_editable_example
+        load_editable_example(context)
+        self.report({'INFO'},'Editable road curve selected. Tab to edit; G to move; terrain follows. Your previous scene is preserved.')
+        return {'FINISHED'}
+
+
 class ROADLAB_OT_new_road(bpy.types.Operator):
     bl_idname='roadlab.new_road';bl_label='Create Road';bl_options={'REGISTER','UNDO'}
     bl_description='Create an editable road at the 3D cursor and connect it to the assigned terrain'
@@ -281,6 +291,7 @@ class WB_PT_native(bpy.types.Panel):
     bl_label='Scene';bl_idname='WB_PT_native';bl_space_type='VIEW_3D';bl_region_type='UI';bl_category='RoadLab';bl_order=-10;bl_options={'DEFAULT_CLOSED'}
     def draw(self,context):
         layout=self.layout;s=context.scene.wb_native
+        layout.operator('roadlab.load_example',icon='FILE_NEW')
         layout.operator('roadlab.new_road',icon='CURVE_PATH')
         layout.operator('wb.bind_roadlab',icon='LINKED')
         if context.scene.get('roadlab_sample'):layout.operator('wb.link_roadlab_nodes',icon='FILE_FOLDER')
@@ -473,7 +484,7 @@ class WB_PT_viewport(NativeSection,bpy.types.Panel):
         layout.prop(s,'edit_preview');layout.prop(s,'precise_cleanup')
 
 
-classes=(WBNativeSettings,ROADLAB_OT_new_road,WB_OT_edit_road_curve,WB_OT_bind_native,WB_OT_link_node_library,WB_OT_add_road_branch,WB_OT_import_materials,WB_OT_find_textures,WB_OT_native_curbs,WB_OT_edit_native_profile,WB_PT_core_status,WB_PT_native,WB_PT_road_shape,WB_PT_road_junctions,WB_PT_junction_limits,WB_PT_road_elevation,WB_PT_road_curve_detail,WB_PT_road_appearance,WB_PT_road_uv,WB_PT_layer_stack,WB_PT_native_terrain,WB_PT_layer_profile,WB_PT_layer_crossing,WB_PT_viewport)
+classes=(WBNativeSettings,ROADLAB_OT_load_example,ROADLAB_OT_new_road,WB_OT_edit_road_curve,WB_OT_bind_native,WB_OT_link_node_library,WB_OT_add_road_branch,WB_OT_import_materials,WB_OT_find_textures,WB_OT_native_curbs,WB_OT_edit_native_profile,WB_PT_core_status,WB_PT_native,WB_PT_road_shape,WB_PT_road_junctions,WB_PT_junction_limits,WB_PT_road_elevation,WB_PT_road_curve_detail,WB_PT_road_appearance,WB_PT_road_uv,WB_PT_layer_stack,WB_PT_native_terrain,WB_PT_layer_profile,WB_PT_layer_crossing,WB_PT_viewport)
 
 def register():
     for cls in classes:bpy.utils.register_class(cls)
