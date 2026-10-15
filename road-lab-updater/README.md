@@ -1,6 +1,6 @@
 # RoadLab Blender extension and update repository
 
-The full RoadLab 0.18.2 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
+The full RoadLab 0.18.3 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
 
 ## Install once
 
@@ -53,3 +53,7 @@ Automatic arrows are now drawn only before an actual junction, never on receivin
 The lane window opens with usage instructions when no valid selection exists. In Edit Mode, select one junction location (coincident handles are accepted), or adjacent points along one street. Opening the tool preserves a selected junction. The active edited road takes priority over a stale Scene road assignment. Alt-click with Marking Stamp erases painted markings; Restore automatic markings clears suppression.
 
 Completed releases are always published to the automatic updater on `feature/road-lab-updater`. Standalone ZIPs are supplemental.
+
+## Clear junction controls (0.18.3)
+
+Choose **Edit road from** using direction names computed from the actual connected roads. North is map +Y and East is +X, independent of the viewport. The chosen arm is highlighted orange while the lane window is open. Arriving at junction and Leaving junction replace ambiguous incoming/outgoing headings. Apply saves the chosen arm; reopen to edit another. Guides disappear on Apply, Cancel, or disabling the extension.

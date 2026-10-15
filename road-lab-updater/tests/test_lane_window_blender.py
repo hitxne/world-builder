@@ -43,5 +43,19 @@ try:
 finally:bpy.ops.roadlab.lane_window=original
 # Active edited road wins over a stale scene assignment.
 scene.wb_native.road=None;select({1});op=window();assert op.has_selection and scene.wb_native.road==road
+# Direction labels follow actual world-space arms, including rotated roads.
+from mathutils import Vector
+geometry=e.approach_geometry(road,json.loads(op.choices_json))
+assert {name for name,hint in e.approach_labels(geometry)}=={'North road','East road','South road','West road'}
+road.rotation_euler.z=0.78539816339;bpy.context.view_layer.update()
+labels=e.approach_labels(e.approach_geometry(road,json.loads(op.choices_json)))
+assert {name for name,hint in labels}=={'Northeast road','Northwest road','Southeast road','Southwest road'}
+# Two arms in the same compass sector remain distinguishable.
+labels=e.approach_labels([(Vector((30,1,0)),Vector((0,0,0))),(Vector((30,5,0)),Vector((0,0,0)))])
+assert labels[0][0]!=labels[1][0]
+# Guides are transient; opening/closing does not alter source selection or geometry.
+before=ps.selected(bpy.context,road)
+e.show_approach_preview(op,road);assert e._approach_preview is not None
+e.clear_approach_preview();assert e._approach_preview is None and ps.selected(bpy.context,road)==before
 bpy.ops.object.mode_set(mode='OBJECT')
 print('LANE_WINDOW_GUIDANCE_PASS',json.dumps(checks),flush=True)

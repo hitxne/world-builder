@@ -339,7 +339,7 @@ def draw_lanes(l,context,junction=False):
         if not junction:box.prop(d,'reverse')
     if required>d.road_width+1e-6:l.label(text=f'Needs {required:.2f} m — expansion approval on Apply',icon='INFO')
     for field in ('incoming','outgoing'):
-        items=getattr(d,field);box=section(l,d,'show_'+field,field.title()+' lanes',f'{len(items)} / 7')
+        items=getattr(d,field);label=('Arriving at junction' if field=='incoming' else 'Leaving junction') if junction else ('Toward section end' if field=='incoming' else 'Toward section start');box=section(l,d,'show_'+field,label,f'{len(items)} / 7')
         if box:
             box.label(text=('Toward this junction' if field=='incoming' else 'Away from this junction') if junction else ('Along selected direction' if field=='incoming' else 'Against selected direction'))
             row=box.row(align=True);row.label(text='Driver’s left → right')
@@ -352,33 +352,69 @@ def draw_lanes(l,context,junction=False):
     box=section(l,d,'show_markings','Markings')
     if box:
         box.prop(d,'spacing');box.prop(d,'arrow_approach');box.prop(d,'solid_approach');box.prop(d,'transition_length')
-        box.prop(d,'control_incoming');box.prop(d,'control_outgoing');box.prop(d,'stop_setback')
+        box.prop(d,'control_incoming',text='Arrivals here' if junction else 'At section end');box.prop(d,'control_outgoing',text='Arrivals at other end' if junction else 'At section start');box.prop(d,'stop_setback')
         box.label(text='Stop bars apply at junctions on controlled arrivals')
         box.label(text='Added-lane dots mark entry; geometry is unchanged')
 
 
 
 _approach_enum_cache={}
+_approach_preview=None
+
+def approach_geometry(obj,choices):
+    lookup={x['id']:i for i,x in enumerate(point_settings.records(obj))};ps=point_settings.points(obj)
+    return [(obj.matrix_world@Vector(ps[lookup[a]].co[:3]),obj.matrix_world@Vector(ps[lookup[b]].co[:3])) for a,b in choices]
+
+def approach_labels(geometry):
+    from math import atan2,degrees
+    names=['East','Northeast','North','Northwest','West','Southwest','South','Southeast']
+    directions=[names[int((degrees(atan2(a.y-b.y,a.x-b.x))%360+22.5)//45)%8] for a,b in geometry]
+    return [(direction+' road'+(f' ({a.x-b.x:+.0f} X, {a.y-b.y:+.0f} Y)' if directions.count(direction)>1 else ''),
+             f'Traffic arriving from {direction.lower()} toward this junction') for direction,(a,b) in zip(directions,geometry)]
 
 def approach_items(self,context):
     choices=json.loads(self.choices_json)
     if not choices:return [('0','Section','')]
-    obj=road(context);items=point_settings.records(obj);lookup={x['id']:i for i,x in enumerate(items)};ps=point_settings.points(obj)
-    result=[]
-    from math import atan2,degrees
-    for i,(a,b) in enumerate(choices):
-        pa,pb=ps[lookup[a]].co,ps[lookup[b]].co
-        if hasattr(obj,'matrix_world'):pa,pb=obj.matrix_world@pa,obj.matrix_world@pb
-        angle=degrees(atan2(pa.y-pb.y,pa.x-pb.x))%360
-        result.append((str(i),f'Approach {i+1} · {angle:.0f}°','Actual connected road heading'))
-    cache_key=self.choices_json
-    _approach_enum_cache[cache_key]=result or [('0','Section','')]
-    return _approach_enum_cache[cache_key]
+    geometry=approach_geometry(road(context),choices)
+    result=[(str(i),name,hint) for i,(name,hint) in enumerate(approach_labels(geometry))]
+    # Blender keeps pointers to enum strings, so retain them for the popup lifetime.
+    key=(road(context).as_pointer(),self.choices_json,tuple(name for _,name,_ in result))
+    _approach_enum_cache[key]=result
+    return _approach_enum_cache[key]
+
+def clear_approach_preview():
+    global _approach_preview
+    if _approach_preview is not None:
+        bpy.types.SpaceView3D.draw_handler_remove(_approach_preview,'WINDOW');_approach_preview=None
+    for screen in bpy.data.screens:
+        for area in screen.areas:
+            if area.type=='VIEW_3D':area.tag_redraw()
+
+def show_approach_preview(operator,obj):
+    global _approach_preview
+    clear_approach_preview()
+    def draw():
+        import gpu
+        from gpu_extras.batch import batch_for_shader
+        try:geometry=approach_geometry(obj,json.loads(operator.choices_json));selected=int(operator.approach)
+        except (ReferenceError,ValueError,KeyError):return
+        shader=gpu.shader.from_builtin('UNIFORM_COLOR');gpu.state.depth_test_set('NONE');gpu.state.line_width_set(4)
+        try:
+            for i,(a,b) in enumerate(geometry):
+                # A short centerline guide distinguishes the selected arm without altering the road.
+                end=b+(a-b)*.65
+                batch=batch_for_shader(shader,'LINES',{'pos':[tuple(b),tuple(end)]})
+                shader.bind();shader.uniform_float('color',(1.,.55,.05,1.) if i==selected else (.15,.65,.85,.5));batch.draw(shader)
+        finally:gpu.state.line_width_set(1);gpu.state.depth_test_set('NONE')
+    _approach_preview=bpy.types.SpaceView3D.draw_handler_add(draw,(),'WINDOW','POST_VIEW')
 
 
 def approach_changed(self,context):
     choices=json.loads(self.choices_json)
-    if choices and self.is_junction:set_draft(context,road(context),[choices[int(self.approach)]],normalize=True)
+    if choices and self.is_junction:
+        set_draft(context,road(context),[choices[int(self.approach)]],normalize=True)
+        for area in context.screen.areas if context.screen else []:
+            if area.type=='VIEW_3D':area.tag_redraw()
 
 
 class ROADLAB_OT_lane_window(bpy.types.Operator):
@@ -390,12 +426,14 @@ class ROADLAB_OT_lane_window(bpy.types.Operator):
     junction_label:StringProperty(default='Junction',options={'HIDDEN'})
     approach:EnumProperty(name='Approach',items=approach_items,update=approach_changed)
     def invoke(self,context,event):
+        clear_approach_preview()
         try:
             obj,targets,junction=selection_targets(context);context.scene.wb_native.road=obj;self.has_selection=True;self.choices_json=json.dumps(targets);self.is_junction=junction
             set_draft(context,obj,[targets[0]] if junction else targets,normalize=junction)
             if junction:
                 from .junction_layout import from_selection
                 self.junction_label=from_selection(context)['kind'].replace('_',' ').title();self.approach='0'
+                if getattr(context,'area',None) and context.area.type=='VIEW_3D':show_approach_preview(self,obj)
         except (ValueError,AttributeError) as e:
             self.has_selection=False;self.selection_hint=str(e);self.choices_json='[]';self.is_junction=False
         return context.window_manager.invoke_props_dialog(self,width=520,confirm_text='Apply lanes' if self.has_selection else 'Close')
@@ -412,14 +450,20 @@ class ROADLAB_OT_lane_window(bpy.types.Operator):
             l.label(text='Shift-click adds points. Existing selections are kept.')
             return
         if self.is_junction:
-            l.label(text=f'{self.junction_label} · {len(json.loads(self.choices_json))} approaches');l.prop(self,'approach')
+            l.label(text=f'{self.junction_label} · {len(json.loads(self.choices_json))} roads')
+            l.prop(self,'approach',text='Edit road from')
+            l.label(text='Selected road is orange in the viewport',icon='INFO')
+            l.label(text='North = +Y · East = +X (map axes)')
+            l.label(text='Edit one road here, Apply, then reopen for another road.')
         else:
             l.label(text=f'{len(json.loads(self.choices_json))} selected street segment(s)')
             obj,indices,targets=draft_target(context);lookup={x['id']:i for i,x in enumerate(point_settings.records(obj))};ps=point_settings.points(obj);endpoint=targets[0][0] if context.scene.roadlab_lane_draft.reverse else targets[-1][1];co=obj.matrix_world@Vector(ps[lookup[endpoint]].co[:3]);l.label(text=f'Incoming toward ({co.x:.1f}, {co.y:.1f})')
         l.label(text='Driving side: '+context.scene.roadlab_map_settings.traffic_side.title())
         draw_lanes(l,context,self.is_junction);l.label(text='Apply saves this section / approach')
         l.operator('roadlab.lane_remove')
+    def cancel(self,context):clear_approach_preview()
     def execute(self,context):
+        clear_approach_preview()
         if self.has_selection:bpy.ops.roadlab.lane_apply('INVOKE_DEFAULT')
         return {'FINISHED'}
 
@@ -476,6 +520,7 @@ def register():
     bpy.utils.register_tool(ROADLAB_WST_lanes,separator=True)
     bpy.app.timers.register(refresh_loaded_markings,first_interval=.1)
 def unregister():
+    clear_approach_preview()
     if bpy.app.timers.is_registered(refresh_loaded_markings):bpy.app.timers.unregister(refresh_loaded_markings)
     bpy.utils.unregister_tool(ROADLAB_WST_lanes)
     del bpy.types.Scene.roadlab_lane_draft
