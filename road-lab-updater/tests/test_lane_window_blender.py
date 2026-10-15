@@ -81,6 +81,36 @@ try:bpy.ops.roadlab.lane_apply(batch_json=json.dumps(narrow))
 except RuntimeError:pass
 assert road['roadlab_lanes']==before
 assert bpy.ops.roadlab.lane_apply(batch_json=json.dumps(narrow),expand=True)=={'FINISHED'}
+# Apply is a property action inside the dialog; it does not run its closing execute.
+bpy.ops.roadlab.lane_window('EXEC_DEFAULT')
+persistent=bpy.context.window_manager.operator_properties_last('roadlab.lane_window')
+persistent.has_selection=True;persistent.is_junction=True;persistent.choices_json=op.choices_json
+persistent.active_approach='0';persistent.drafts_json=op.drafts_json
+persistent.apply_status='';persistent.expansion_text='[]'
+d.page='MARKINGS';d.show_arrows=True;d.spacing=27
+e.show_approach_preview(persistent,road)
+persistent.apply_action=True
+assert persistent.apply_status=='Applied. Further edits need Apply.' and not persistent.apply_action
+assert d.page=='MARKINGS' and d.show_arrows and persistent.active_approach=='0' and e._approach_preview is not None
+assert any(c['spacing']==27 for c in e.state(road))
+# Expansion and its cancellation keep the same editor and pending edits.
+d.road_width=1;persistent.apply_action=True
+assert json.loads(persistent.expansion_text)
+before=road['roadlab_lanes'];persistent.keep_width_action=True
+assert road['roadlab_lanes']==before and persistent.expansion_text=='[]' and d.road_width==1
+persistent.apply_action=True
+# A changed width request must be reviewed again before expansion.
+d.road_width=2;persistent.expand_action=True
+assert road['roadlab_lanes']==before and json.loads(persistent.expansion_text)
+persistent.expand_action=True
+assert persistent.apply_status=='Applied. Further edits need Apply.' and d.road_width>=8
+# Invalid changes stay editable in place, and do not change saved lanes.
+before=road['roadlab_lanes'];d.incoming.clear();d.outgoing.clear();persistent.apply_action=True
+assert 'Add at least one lane' in persistent.apply_status and road['roadlab_lanes']==before
+# Done only closes: unapplied changes do not get saved implicitly.
+assert e.ROADLAB_OT_lane_window.execute(persistent,bpy.context)=={'FINISHED'}
+assert road['roadlab_lanes']==before and e._approach_preview is None
+restore=e.state(road)[0];e.set_draft(bpy.context,road,[restore['endpoints']])
 # Draw each page and its expanded sections using the real RNA draft.
 class Layout:
  def __init__(self):self.text=[];self.enabled=True

@@ -481,6 +481,39 @@ def approach_changed(self,context):
             if area.type=='VIEW_3D':area.tag_redraw()
 
 
+def apply_window_edits(self,context,expand=False):
+    try:
+        drafts=save_active_approach(self,context) if self.is_junction else {}
+        batch=list(drafts.values()) if drafts else [draft_snapshot(context.scene.roadlab_lane_draft)]
+        obj,checked=checked_drafts(context,batch)
+        needs=[(data,needed) for data,_,_,needed in checked if needed>data['road_width']+1e-6]
+        if expand and json.dumps(batch)!=self.expansion_batch:expand=False
+        if needs and not expand:
+            self.expansion_text=json.dumps([(data.get('label','Selected road'),data['road_width'],needed) for data,needed in needs])
+            self.expansion_batch=json.dumps(batch);self.apply_status='Review road expansion below.';return
+        result=bpy.ops.roadlab.lane_apply('EXEC_DEFAULT',batch_json=json.dumps(batch),expand=expand)
+        if result!={'FINISHED'}:self.apply_status='Changes were not applied. Review the lane setup.';return
+        if expand:
+            for data,_,_,needed in checked:data['road_width']=max(data['road_width'],needed)
+            if drafts:
+                self.drafts_json=json.dumps(drafts)
+                context.scene.roadlab_lane_draft.road_width=drafts[self.active_approach]['road_width']
+        self.expansion_text='[]';self.apply_status='Applied. Further edits need Apply.'
+    except (ValueError,RuntimeError) as error:self.apply_status=str(error).removeprefix('Error: ').strip()
+
+def apply_clicked(self,context):
+    if self.apply_action:
+        self.apply_action=False;apply_window_edits(self,context)
+
+def expansion_clicked(self,context):
+    if self.expand_action:
+        self.expand_action=False;apply_window_edits(self,context,expand=True)
+
+def expansion_cancelled(self,context):
+    if self.keep_width_action:
+        self.keep_width_action=False;self.expansion_text='[]';self.apply_status='Road widths kept. Adjust your lanes, then Apply.'
+
+
 class ROADLAB_OT_lane_window(bpy.types.Operator):
     bl_idname='roadlab.lane_window';bl_label='Lane editor';bl_options={'REGISTER','UNDO'}
     choices_json:StringProperty(default='[]',options={'HIDDEN'})
@@ -491,8 +524,14 @@ class ROADLAB_OT_lane_window(bpy.types.Operator):
     is_junction:BoolProperty(default=False,options={'HIDDEN'})
     junction_label:StringProperty(default='Junction',options={'HIDDEN'})
     approach:EnumProperty(name='Approach',items=approach_items,update=approach_changed)
+    apply_action:BoolProperty(default=False,update=apply_clicked,options={'SKIP_SAVE'})
+    expand_action:BoolProperty(default=False,update=expansion_clicked,options={'SKIP_SAVE'})
+    keep_width_action:BoolProperty(default=False,update=expansion_cancelled,options={'SKIP_SAVE'})
+    expansion_text:StringProperty(default='[]',options={'HIDDEN'})
+    expansion_batch:StringProperty(default='[]',options={'HIDDEN'})
+    apply_status:StringProperty(default='',options={'HIDDEN'})
     def invoke(self,context,event):
-        clear_approach_preview();self.drafts_json='{}';self.active_approach=''
+        clear_approach_preview();self.drafts_json='{}';self.active_approach='';self.expansion_text='[]';self.apply_status=''
         d=context.scene.roadlab_lane_draft;d.page='LANES';d.travel='incoming'
         for flag in ('show_size','show_incoming','show_outgoing','show_markings','show_arrows','show_dividers','show_stops','show_lane_details','show_saved'):setattr(d,flag,False)
         try:
@@ -504,7 +543,7 @@ class ROADLAB_OT_lane_window(bpy.types.Operator):
                 if getattr(context,'area',None) and context.area.type=='VIEW_3D':show_approach_preview(self,obj)
         except (ValueError,AttributeError) as e:
             self.has_selection=False;self.selection_hint=str(e);self.choices_json='[]';self.is_junction=False
-        return context.window_manager.invoke_props_dialog(self,width=520,confirm_text='Apply lanes' if self.has_selection else 'Close')
+        return context.window_manager.invoke_props_dialog(self,width=520,confirm_text='Done' if self.has_selection else 'Close')
     def check(self,context):return True
     def draw(self,context):
         l=self.layout
@@ -527,13 +566,22 @@ class ROADLAB_OT_lane_window(bpy.types.Operator):
             obj,indices,targets=draft_target(context);lookup={x['id']:i for i,x in enumerate(point_settings.records(obj))};ps=point_settings.points(obj);endpoint=targets[0][0] if context.scene.roadlab_lane_draft.reverse else targets[-1][1];co=obj.matrix_world@Vector(ps[lookup[endpoint]].co[:3]);l.label(text=f'Incoming toward ({co.x:.1f}, {co.y:.1f})')
         draw_lanes(l,context,self.is_junction)
         l.separator();l.label(text='Traffic keeps '+context.scene.roadlab_map_settings.traffic_side.lower()+' · map setting')
+        l.prop(self,'apply_action',text='Apply lanes',icon='CHECKMARK',toggle=True)
+        expansion=json.loads(self.expansion_text)
+        if expansion:
+            box=l.box();box.label(text='Expand roads to fit these lanes?',icon='QUESTION')
+            for name,current,needed in expansion:box.label(text=f'{name}: {current:.1f} m → {needed:.1f} m')
+            row=box.row(align=True);row.prop(self,'keep_width_action',text='Keep current widths',toggle=True);row.prop(self,'expand_action',text='Expand & apply',toggle=True)
+        if self.apply_status:
+            from textwrap import wrap
+            for line in wrap(self.apply_status,64):l.label(text=line,icon='INFO')
+        l.label(text='Apply saves without closing.')
+        l.label(text='Done closes; unapplied changes are discarded.')
     def cancel(self,context):clear_approach_preview()
     def execute(self,context):
         clear_approach_preview()
-        if self.has_selection:
-            drafts=save_active_approach(self,context) if self.is_junction else {}
-            bpy.ops.roadlab.lane_apply('INVOKE_DEFAULT',batch_json=json.dumps(list(drafts.values())) if drafts else '')
         return {'FINISHED'}
+
 
 
 class ROADLAB_OT_lane_pick(bpy.types.Operator):

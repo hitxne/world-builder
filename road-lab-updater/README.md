@@ -1,6 +1,6 @@
 # RoadLab Blender extension and update repository
 
-The full RoadLab 0.18.4 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
+The full RoadLab 0.18.5 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
 
 ## Install once
 
@@ -63,3 +63,7 @@ Choose **Edit road from** using direction names computed from the actual connect
 The lane window has three pages: **Lanes**, **Markings**, and **Road size**. Detail sections start collapsed on each opening. Lanes shows one travel direction at a time, with the lane count, movement choices, widths, and optional entry details. Markings groups arrows, lane lines, and stop lines separately. Road size holds total width, median, section direction, and the confirmed clear action. Junction stop-line controls refer to arrivals at the selected junction; controls for the far end are available by selecting that street section.
 
 Switching junction roads preserves pending edits. Apply validates every edited road before writing any setup and saves them together. If roads need more width, a single expansion confirmation lists the affected roads. Cancel leaves committed road setups unchanged.
+
+## Apply without closing (0.18.5)
+
+**Apply lanes** saves inside the lane editor. The current road, page, open sections, pending drafts, and viewport guide remain available. Width expansion is reviewed and approved inline; changing the request requires reviewing the new dimensions. Invalid changes show an inline message and keep the draft editable. **Done** closes the editor without implicitly saving pending changes. Applied changes remain saved when the editor closes.
