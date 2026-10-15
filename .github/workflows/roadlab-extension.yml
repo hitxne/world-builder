@@ -28,6 +28,8 @@ jobs:
         run: python road-lab-updater/tests/test_marking_approaches.py
       - name: Test lane window selection and guidance
         run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_lane_window_blender.py
+      - name: Test live marking preview and street connections
+        run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_lane_connections_blender.py
       - name: Validate and build repository
         env:
           BLENDER: /tmp/roadlab-blender/blender

@@ -1,6 +1,6 @@
 # RoadLab Blender extension and update repository
 
-The full RoadLab 0.18.5 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
+The full RoadLab 0.18.6 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
 
 ## Install once
 
@@ -67,3 +67,11 @@ Switching junction roads preserves pending edits. Apply validates every edited r
 ## Apply without closing (0.18.5)
 
 **Apply lanes** saves inside the lane editor. The current road, page, open sections, pending drafts, and viewport guide remain available. Width expansion is reviewed and approved inline; changing the request requires reviewing the new dimensions. Invalid changes show an inline message and keep the draft editable. **Done** closes the editor without implicitly saving pending changes. Applied changes remain saved when the editor closes.
+
+## Connected markings and live preview (0.18.6)
+
+Lane and marking edits preview in the viewport without modifying saved lane assignments, pavement, terrain, or manual stamps. Apply commits the draft; Done or Cancel discards changes since the last Apply. The preview is removed before saving a .blend and resumes afterward. A draft that needs wider pavement requests expansion on Apply.
+
+Two-road connection vertices can be selected with the Lane tool. Choose **Continuous street** for joined curved markings or **Stop-controlled** for separated road-end markings and arrival stop lines. The choice is stored at the vertex, survives extension and later branches, and is independent of corner sharpness. This sets marking control; physical sign assets and traffic simulation are separate.
+
+Endpoint extensions inherit an existing street profile when the continuation is unambiguous. New branches at a multi-road junction are not assigned an arbitrary profile. At two-arm bends, paint follows the same rounded side boundaries as the road surface. Differing lane counts receive divider tapers; on straight connections, Markings > Lane lines > Lane merge length controls the transition corridor. Width remains subject to explicit expansion approval. Unsupported median or opposing one-way changes retain a gap with a warning rather than inventing a crossing. These marking transitions are not simulated traffic routing.

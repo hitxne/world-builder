@@ -17,7 +17,7 @@ def arrow_id(movements,side='RIGHT'):
     except KeyError:raise ValueError('No marking for this movement combination')
     return 'arrow_uturn_right' if asset=='arrow_uturn_left' and side=='LEFT' else asset
 
-def plan(a,b,incoming,outgoing,width,side='RIGHT',median=0.,trim_start=0.,trim_end=0.,spacing=18.,solid_approach=20.,transition_length=30.,emerging_incoming=(),emerging_outgoing=(),control_incoming="NONE",control_outgoing="NONE",stop_setback=1.22,arrow_approach=35.):
+def plan(a,b,incoming,outgoing,width,side='RIGHT',median=0.,trim_start=0.,trim_end=0.,spacing=18.,solid_approach=20.,transition_length=30.,emerging_incoming=(),emerging_outgoing=(),control_incoming="NONE",control_outgoing="NONE",stop_setback=1.22,arrow_approach=35.,junction_start=None,junction_end=None):
     """Incoming travels a -> b. Lane order is each driver's left -> right.
 
     End clearances are supplied by the topology adapter. Never draw through a
@@ -37,6 +37,8 @@ def plan(a,b,incoming,outgoing,width,side='RIGHT',median=0.,trim_start=0.,trim_e
     if end<=start:return []
     if not all(isfinite(x) and x>=0 for x in (solid_approach,transition_length,stop_setback,arrow_approach)):raise ValueError('Invalid approach marking dimensions')
     if control_incoming not in ('NONE','STOP','SIGNAL','YIELD') or control_outgoing not in ('NONE','STOP','SIGNAL','YIELD'):raise ValueError('Invalid approach control')
+    junction_start=trim_start>0 if junction_start is None else junction_start
+    junction_end=trim_end>0 if junction_end is None else junction_end
     assets=manifest();result=[]
     def add(asset,station,lateral,direction=1,size=None,role=None):
         if size is None:size=assets[asset]['physical_canvas_m']
@@ -51,7 +53,7 @@ def plan(a,b,incoming,outgoing,width,side='RIGHT',median=0.,trim_start=0.,trim_e
             span=min(period,hi-lo-distance)
             station=lo+distance+span/2 if direction==1 else hi-distance-span/2
             add(asset,station,offset,direction,(.1524,span),role=role+[asset,tile]);result[-1]['v_range']=[0,span/period];distance+=span;tile+=1
-    for lanes,direction,total,emerging,control,junction in ((incoming,1,ni,set(emerging_incoming),control_incoming,trim_end>0),(outgoing,-1,no,set(emerging_outgoing),control_outgoing,trim_start>0)):
+    for lanes,direction,total,emerging,control,junction in ((incoming,1,ni,set(emerging_incoming),control_incoming,junction_end),(outgoing,-1,no,set(emerging_outgoing),control_outgoing,junction_start)):
         bar=None
         lo,hi=start,end
         if lanes and junction and control in ('STOP','SIGNAL'):
@@ -66,8 +68,8 @@ def plan(a,b,incoming,outgoing,width,side='RIGHT',median=0.,trim_start=0.,trim_e
         # On short streets connecting two junctions, reserve the other half
         # for departing traffic rather than repeating arrows after the crossing.
         arrow_lo,arrow_hi=lo,hi
-        if direction==1:arrow_lo=max(lo,hi-arrow_approach,(start+end)/2 if trim_start>0 else lo)
-        else:arrow_hi=min(hi,lo+arrow_approach,(start+end)/2 if trim_end>0 else hi)
+        if direction==1:arrow_lo=max(lo,hi-arrow_approach,(start+end)/2 if junction_start else lo)
+        else:arrow_hi=min(hi,lo+arrow_approach,(start+end)/2 if junction_end else hi)
         cursor=0
         for lane_index,lane in enumerate(lanes if junction and arrow_approach>0 else []):
             distance=cursor+lane.width/2 if side=='RIGHT' else total-cursor-lane.width/2
@@ -108,6 +110,18 @@ def plan(a,b,incoming,outgoing,width,side='RIGHT',median=0.,trim_start=0.,trim_e
 def patch_grid(marking,max_step=.4):
     """Subdivide each textured patch for bank/sculpt surface projection."""
     from math import ceil
+    if marking.get('path'):
+        from mathutils import Vector
+        path=[Vector(p) for p in marking['path']];verts=[];uv=[];distance=0.;length=marking['size'][1];width=marking['size'][0]
+        period=manifest()[marking['asset']]['physical_canvas_m'][1]
+        repeat=marking['asset'] in ('broken_white','dotted_white')
+        for i,p in enumerate(path):
+            if i:distance+=(p-path[i-1]).length
+            before=(p-path[i-1]) if i else path[1]-p;after=(path[i+1]-p) if i<len(path)-1 else before
+            before.z=after.z=0;before.normalize();after.normalize();tangent=(before+after).normalized();normal=Vector((tangent.y,-tangent.x,0))
+            scale=1/max(.5,tangent.dot(before));v=distance/period if repeat else distance/max(length,1e-9)
+            for u,sign in ((0,-1),(1,1)):verts.append(tuple(p+normal*(sign*width*.5*scale)));uv.append((u,v))
+        return verts,[(2*i,2*i+1,2*i+3,2*i+2) for i in range(len(path)-1)],uv
     w,h=marking['size'];nx=max(1,ceil(w/max_step));ny=max(1,ceil(h/max_step))
     fx,fy=marking['forward'];rx,ry=fy,-fx;cx,cy,cz=marking['center'];v0,v1=marking.get('v_range',[0,1]);verts=[];uv=[]
     for j in range(ny+1):

@@ -99,6 +99,23 @@ def alpha_hit(mark,point):
     """Test visible paint, not the transparent rectangular decal canvas."""
     fx,fy=mark['forward'];dx=point[0]-mark['center'][0];dy=point[1]-mark['center'][1];w,h=mark['size']
     u=.5+(dx*fy-dy*fx)/w;v=.5+(dx*fx+dy*fy)/h
+    if mark.get('path'):
+        from math import hypot
+        nearest=None;travel=0.
+        for a,b in zip(mark['path'],mark['path'][1:]):
+            vx,vy=b[0]-a[0],b[1]-a[1];length=hypot(vx,vy)
+            if length<1e-9:continue
+            t=max(0.,min(1.,((point[0]-a[0])*vx+(point[1]-a[1])*vy)/(length*length)))
+            px,py=a[0]+t*vx,a[1]+t*vy;distance=hypot(point[0]-px,point[1]-py)
+            candidate=(distance,.5+((point[0]-px)*vy-(point[1]-py)*vx)/(length*w),(travel+t*length)/h)
+            if nearest is None or candidate[0]<nearest[0]:nearest=candidate
+            travel+=length
+        if nearest is None:return False
+        _,u,v=nearest
+        if mark['asset'] in ('broken_white','dotted_white'):
+            from . import lane_markings
+            v=(v*h/lane_markings.manifest()[mark['asset']]['physical_canvas_m'][1])%1
+
     if not (0<=u<=1 and 0<=v<=1):return False
     v0,v1=mark.get('v_range',[0,1]);v=v0+(v1-v0)*v
     from .lane_editor import paint_material

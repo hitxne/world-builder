@@ -98,6 +98,8 @@ def rebuild(road,force=False):
     if road.mode=='EDIT':road.update_from_editmode()
     from . import point_settings
     items=point_settings.sync(road)
+    from .lane_editor import inherit_extensions
+    inherit_extensions(road);items=point_settings.records(road)
     settings=values(road);paths=[];tilts=[];offset=0
     for spline in road.data.splines:
         if spline.type!='POLY':raise ValueError('Prototype accepts POLY splines only')

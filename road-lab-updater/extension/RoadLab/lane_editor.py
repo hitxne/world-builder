@@ -24,6 +24,39 @@ def segments(obj):
         offset+=count
     return result
 
+def inherit_extensions(obj):
+    """Copy a lane profile only onto newly created, unambiguous endpoint extensions."""
+    records=point_settings.records(obj);ids={row['id'] for row in records}
+    known=set(json.loads(obj.get('roadlab_lane_known_points',json.dumps(sorted(ids)))))
+    new=ids-known;obj['roadlab_lane_known_points']=json.dumps(sorted(ids))
+    if not new or 'roadlab_lanes' not in obj:return
+    configs=state(obj);ps=point_settings.points(obj);lookup={row['id']:i for i,row in enumerate(records)}
+    position=lambda ident:tuple(round(float(v),6) for v in ps[lookup[ident]].co[:3])
+    segs=segments(obj);neighbors={}
+    for _,_,a,b in segs:
+        pa,pb=position(a),position(b);neighbors.setdefault(pa,set()).add(pb);neighbors.setdefault(pb,set()).add(pa)
+    changed=True
+    while changed:
+        changed=False;assigned={frozenset(c['endpoints']) for c in configs}
+        for _,_,a,b in segs:
+            if frozenset((a,b)) in assigned or not ({a,b}&new):continue
+            for shared,other in ((a,b),(b,a)):
+                p=position(shared)
+                if len(neighbors[p])!=2:continue
+                candidates=[]
+                for config in configs:
+                    x,y=config['endpoints']
+                    if x not in lookup or y not in lookup:continue
+                    if position(x)==p or position(y)==p:candidates.append(config)
+                if len(candidates)!=1:continue
+                parent=candidates[0];copy=json.loads(json.dumps(parent))
+                copy['endpoints']=[shared,other] if position(parent['endpoints'][1])==p else [other,shared]
+                copy['control_incoming']=copy['control_outgoing']='NONE';configs.append(copy)
+                if 'width' not in records[lookup[other]] and 'width' in records[lookup[shared]]:records[lookup[other]]['width']=records[lookup[shared]]['width']
+                assigned.add(frozenset((a,b)));changed=True;break
+    obj['roadlab_lanes']=json.dumps(configs);point_settings.save(obj,records)
+
+
 def selected_segment(context,sync=False):
     obj=road(context);sel=set(point_settings.selected(context,obj))
     if sync:point_settings.sync(obj)
@@ -65,6 +98,7 @@ class ROADLAB_LaneDraft(bpy.types.PropertyGroup):
     spacing:FloatProperty(name='Arrow spacing (m)',min=5.,default=18.)
     arrow_approach:FloatProperty(name='Arrow approach (m)',min=0.,default=35.,description='Distance before a junction that receives automatic arrows; zero disables them')
     solid_approach:FloatProperty(name='Solid approach (m)',min=0.,default=20.)
+    lane_transition:FloatProperty(name='Lane transition (m)',min=1.,default=30.,description='Length used to taper a lane-count change on a straight connection')
     transition_length:FloatProperty(name='Entry dots (m)',min=0.,default=30.)
     stop_setback:FloatProperty(name='Stop setback (m)',min=0.,default=1.22)
     control_incoming:EnumProperty(name='Forward-end control',items=[('NONE','Uncontrolled','No stop bar'),('STOP','Stop','Place a stop bar on incoming lanes'),('SIGNAL','Traffic signals','Place a stop bar; traffic simulation remains separate'),('YIELD','Yield','No stop bar')],default='NONE')
@@ -74,9 +108,12 @@ class ROADLAB_LaneDraft(bpy.types.PropertyGroup):
 
 def paint_material(asset):
     name='RoadLab Marking '+asset;mat=bpy.data.materials.get(name)
-    if mat:return mat
+    if mat:
+        for node in mat.node_tree.nodes if mat.node_tree else []:
+            if node.type=='TEX_IMAGE':node.extension='REPEAT' if asset in ('broken_white','dotted_white') else 'CLIP'
+        return mat
     row=lane_markings.manifest()[asset];mat=bpy.data.materials.new(name);mat.use_nodes=True
-    nodes=mat.node_tree.nodes;p=nodes.get('Principled BSDF');tex=nodes.new('ShaderNodeTexImage');tex.image=bpy.data.images.load(str(lane_markings.ROOT/row['rgba']),check_existing=True);tex.image.alpha_mode='STRAIGHT';tex.extension='CLIP'
+    nodes=mat.node_tree.nodes;p=nodes.get('Principled BSDF');tex=nodes.new('ShaderNodeTexImage');tex.image=bpy.data.images.load(str(lane_markings.ROOT/row['rgba']),check_existing=True);tex.image.alpha_mode='STRAIGHT';tex.extension='REPEAT' if asset in ('broken_white','dotted_white') else 'CLIP'
     mat.node_tree.links.new(tex.outputs['Color'],p.inputs['Base Color']);mat.node_tree.links.new(tex.outputs['Alpha'],p.inputs['Alpha']);p.inputs['Roughness'].default_value=.85
     if hasattr(mat,'surface_render_method'):mat.surface_render_method='DITHERED'
     elif hasattr(mat,'blend_method'):mat.blend_method='HASHED'
@@ -87,7 +124,7 @@ def rebuild(obj,scene,force=False):
     configs=state(obj);output=obj.get('roadlab_core_mesh')
     if output is None:return
     side=scene.roadlab_map_settings.traffic_side
-    signature=hashlib.sha256(json.dumps(['approach-arrows-erase-v2',obj.get('roadlab_hidden_lane_markings','[]'),configs,obj.get('roadlab_core_signature'),output.data.as_pointer(),side],sort_keys=True).encode()).hexdigest()
+    signature=hashlib.sha256(json.dumps(['connected-bends-v3',[(row.get('co'),row.get('connection_mode')) for row in point_settings.records(obj) if row.get('connection_mode')],obj.get('roadlab_hidden_lane_markings','[]'),configs,obj.get('roadlab_core_signature'),output.data.as_pointer(),side],sort_keys=True).encode()).hexdigest()
     existing=obj.get('roadlab_marking_object')
     owned=existing is not None and (existing.get('roadlab_markings_owner_object')==obj or existing.get('roadlab_markings_owner')==obj.name)
     if not force and owned and obj.get('roadlab_marking_signature')==signature:
@@ -102,7 +139,14 @@ def rebuild(obj,scene,force=False):
         if spl.use_cyclic_u and coords:coords.append(coords[0]);widths.append(widths[0])
         paths.append((coords,widths))
     nodes,edges,_=graph(paths,default)
-    def clearance(co,width):
+    from . import lane_bends
+    transitions=lane_bends.profile_transitions(nodes,edges,configs,{ident:key(points[index].co[:3]) for ident,index in lookup.items()},values(obj),{key(row['co']) for row in items if row.get('connection_mode')=='STOP'})
+    bends=lane_bends.patches(nodes,edges,values(obj),point_settings.junction_overrides(obj));bends.update(transitions);bend_arms={}
+    stop_nodes={key(row['co']) for row in items if row.get('connection_mode')=='STOP'}
+    def clearance(co,width,other):
+        if key(co) in bends:
+            neighbors=nodes[key(co)];neighbor=max(neighbors,key=lambda n:(Vector(n)-Vector(co)).normalized().dot((Vector(other)-Vector(co)).normalized()))
+            return lane_bends.gate(bends[key(co)],key(co),neighbor)
         if len(nodes.get(key(co),[]))<3:return 0.
         # Keep paint clear of rounded junction footprints; never draw connectors here.
         touching=[max(w) if isinstance(w,(list,tuple)) else w for e,w in edges.items() if key(co) in e]
@@ -126,11 +170,24 @@ def rebuild(obj,scene,force=False):
                     if 1e-6<t<1-1e-6 and (candidate-Vector(junction)).length<1e-5:cuts.append((length*t,junction))
             cuts.sort(key=lambda cut:cut[0])
             for part,((_,start),(_,finish)) in enumerate(zip(cuts,cuts[1:])):
-                segment_plans=lane_markings.plan(start,finish,entries(config['incoming'],'i'),entries(config['outgoing'],'o'),width,side,config['median'],clearance(start,width),clearance(finish,width),config['spacing'],**{k:config.get(k,v) for k,v in [('arrow_approach',35.),('solid_approach',20.),('transition_length',30.),('stop_setback',1.22),('control_incoming','NONE'),('control_outgoing','NONE')]},emerging_incoming=[i for i,row in enumerate(config['incoming']) if row.get('entry')=='ADDED'],emerging_outgoing=[i for i,row in enumerate(config['outgoing']) if row.get('entry')=='ADDED'])
+                segment_plans=lane_markings.plan(start,finish,entries(config['incoming'],'i'),entries(config['outgoing'],'o'),width,side,config['median'],clearance(start,width,finish),clearance(finish,width,start),config['spacing'],**{k:('STOP' if (k=='control_incoming' and key(finish) in stop_nodes) or (k=='control_outgoing' and key(start) in stop_nodes) else config.get(k,v)) for k,v in [('arrow_approach',35.),('solid_approach',20.),('transition_length',30.),('stop_setback',1.22),('control_incoming','NONE'),('control_outgoing','NONE')]},junction_start=len(nodes.get(key(start),[]))>=3 or key(start) in stop_nodes,junction_end=len(nodes.get(key(finish),[]))>=3 or key(finish) in stop_nodes,emerging_incoming=[i for i,row in enumerate(config['incoming']) if row.get('entry')=='ADDED'],emerging_outgoing=[i for i,row in enumerate(config['outgoing']) if row.get('entry')=='ADDED'])
+                for co,other in ((start,finish),(finish,start)):
+                    if key(co) not in bends or key(co) in stop_nodes:continue
+                    neighbor=max(nodes[key(co)],key=lambda n:(Vector(n)-Vector(co)).normalized().dot((Vector(other)-Vector(co)).normalized()))
+                    u=Vector(neighbor)-Vector(co);u.z=0;u.normalize();normal=Vector((-u.y,u.x,0));seen=set();arm=[]
+                    for mark in segment_plans:
+                        role=mark['role'];family=role[0]
+                        if family not in ('outer','center-yellow','median-yellow','center-white','divider'):continue
+                        semantic=tuple(role[:3] if family=='divider' else role[:2])
+                        if semantic in seen:continue
+                        seen.add(semantic);lateral=(Vector(mark['center'])-Vector(co)).dot(normal)
+                        arm.append(dict(family=family,flow=1 if Vector((*mark['forward'],0)).dot(u)>0 else -1,asset=mark['asset'],fraction=.5+lateral/(Vector(bends[key(co)][2][neighbor][-1])-Vector(bends[key(co)][2][neighbor][0])).length,width=mark['size'][0]))
+                    bend_arms[(key(co),neighbor)]=arm
                 for mark in segment_plans:
                     mark['id']=hashlib.sha256(json.dumps([config['endpoints'],part,mark['role']],sort_keys=True).encode()).hexdigest()
                     if mark['id'] not in hidden:plans.append(mark)
         except ValueError as error:warnings.append(str(error))
+    connectors,notes=lane_bends.connect(bends,bend_arms,hidden);plans.extend(connectors);warnings.extend(notes)
     obj['roadlab_generated_marking_catalog']=json.dumps(plans)
     mesh=output.data;vs=[v.co.copy() for v in mesh.vertices];polys=[tuple(p.vertices) for p in mesh.polygons]
     bvh=BVHTree.FromPolygons(vs,polys);top=max((v.z for v in vs),default=0)+100;bottom=min((v.z for v in vs),default=0)-100
@@ -180,7 +237,7 @@ def selection_targets(context):
         for x,y,a,b in segs:
             if x in sel:choices.append([b,a])
             elif y in sel:choices.append([a,b])
-        if len(choices)<3:raise ValueError('Select a junction, or two adjacent points for a street section')
+        if len(choices)<2:raise ValueError('Select a connection point, or two adjacent points for a street section')
         return obj,choices,True
     targets=[(a,b,position(x),position(y)) for x,y,a,b in segs if x in sel and y in sel]
     if not targets:raise ValueError('Select two adjacent road points for a street section')
@@ -209,7 +266,7 @@ def set_draft(context,obj,targets,normalize=False):
     config=next((c for c in state(obj) if frozenset(c['endpoints'])==frozenset(targets[0])),None)
     if config:d.reverse=config['endpoints'][0]!=targets[0][0];d.median=config['median'];d.spacing=config['spacing']
     else:d.median=0.;d.spacing=18.
-    for field,value in [('arrow_approach',35.),('solid_approach',20.),('transition_length',30.),('stop_setback',1.22),('control_incoming','NONE'),('control_outgoing','NONE')]:setattr(d,field,config.get(field,value) if config else value)
+    for field,value in [('arrow_approach',35.),('solid_approach',20.),('lane_transition',30.),('transition_length',30.),('stop_setback',1.22),('control_incoming','NONE'),('control_outgoing','NONE')]:setattr(d,field,config.get(field,value) if config else value)
     for field in ('incoming','outgoing'):
         for row in (config[field] if config else [{'width':3.5,'movement':'THROUGH'}]):
             item=getattr(d,field).add();item.width=row['width'];item.movement=row['movement'];item.entry=row.get('entry','CONTINUOUS')
@@ -268,7 +325,7 @@ def validate_approach(obj,endpoints,incoming,outgoing):
     if errors:raise ValueError('; '.join(errors))
 
 
-DRAFT_FIELDS=('segment_key','targets_json','reverse','road_width','median','spacing','arrow_approach','solid_approach','transition_length','stop_setback','control_incoming','control_outgoing')
+DRAFT_FIELDS=('segment_key','targets_json','reverse','road_width','median','spacing','arrow_approach','solid_approach','lane_transition','transition_length','stop_setback','control_incoming','control_outgoing')
 
 def draft_snapshot(d):
     return dict({k:getattr(d,k) for k in DRAFT_FIELDS},incoming=rows(d.incoming),outgoing=rows(d.outgoing))
@@ -329,7 +386,11 @@ class ROADLAB_OT_lane_apply(bpy.types.Operator):
                 for i in indices:widths[i]=max(widths.get(i,0),desired)
                 configs=[c for c in configs if all(frozenset(c['endpoints'])!=frozenset(t) for t in targets)]
                 for t in targets:
-                    configs.append(dict(endpoints=t[::-1] if data['reverse'] else t,incoming=data['incoming'],outgoing=data['outgoing'],**{k:data[k] for k in ('median','spacing','arrow_approach','solid_approach','transition_length','stop_setback','control_incoming','control_outgoing')}))
+                    configs.append(dict(endpoints=t[::-1] if data['reverse'] else t,incoming=data['incoming'],outgoing=data['outgoing'],**{k:data[k] for k in ('median','spacing','arrow_approach','solid_approach','lane_transition','transition_length','stop_setback','control_incoming','control_outgoing')}))
+            for data,_,_,_ in checked:
+                if data.get('_connection_node') is not None:
+                    for row in items:
+                        if all(abs(a-b)<1e-5 for a,b in zip(row['co'],data['_connection_node'])):row['connection_mode']=data['_connection_mode']
             for i,width in widths.items():items[i]['width']=width
             point_settings.save(obj,items);obj['roadlab_lanes']=json.dumps(configs)
             context.scene.roadlab_lane_draft.road_width=max(context.scene.roadlab_lane_draft.road_width,self.required(context)) if self.expand else context.scene.roadlab_lane_draft.road_width
@@ -359,7 +420,7 @@ def section(l,d,flag,label,summary=''):
     return box if opened else None
 
 
-def draw_lanes(l,context,junction=False):
+def draw_lanes(l,context,junction=False,connection_mode=None):
     d=context.scene.roadlab_lane_draft
     required=lane_logic.road_width(entries(rows(d.incoming),'i'),entries(rows(d.outgoing),'o'),d.median)[1]
     l.prop(d,'page',expand=True)
@@ -391,13 +452,20 @@ def draw_lanes(l,context,junction=False):
         box=section(l,d,'show_arrows','Direction arrows')
         if box:box.prop(d,'arrow_approach',text='Before junction (m)');box.prop(d,'spacing',text='Repeat spacing (m)');box.label(text='Set distance to 0 to turn off automatic arrows.')
         box=section(l,d,'show_dividers','Lane lines')
-        if box:box.prop(d,'solid_approach',text='Solid before junction (m)');box.prop(d,'transition_length',text='Added-lane dots (m)')
+        if box:
+            box.prop(d,'solid_approach',text='Solid before junction (m)')
+            box.prop(d,'lane_transition',text='Lane merge length (m)')
+            box.prop(d,'transition_length',text='Added-lane dots (m)')
         box=section(l,d,'show_stops','Stop line')
         if box:
-            box.prop(d,'control_incoming',text='Arrivals here' if junction else 'At section end')
-            if not junction:box.prop(d,'control_outgoing',text='At section start')
-            if d.control_incoming in {'STOP','SIGNAL'} or (not junction and d.control_outgoing in {'STOP','SIGNAL'}):box.prop(d,'stop_setback',text='Setback (m)')
-            box.label(text='Stop and signal controls paint an arrival stop line.')
+            if connection_mode is not None:
+                box.label(text='Controlled by the Connection setting above.')
+                if connection_mode=='STOP':box.prop(d,'stop_setback',text='Setback (m)')
+            else:
+                box.prop(d,'control_incoming',text='Arrivals here' if junction else 'At section end')
+                if not junction:box.prop(d,'control_outgoing',text='At section start')
+                if d.control_incoming in {'STOP','SIGNAL'} or (not junction and d.control_outgoing in {'STOP','SIGNAL'}):box.prop(d,'stop_setback',text='Setback (m)')
+                box.label(text='Stop and signal controls paint an arrival stop line.')
     else:
         box=section(l,d,'show_size','Width and median',f'{d.road_width:.1f} m')
         if box:
@@ -481,10 +549,135 @@ def approach_changed(self,context):
             if area.type=='VIEW_3D':area.tag_redraw()
 
 
+# Preview uses an unlinked source copy and its own marking mesh. Committed lane
+# settings, pavement, terrain and manual stamps are never changed by the timer.
+_lane_preview=None
+
+def stop_lane_preview():
+    global _lane_preview
+    session=_lane_preview;_lane_preview=None
+    if bpy.app.timers.is_registered(tick_lane_preview):bpy.app.timers.unregister(tick_lane_preview)
+    if not session:return
+    for target,hidden in session['hidden']:
+        try:target.hide_set(hidden)
+        except ReferenceError:pass
+    proxy=session.get('proxy')
+    if proxy is not None:
+        try:
+            marking=proxy.get('roadlab_marking_object')
+            if marking is not None:
+                mesh=marking.data;bpy.data.objects.remove(marking,do_unlink=True)
+                if mesh.users==0:bpy.data.meshes.remove(mesh)
+            bpy.data.objects.remove(proxy,do_unlink=True)
+        except ReferenceError:pass
+
+def start_lane_preview(operator,context):
+    global _lane_preview
+    stop_lane_preview()
+    _lane_preview={'operator':operator,'scene':context.scene,'road':road(context),'signature':None,'proxy':None,'hidden':[]}
+    bpy.app.timers.register(tick_lane_preview,first_interval=.1)
+
+def preview_batch(operator,scene):
+    drafts=json.loads(operator.drafts_json) if operator.is_junction else {}
+    current=draft_snapshot(scene.roadlab_lane_draft)
+    if drafts or operator.is_junction:drafts[operator.active_approach]=current
+    batch=list(drafts.values()) if drafts else [current]
+    node=getattr(operator,'connection_node','')
+    if node:
+        # A two-arm connection is one operation. Preserve an existing opposite
+        # profile, or continue the current street profile when it has none yet.
+        obj=scene.wb_native.road
+        for index,target in enumerate(json.loads(operator.choices_json)):
+            if any(frozenset(json.loads(data['targets_json'])[0])==frozenset(target) for data in batch):continue
+            data=json.loads(json.dumps(current));data['targets_json']=json.dumps([target]);data['reverse']=False
+            saved=next((c for c in state(obj) if frozenset(c['endpoints'])==frozenset(target)),None)
+            if saved:
+                for field in ('median','spacing','arrow_approach','solid_approach','lane_transition','transition_length','stop_setback','control_incoming','control_outgoing'):data[field]=saved.get(field,data[field])
+                reverse=saved['endpoints']!=target
+                data['incoming']=saved['outgoing' if reverse else 'incoming'];data['outgoing']=saved['incoming' if reverse else 'outgoing']
+                if reverse:data['control_incoming'],data['control_outgoing']=data['control_outgoing'],data['control_incoming']
+            else:data['incoming'],data['outgoing']=data['outgoing'],data['incoming']
+            batch.append(data)
+        for data in batch:data['_connection_node']=json.loads(node);data['_connection_mode']=operator.connection_mode
+    return batch
+
+def tick_lane_preview():
+    session=_lane_preview
+    if session is None:return None
+    try:
+        operator=session['operator'];obj=session['road'];scene=session['scene']
+        batch=preview_batch(operator,scene)
+        signature=json.dumps([batch,obj.get('roadlab_core_signature'),scene.roadlab_map_settings.traffic_side],sort_keys=True)
+        if signature==session['signature']:return .12
+        session['signature']=signature
+        context=type('PreviewContext',(),{'scene':scene,'edit_object':obj,'active_object':obj})()
+        _,checked=checked_drafts(context,batch)
+        from .road_core import values
+        default=values(obj)['road width']
+        if any(needed>min(point_settings.width(obj,i,default) for i in indices)+1e-6 for data,targets,indices,needed in checked):
+            operator.preview_status='Preview needs a wider road. Apply to review expansion.';return .12
+        configs=state(obj)
+        for data,targets,indices,needed in checked:
+            configs=[c for c in configs if all(frozenset(c['endpoints'])!=frozenset(t) for t in targets)]
+            for t in targets:configs.append(dict(endpoints=t[::-1] if data['reverse'] else t,incoming=data['incoming'],outgoing=data['outgoing'],**{k:data[k] for k in ('median','spacing','arrow_approach','solid_approach','lane_transition','transition_length','stop_setback','control_incoming','control_outgoing')}))
+        proxy=session['proxy']
+        if proxy is None:
+            proxy=obj.copy();proxy.name='RoadLab Preview Source';session['proxy']=proxy
+            if 'roadlab_marking_object' in proxy:del proxy['roadlab_marking_object']
+            proxy['roadlab_new_core']=False
+        proxy['roadlab_lanes']=json.dumps(configs)
+        preview_records=point_settings.records(obj)
+        for data in batch:
+            if data.get('_connection_node') is not None:
+                for row in preview_records:
+                    if all(abs(a-b)<1e-5 for a,b in zip(row['co'],data['_connection_node'])):row['connection_mode']=data['_connection_mode']
+        proxy['roadlab_point_settings']=json.dumps(preview_records)
+        proxy['roadlab_core_mesh']=obj['roadlab_core_mesh'];proxy['roadlab_core_signature']=obj.get('roadlab_core_signature','')
+        proxy.matrix_world=obj.matrix_world.copy();rebuild(proxy,scene,True)
+        target=proxy.get('roadlab_marking_object')
+        if target is not None:
+            target.name='RoadLab Marking Preview';target.hide_render=True;target['roadlab_temporary_preview']=True
+            original=obj.get('roadlab_marking_object')
+            if original is not None and all(item[0]!=original for item in session['hidden']):
+                session['hidden'].append((original,original.hide_get()));original.hide_set(True)
+        operator.preview_status='Live preview · Apply saves changes'
+        for screen in bpy.data.screens:
+            for area in screen.areas:
+                if area.type=='VIEW_3D':area.tag_redraw()
+    except (ReferenceError,AttributeError):
+        stop_lane_preview();return None
+    except (ValueError,KeyError,RuntimeError) as error:
+        try:session['operator'].preview_status='Preview unavailable: '+str(error)
+        except ReferenceError:stop_lane_preview();return None
+    return .12
+
+@bpy.app.handlers.persistent
+def preview_before_save(*args):
+    # Never serialize temporary preview meshes or viewport hiding into a .blend.
+    if _lane_preview is not None:
+        session=_lane_preview.copy();stop_lane_preview()
+        global _preview_resume
+        _preview_resume=session
+
+_preview_resume=None
+
+@bpy.app.handlers.persistent
+def preview_after_save(*args):
+    global _lane_preview,_preview_resume
+    if _preview_resume is not None:
+        session=_preview_resume;_preview_resume=None
+        session.update(signature=None,proxy=None,hidden=[]);_lane_preview=session
+        bpy.app.timers.register(tick_lane_preview,first_interval=.1)
+
+@bpy.app.handlers.persistent
+def preview_before_load(*args):
+    global _preview_resume
+    _preview_resume=None;stop_lane_preview();clear_approach_preview()
+
 def apply_window_edits(self,context,expand=False):
     try:
         drafts=save_active_approach(self,context) if self.is_junction else {}
-        batch=list(drafts.values()) if drafts else [draft_snapshot(context.scene.roadlab_lane_draft)]
+        batch=preview_batch(self,context.scene)
         obj,checked=checked_drafts(context,batch)
         needs=[(data,needed) for data,_,_,needed in checked if needed>data['road_width']+1e-6]
         if expand and json.dumps(batch)!=self.expansion_batch:expand=False
@@ -496,9 +689,12 @@ def apply_window_edits(self,context,expand=False):
         if expand:
             for data,_,_,needed in checked:data['road_width']=max(data['road_width'],needed)
             if drafts:
+                for data in drafts.values():
+                    match=next(row for row,_,_,_ in checked if row['targets_json']==data['targets_json'])
+                    data['road_width']=match['road_width']
                 self.drafts_json=json.dumps(drafts)
-                context.scene.roadlab_lane_draft.road_width=drafts[self.active_approach]['road_width']
         self.expansion_text='[]';self.apply_status='Applied. Further edits need Apply.'
+        if _lane_preview is not None:_lane_preview['signature']=None
     except (ValueError,RuntimeError) as error:self.apply_status=str(error).removeprefix('Error: ').strip()
 
 def apply_clicked(self,context):
@@ -523,6 +719,8 @@ class ROADLAB_OT_lane_window(bpy.types.Operator):
     selection_hint:StringProperty(default='',options={'HIDDEN'})
     is_junction:BoolProperty(default=False,options={'HIDDEN'})
     junction_label:StringProperty(default='Junction',options={'HIDDEN'})
+    connection_node:StringProperty(default='',options={'HIDDEN'})
+    connection_mode:EnumProperty(name='Connection',items=[('CONTINUOUS','Continuous street','Lane lines continue through this vertex'),('STOP','Stop-controlled','Terminate lines at both road ends and add arrival stop lines')],default='CONTINUOUS')
     approach:EnumProperty(name='Approach',items=approach_items,update=approach_changed)
     apply_action:BoolProperty(default=False,update=apply_clicked,options={'SKIP_SAVE'})
     expand_action:BoolProperty(default=False,update=expansion_clicked,options={'SKIP_SAVE'})
@@ -530,8 +728,9 @@ class ROADLAB_OT_lane_window(bpy.types.Operator):
     expansion_text:StringProperty(default='[]',options={'HIDDEN'})
     expansion_batch:StringProperty(default='[]',options={'HIDDEN'})
     apply_status:StringProperty(default='',options={'HIDDEN'})
+    preview_status:StringProperty(default='',options={'HIDDEN'})
     def invoke(self,context,event):
-        clear_approach_preview();self.drafts_json='{}';self.active_approach='';self.expansion_text='[]';self.apply_status=''
+        stop_lane_preview();clear_approach_preview();self.drafts_json='{}';self.active_approach='';self.expansion_text='[]';self.apply_status='';self.connection_node=''
         d=context.scene.roadlab_lane_draft;d.page='LANES';d.travel='incoming'
         for flag in ('show_size','show_incoming','show_outgoing','show_markings','show_arrows','show_dividers','show_stops','show_lane_details','show_saved'):setattr(d,flag,False)
         try:
@@ -539,10 +738,16 @@ class ROADLAB_OT_lane_window(bpy.types.Operator):
             set_draft(context,obj,[targets[0]] if junction else targets,normalize=junction)
             if junction:
                 from .junction_layout import from_selection
-                self.junction_label=from_selection(context)['kind'].replace('_',' ').title();self.approach='0';self.active_approach='0'
+                if len(targets)==2:
+                    self.junction_label='Street connection'
+                    indices=point_settings.selected(context,obj);co=tuple(round(v,6) for v in point_settings.points(obj)[indices[0]].co[:3]);self.connection_node=json.dumps(co)
+                    self.connection_mode=next((row.get('connection_mode','CONTINUOUS') for row in point_settings.records(obj) if tuple(row['co'])==co),'CONTINUOUS')
+                else:self.junction_label=from_selection(context)['kind'].replace('_',' ').title()
+                self.approach='0';self.active_approach='0'
                 if getattr(context,'area',None) and context.area.type=='VIEW_3D':show_approach_preview(self,obj)
         except (ValueError,AttributeError) as e:
             self.has_selection=False;self.selection_hint=str(e);self.choices_json='[]';self.is_junction=False
+        if self.has_selection:start_lane_preview(self,context)
         return context.window_manager.invoke_props_dialog(self,width=520,confirm_text='Done' if self.has_selection else 'Close')
     def check(self,context):return True
     def draw(self,context):
@@ -551,21 +756,23 @@ class ROADLAB_OT_lane_window(bpy.types.Operator):
             l.label(text='Choose what to edit',icon='INFO')
             l.label(text=self.selection_hint)
             box=l.box();box.label(text='1. Select a RoadLab road and enter Edit Mode (Tab).')
-            box.label(text='2. Junction: select its shared center point.')
+            box.label(text='2. Connection or junction: select its shared point.')
             box.label(text='   Street: select two or more adjacent curve points.')
             box.label(text='3. Open the lane window to edit the selection.')
             l.label(text='Shift-click adds points. Existing selections are kept.')
             return
         if self.is_junction:
             l.label(text=f'{self.junction_label} · {len(json.loads(self.choices_json))} roads')
+            if self.connection_node:l.prop(self,'connection_mode')
             l.prop(self,'approach',text='Edit road from')
             l.label(text='Selected road is orange in the viewport',icon='INFO')
             l.label(text='Switch roads freely. Apply saves your edited roads together.')
         else:
             l.label(text=f'{len(json.loads(self.choices_json))} selected street segment(s)')
             obj,indices,targets=draft_target(context);lookup={x['id']:i for i,x in enumerate(point_settings.records(obj))};ps=point_settings.points(obj);endpoint=targets[0][0] if context.scene.roadlab_lane_draft.reverse else targets[-1][1];co=obj.matrix_world@Vector(ps[lookup[endpoint]].co[:3]);l.label(text=f'Incoming toward ({co.x:.1f}, {co.y:.1f})')
-        draw_lanes(l,context,self.is_junction)
+        draw_lanes(l,context,self.is_junction,self.connection_mode if self.connection_node else None)
         l.separator();l.label(text='Traffic keeps '+context.scene.roadlab_map_settings.traffic_side.lower()+' · map setting')
+        l.label(text=self.preview_status or 'Preparing live preview…',icon='SHADING_RENDERED')
         l.prop(self,'apply_action',text='Apply lanes',icon='CHECKMARK',toggle=True)
         expansion=json.loads(self.expansion_text)
         if expansion:
@@ -577,9 +784,9 @@ class ROADLAB_OT_lane_window(bpy.types.Operator):
             for line in wrap(self.apply_status,64):l.label(text=line,icon='INFO')
         l.label(text='Apply saves without closing.')
         l.label(text='Done closes; unapplied changes are discarded.')
-    def cancel(self,context):clear_approach_preview()
+    def cancel(self,context):stop_lane_preview();clear_approach_preview()
     def execute(self,context):
-        clear_approach_preview()
+        stop_lane_preview();clear_approach_preview()
         return {'FINISHED'}
 
 
@@ -624,6 +831,7 @@ def refresh_loaded_markings():
     for scene in bpy.data.scenes:
         for obj in scene.objects:
             if obj.type=='CURVE' and obj.get('roadlab_new_core') and 'roadlab_lanes' in obj:
+                if 'roadlab_lane_known_points' not in obj:obj['roadlab_lane_known_points']=json.dumps(sorted(row['id'] for row in point_settings.records(obj)))
                 try:rebuild(obj,scene)
                 except Exception as error:obj['roadlab_marking_warnings']=json.dumps([str(error)])
     return None
@@ -635,7 +843,13 @@ def register():
     bpy.types.Scene.roadlab_lane_draft=PointerProperty(type=ROADLAB_LaneDraft)
     bpy.utils.register_tool(ROADLAB_WST_lanes,separator=True)
     bpy.app.timers.register(refresh_loaded_markings,first_interval=.1)
+    bpy.app.handlers.save_pre.append(preview_before_save)
+    bpy.app.handlers.save_post.append(preview_after_save)
+    bpy.app.handlers.load_pre.append(preview_before_load)
 def unregister():
+    preview_before_load()
+    for handlers,callback in ((bpy.app.handlers.save_pre,preview_before_save),(bpy.app.handlers.save_post,preview_after_save),(bpy.app.handlers.load_pre,preview_before_load)):
+        if callback in handlers:handlers.remove(callback)
     clear_approach_preview()
     if bpy.app.timers.is_registered(refresh_loaded_markings):bpy.app.timers.unregister(refresh_loaded_markings)
     bpy.utils.unregister_tool(ROADLAB_WST_lanes)
