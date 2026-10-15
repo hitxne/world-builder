@@ -1,6 +1,6 @@
 # RoadLab Blender extension and update repository
 
-The full RoadLab 0.18.10 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
+The full RoadLab 0.18.11 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
 
 ## Install once
 
@@ -105,3 +105,13 @@ Crosswalk ramp guides sample the finished road edge instead of the source segmen
 Sidewalks preserve perimeter corners, use corrected polyline offsets, and shade concrete faces flat. A non-destructive **RoadLab Planar Slabs** modifier dissolves nearly coplanar faces (0.1-degree tolerance) while retaining bends and ramp creases. The default editable example drops from 46,384 to 2,021 evaluated sidewalk vertices. This produces planar slab polygons rather than a dense uniform grid; terrain remains quad-based. Curb profiles flatten into crossing grade instead of translating their toe below the terrain. Existing layers upgrade when opening a file or enabling the extension.
 
 With a RoadLab source curve selected in Edit Mode, select two points and press **F** or use **Connect selected points (F)** under Road defaults. Endpoint pairs use Blender's native join. If either point is inside a street, RoadLab adds a connecting spline while preserving the through street and its lane assignments. This shortcut only overrides F for RoadLab core curves. New junction movement permissions remain editable in the Lane tool.
+
+## Surface Bounds (0.18.11)
+
+In **Object Mode**, choose **Surface Bounds** in the left toolbar. Set **Surface** in the tool header to **Sidewalk**, **Curb island**, **Median**, or **Parking lot**. Click outline corners, then press **Enter** or click the first corner to finish. **Backspace** removes a corner; **Esc/right-click** cancels. The new editable mesh plane opens in Edit Mode. Move, subdivide, or extrude its boundary with Blender's normal controls; Geometry Nodes update the generated surface without replacing the source. Concave outlines are supported; the drawing tool rejects crossed outlines.
+
+For a starting square instead, use **RoadLab > Surface Bounds > Create editable plane**. The panel is collapsed by default. Surface height, slab thickness, corner radius and optional curb are controlled there. Islands and medians start with grass and a concrete curb; parking lots start with asphalt. **Follow terrain** samples the assigned terrain and ground road. Flat/sloped planes stay simple; changing ground normals add interior geometry, with **Terrain detail** under the collapsed **Ground and Road** section. Disable Follow terrain to shape elevation by moving the source vertices. Ground and road assignments can be changed per surface.
+
+**Trim overlaps** removes overlap with the assigned ground road and existing enabled curb/sidewalk layers. Trimming uses nearby face bounds, including long planar slabs. Existing road sources and layers remain editable. Bridge-cut road decks are excluded from the road footprint. Save/reopen preserves surface type, unique identity, source plane, targets and node settings.
+
+This feature defines editable surface geometry. Parking stalls, planter-island cutouts, NPC lane connections and automatic crosswalk routing across new pads are separate systems; surface type alone does not generate them.

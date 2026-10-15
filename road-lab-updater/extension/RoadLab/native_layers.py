@@ -84,6 +84,10 @@ def refresh_stack(model):
                 if mod.type=='NODES' and mod.node_group and mod.node_group.name.startswith('WB_EXTENSION_BORDER_EXTRUSION'):
                     set_input(mod,'Enabled',layer.enabled);set_input(mod,'Vertex controls',model['wb_helper']);set_input(mod,'Layer prefix',base);set_input(mod,'Use vertex controls',True);set_input(mod,'Use layer order',True)
     model.data.update();model.update_tag()
+    road=model.get('wb_road')
+    if road and road.get('roadlab_surface_contacts'):
+        from .surface_bounds import sync_contacts
+        sync_contacts(road)
 
 
 def add_layer(scene,road,obj,kind):
@@ -203,6 +207,10 @@ def sync_model(model):
     if len(current)==len(old):
         for v,co in zip(model.data.vertices,current):v.co=co
         model.data.update();model.update_tag()
+    road=model.get('wb_road')
+    if road and road.get('roadlab_surface_contacts'):
+        from .surface_bounds import sync_contacts
+        sync_contacts(road)
         return
     else:
         arrays={a.name:read(model,a.name) for a in model.data.attributes if a.data_type=='FLOAT' and a.domain=='POINT'}
