@@ -17,7 +17,7 @@ def arrow_id(movements,side='RIGHT'):
     except KeyError:raise ValueError('No marking for this movement combination')
     return 'arrow_uturn_right' if asset=='arrow_uturn_left' and side=='LEFT' else asset
 
-def plan(a,b,incoming,outgoing,width,side='RIGHT',median=0.,trim_start=0.,trim_end=0.,spacing=18.,solid_approach=20.,transition_length=30.,emerging_incoming=(),emerging_outgoing=(),control_incoming="NONE",control_outgoing="NONE",stop_setback=1.22):
+def plan(a,b,incoming,outgoing,width,side='RIGHT',median=0.,trim_start=0.,trim_end=0.,spacing=18.,solid_approach=20.,transition_length=30.,emerging_incoming=(),emerging_outgoing=(),control_incoming="NONE",control_outgoing="NONE",stop_setback=1.22,arrow_approach=35.):
     """Incoming travels a -> b. Lane order is each driver's left -> right.
 
     End clearances are supplied by the topology adapter. Never draw through a
@@ -35,22 +35,22 @@ def plan(a,b,incoming,outgoing,width,side='RIGHT',median=0.,trim_start=0.,trim_e
     center=sign*(no-ni)/2
     start=trim_start;end=length-trim_end
     if end<=start:return []
-    if not all(isfinite(x) and x>=0 for x in (solid_approach,transition_length,stop_setback)):raise ValueError('Invalid approach marking dimensions')
+    if not all(isfinite(x) and x>=0 for x in (solid_approach,transition_length,stop_setback,arrow_approach)):raise ValueError('Invalid approach marking dimensions')
     if control_incoming not in ('NONE','STOP','SIGNAL','YIELD') or control_outgoing not in ('NONE','STOP','SIGNAL','YIELD'):raise ValueError('Invalid approach control')
     assets=manifest();result=[]
-    def add(asset,station,lateral,direction=1,size=None):
+    def add(asset,station,lateral,direction=1,size=None,role=None):
         if size is None:size=assets[asset]['physical_canvas_m']
-        result.append({'asset':asset,'center':[a[0]+forward[0]*station+right[0]*lateral,a[1]+forward[1]*station+right[1]*lateral,a[2]+(b[2]-a[2])*station/length], 'forward':[direction*forward[0],direction*forward[1]],'size':list(size)})
-    def line_interval(asset,lo,hi,offset,direction):
+        result.append({'asset':asset,'center':[a[0]+forward[0]*station+right[0]*lateral,a[1]+forward[1]*station+right[1]*lateral,a[2]+(b[2]-a[2])*station/length], 'forward':[direction*forward[0],direction*forward[1]],'size':list(size),'role':role or [asset,direction]})
+    def line_interval(asset,lo,hi,offset,direction,role):
         if hi-lo<1e-6:return
-        if asset=='line_white':add(asset,(lo+hi)/2,offset,direction,(.1524,hi-lo));return
+        if asset=='line_white':add(asset,(lo+hi)/2,offset,direction,(.1524,hi-lo),role=role+['solid']);return
         period=assets[asset]['physical_canvas_m'][1]
         # Anchor phase in travel direction, so short end tiles don't reverse the pattern.
-        distance=0.
+        distance=0.;tile=0
         while distance<hi-lo-1e-6:
             span=min(period,hi-lo-distance)
             station=lo+distance+span/2 if direction==1 else hi-distance-span/2
-            add(asset,station,offset,direction,(.1524,span));result[-1]['v_range']=[0,span/period];distance+=span
+            add(asset,station,offset,direction,(.1524,span),role=role+[asset,tile]);result[-1]['v_range']=[0,span/period];distance+=span;tile+=1
     for lanes,direction,total,emerging,control,junction in ((incoming,1,ni,set(emerging_incoming),control_incoming,trim_end>0),(outgoing,-1,no,set(emerging_outgoing),control_outgoing,trim_start>0)):
         bar=None
         lo,hi=start,end
@@ -58,12 +58,18 @@ def plan(a,b,incoming,outgoing,width,side='RIGHT',median=0.,trim_start=0.,trim_e
             depth=.6096
             bar=end-stop_setback-depth/2 if direction==1 else start+stop_setback+depth/2
             if bar-depth/2>=start and bar+depth/2<=end:
-                add('stop_bar',bar,center+sign*direction*(median/2+total/2),direction,(total,depth))
+                add('stop_bar',bar,center+sign*direction*(median/2+total/2),direction,(total,depth),role=['stop',direction])
                 if direction==1:hi=bar-depth/2
                 else:lo=bar+depth/2
             else:bar=None
+        # Directional arrows belong only to an actual junction approach.
+        # On short streets connecting two junctions, reserve the other half
+        # for departing traffic rather than repeating arrows after the crossing.
+        arrow_lo,arrow_hi=lo,hi
+        if direction==1:arrow_lo=max(lo,hi-arrow_approach,(start+end)/2 if trim_start>0 else lo)
+        else:arrow_hi=min(hi,lo+arrow_approach,(start+end)/2 if trim_end>0 else hi)
         cursor=0
-        for lane in lanes:
+        for lane_index,lane in enumerate(lanes if junction and arrow_approach>0 else []):
             distance=cursor+lane.width/2 if side=='RIGHT' else total-cursor-lane.width/2
             offset=center+sign*direction*(median/2+distance);cursor+=lane.width
             asset=arrow_id(lane.movements,side);w,h=assets[asset]['physical_canvas_m']
@@ -71,10 +77,11 @@ def plan(a,b,incoming,outgoing,width,side='RIGHT',median=0.,trim_start=0.,trim_e
             scale=min(1.,(lane.width/2-.15)/(w*max(anchor,1-anchor)))
             if scale<=0:continue
             w*=scale;h*=scale
-            station=hi-h/2-1 if direction==1 else lo+h/2+1
-            while station-h/2>=lo and station+h/2<=hi:
+            station=arrow_hi-h/2-1 if direction==1 else arrow_lo+h/2+1
+            repeat=0
+            while station-h/2>=arrow_lo and station+h/2<=arrow_hi:
                 anchor=assets[asset]['anchor_uv'][0]
-                add(asset,station,offset+direction*(.5-anchor)*w,direction,(w,h));station-=direction*spacing
+                add(asset,station,offset+direction*(.5-anchor)*w,direction,(w,h),role=['arrow',direction,lane_index,repeat]);station-=direction*spacing;repeat+=1
         cursor=0
         for index,lane in enumerate(lanes[:-1]):
             cursor+=lane.width;distance=cursor if side=='RIGHT' else total-cursor
@@ -84,17 +91,17 @@ def plan(a,b,incoming,outgoing,width,side='RIGHT',median=0.,trim_start=0.,trim_e
             dotted=min(transition_length,travel_length-solid) if index in emerging or index+1 in emerging else 0.
             spans=[('dotted_white',0.,dotted),('broken_white',dotted,travel_length-solid),('line_white',travel_length-solid,travel_length)]
             for asset,u,v in spans:
-                if direction==1:line_interval(asset,lo+u,lo+v,offset,direction)
-                else:line_interval(asset,hi-v,hi-u,offset,direction)
+                if direction==1:line_interval(asset,lo+u,lo+v,offset,direction,['divider',direction,index])
+                else:line_interval(asset,hi-v,hi-u,offset,direction,['divider',direction,index])
         if lanes:
-            add('line_white',(start+end)/2,center+sign*direction*(median/2+total),direction,(.1524,end-start))
+            add('line_white',(start+end)/2,center+sign*direction*(median/2+total),direction,(.1524,end-start),role=['outer',direction])
     if bool(incoming)!=bool(outgoing):
         direction=1 if incoming else -1
-        add('line_white',(start+end)/2,center+sign*direction*median/2,direction,(.1524,end-start))
+        add('line_white',(start+end)/2,center+sign*direction*median/2,direction,(.1524,end-start),role=['center-white',direction])
     if incoming and outgoing:
-        if median==0:add('double_yellow',(start+end)/2,center,size=(.4064,end-start))
+        if median==0:add('double_yellow',(start+end)/2,center,size=(.4064,end-start),role=['center-yellow'])
         else:
-            for direction in (-1,1):add('line_yellow',(start+end)/2,center+sign*direction*median/2,size=(.1524,end-start))
+            for direction in (-1,1):add('line_yellow',(start+end)/2,center+sign*direction*median/2,size=(.1524,end-start),role=['median-yellow',direction])
     return result
 
 

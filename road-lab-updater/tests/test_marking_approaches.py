@@ -23,6 +23,22 @@ class ApproachTests(unittest.TestCase):
    for length in (2,15,25,100):
     ms=plan((0,0,0),(0,length,0),[Lane('i0'),Lane('i1')],[Lane('o0'),Lane('o1')],15.,side,trim_start=2,trim_end=2,control_incoming='STOP',control_outgoing='SIGNAL',emerging_incoming=[0],emerging_outgoing=[1])
     for m in ms:self.assertGreater(min(m['size']),0);self.assertGreaterEqual(m['center'][1]-m['size'][1]/2,2-1e-6);self.assertLessEqual(m['center'][1]+m['size'][1]/2,length-2+1e-6)
+ def test_no_receiving_arrows(self):
+  for side in ('RIGHT','LEFT'):
+   ms=plan((0,0,0),(0,100,0),[Lane('i')],[Lane('o')],8.,side,trim_end=12)
+   arrows=[m for m in ms if m['asset'].startswith('arrow_')]
+   self.assertTrue(arrows);self.assertEqual({tuple(m['forward']) for m in arrows},{(0.,1.)})
+   self.assertTrue(all(m['center'][1]-m['size'][1]/2>=53 for m in arrows))
+ def test_two_junctions_approach_both_ends(self):
+  ms=plan((0,0,0),(0,100,0),[Lane('i')],[Lane('o')],8.,trim_start=12,trim_end=12)
+  arrows=[m for m in ms if m['asset'].startswith('arrow_')];self.assertEqual({tuple(m['forward']) for m in arrows},{(0.,1.),(0.,-1.)})
+  for m in arrows:
+   if m['forward'][1]>0:self.assertGreaterEqual(m['center'][1]-m['size'][1]/2,50)
+   else:self.assertLessEqual(m['center'][1]+m['size'][1]/2,50)
+ def test_no_junction_or_disabled_arrows(self):
+  for kwargs in ({},{'trim_end':12,'arrow_approach':0}):
+   ms=plan((0,0,0),(0,100,0),[Lane('i')],[Lane('o')],8.,**kwargs)
+   self.assertFalse(any(m['asset'].startswith('arrow_') for m in ms))
  def test_rotation_and_z(self):
   ms=plan((0,0,0),(100,0,10),[Lane('i')],[Lane('o')],8.,trim_end=10,control_incoming='STOP');bar=next(m for m in ms if m['asset']=='stop_bar');self.assertEqual(bar['forward'],[1.,0.]);self.assertAlmostEqual(bar['center'][2],bar['center'][0]/10)
 

@@ -1,6 +1,6 @@
 # RoadLab Blender extension and update repository
 
-The full RoadLab 0.18.1 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
+The full RoadLab 0.18.2 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
 
 ## Install once
 
@@ -43,3 +43,13 @@ Delete the default cube. Add a mesh plane and scale it to the desired map size (
 Click **Create Road** in the same Scene panel. It creates a 30 m editable alignment at the 3D cursor, selects the new road, and connects its grading to the designated terrain. Press Tab to edit. Select an endpoint and E to extend; G to move; G then Z to change elevation. Terrain follows after placement. Road defaults holds width and sample spacing. Use Add road branch in Edit Mode for junctions in the same network.
 
 Select the terrain in Object Mode to use Raise, Lower, Flatten and Smooth with adjustable radius and strength. Use Material Preview to see decal textures.
+
+## Approach-only arrows (0.18.2)
+
+Automatic arrows are now drawn only before an actual junction, never on receiving lanes pointing away from that junction. On a segment connecting two junctions, each direction can receive arrows before its own destination junction; the opposite departure half stays clear. Markings > Arrow approach controls the upstream extent (default 35 m; zero disables automatic arrows). Manual stamps remain user-placed. Existing lane assignments inherit the corrected behavior when regenerated.
+
+## Lane window guidance (0.18.2)
+
+The lane window opens with usage instructions when no valid selection exists. In Edit Mode, select one junction location (coincident handles are accepted), or adjacent points along one street. Opening the tool preserves a selected junction. The active edited road takes priority over a stale Scene road assignment. Alt-click with Marking Stamp erases painted markings; Restore automatic markings clears suppression.
+
+Completed releases are always published to the automatic updater on `feature/road-lab-updater`. Standalone ZIPs are supplemental.

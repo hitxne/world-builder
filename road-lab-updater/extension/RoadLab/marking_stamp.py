@@ -2,7 +2,7 @@
 import bpy,json,math,hashlib
 from mathutils import Vector,Quaternion
 from mathutils.bvhtree import BVHTree
-from bpy.props import EnumProperty,FloatProperty,PointerProperty
+from bpy.props import EnumProperty,FloatProperty,PointerProperty,BoolProperty
 from . import lane_markings,point_settings
 
 _views={};_preview=None;_draw=None;_trees={}
@@ -60,17 +60,18 @@ def placement(obj,stamp):
 def rebuild(obj,force=False):
     stamps=records(obj);helper=obj.get('roadlab_core_mesh');target=obj.get('roadlab_manual_marking_object')
     if helper is None or not stamps:return
-    signature=hashlib.sha256(json.dumps([stamps,obj.get('roadlab_core_signature'),helper.data.as_pointer()]).encode()).hexdigest()
+    signature=hashlib.sha256(json.dumps(['stamp-erase-v1',stamps,obj.get('roadlab_core_signature'),helper.data.as_pointer()]).encode()).hexdigest()
     owned=target is not None and target.get('roadlab_manual_owner')==obj
     if not force and owned and obj.get('roadlab_manual_marking_signature')==signature:
         target.matrix_world=obj.matrix_world.copy();return
-    tree=projection(obj);verts=[];faces=[];uvs=[];slots=[];materials=[];skipped=0
-    for stamp in stamps:
+    tree=projection(obj);verts=[];faces=[];uvs=[];slots=[];materials=[];skipped=0;visible=[]
+    for stamp_index,stamp in enumerate(stamps):
         mark=placement(obj,stamp)
         if mark is None:skipped+=1;continue
         pv,pf,pu=lane_markings.patch_grid(mark);projected=[sample(tree,Vector(p)) for p in pv]
         # Reject the entire footprint rather than producing a torn decal at the edge.
         if any(p is None for p in projected):skipped+=1;continue
+        visible.append(stamp_index)
         if mark['asset'] not in slots:slots.append(mark['asset'])
         base=len(verts);verts.extend(tuple(p) for p in projected);uvs.extend(pu);faces.extend(tuple(base+i for i in f) for f in pf);materials.extend([slots.index(mark['asset'])]*len(pf))
     mesh=bpy.data.meshes.new('RoadLab Manual Markings');mesh.from_pydata(verts,[],faces);mesh.update()
@@ -83,7 +84,7 @@ def rebuild(obj,force=False):
     else:
         old=target.data;target.data=mesh
         if old.users==0:bpy.data.meshes.remove(old)
-    target.matrix_world=obj.matrix_world.copy();target.hide_select=True;obj['roadlab_manual_marking_signature']=signature;obj['roadlab_manual_marking_skipped']=skipped
+    target.matrix_world=obj.matrix_world.copy();target.hide_select=True;obj['roadlab_manual_marking_signature']=signature;obj['roadlab_manual_marking_skipped']=skipped;obj['roadlab_manual_visible']=json.dumps(visible)
 
 def add(obj,point,asset,scale=1.,rotation=0.):
     if asset not in lane_markings.manifest():raise ValueError('Choose a valid marking')
@@ -93,6 +94,50 @@ def add(obj,point,asset,scale=1.,rotation=0.):
     if tree is None or mark is None or any(sample(tree,Vector(p)) is None for p in lane_markings.patch_grid(mark)[0]):raise ValueError('Entire stamp must fit on the road; reduce size or move inward')
     rows=records(obj);rows.append(stamp);obj['roadlab_manual_markings']=json.dumps(rows);rebuild(obj,True)
     return stamp
+
+def alpha_hit(mark,point):
+    """Test visible paint, not the transparent rectangular decal canvas."""
+    fx,fy=mark['forward'];dx=point[0]-mark['center'][0];dy=point[1]-mark['center'][1];w,h=mark['size']
+    u=.5+(dx*fy-dy*fx)/w;v=.5+(dx*fx+dy*fy)/h
+    if not (0<=u<=1 and 0<=v<=1):return False
+    v0,v1=mark.get('v_range',[0,1]);v=v0+(v1-v0)*v
+    from .lane_editor import paint_material
+    material=paint_material(mark['asset']);image=next(n.image for n in material.node_tree.nodes if n.type=='TEX_IMAGE')
+    width,height=image.size
+    if width<1 or height<1:return False
+    x=min(width-1,int(u*width));y=min(height-1,int(v*height));channels=image.channels
+    return channels<4 or image.pixels[(y*width+x)*channels+3]>.1
+
+
+def erase(obj,point,scene):
+    """Remove one visible patch; generated patches use persistent exclusions."""
+    from . import lane_editor
+    rebuild(obj);lane_editor.rebuild(obj,scene)
+    tree=projection(obj)
+    def visible_here(mark):
+        if not alpha_hit(mark,point):return False
+        surface=sample(tree,Vector((point[0],point[1],mark['center'][2])))
+        return surface is not None and abs(surface.z-point[2])<.05
+    stamps=records(obj);visible=set(json.loads(obj.get('roadlab_manual_visible','[]')))
+    for index in reversed(range(len(stamps))):
+        mark=placement(obj,stamps[index])
+        if index in visible and mark and visible_here(mark):
+            stamps.pop(index);obj['roadlab_manual_markings']=json.dumps(stamps)
+            if stamps:rebuild(obj,True)
+            else:
+                target=obj.get('roadlab_manual_marking_object')
+                if target and target.get('roadlab_manual_owner')==obj:
+                    mesh=target.data;bpy.data.objects.remove(target,do_unlink=True)
+                    if mesh.users==0:bpy.data.meshes.remove(mesh)
+                if 'roadlab_manual_marking_object' in obj:del obj['roadlab_manual_marking_object']
+                obj['roadlab_manual_visible']='[]'
+            return 'manual stamp'
+    for mark in reversed(json.loads(obj.get('roadlab_generated_marking_catalog','[]'))):
+        if visible_here(mark):
+            hidden=set(json.loads(obj.get('roadlab_hidden_lane_markings','[]')));hidden.add(mark['id']);obj['roadlab_hidden_lane_markings']=json.dumps(sorted(hidden));lane_editor.rebuild(obj,scene,True)
+            return 'generated marking'
+    return None
+
 
 class StampSettings(bpy.types.PropertyGroup):
     asset:EnumProperty(name='Marking',items=ASSETS,default='arrow_through')
@@ -117,6 +162,9 @@ class ROADLAB_OT_stamp_hover(bpy.types.Operator):
         obj=road(context);p=hit(context,event)
         if obj is None or p is None:_preview=None
         else:
+            if getattr(event,'alt',False):
+                corners=[Vector((p.x+x,p.y+y,p.z+.02)) for x,y in ((-.35,-.35),(.35,-.35),(-.35,.35),(.35,.35))]
+                _preview=(context.area.as_pointer(),[obj.matrix_world@v for v in corners],False);context.area.tag_redraw();return {'FINISHED'}
             settings=context.scene.roadlab_stamp_settings
             try:
                 mark=placement(obj,{**anchor(obj,p),'asset':settings.asset,'scale':settings.scale,'rotation':settings.rotation})
@@ -129,12 +177,26 @@ class ROADLAB_OT_stamp_place(bpy.types.Operator):
     bl_idname='roadlab.stamp_place';bl_label='Place road marking';bl_options={'REGISTER','UNDO'}
     @classmethod
     def poll(cls,context):return road(context) is not None and context.area is not None and context.area.type=='VIEW_3D'
+    erase_mode:BoolProperty(default=False,options={'HIDDEN'})
     def invoke(self,context,event):
         obj=road(context);p=hit(context,event);settings=context.scene.roadlab_stamp_settings
         if p is None:self.report({'WARNING'},'Click on the selected road surface');return {'CANCELLED'}
+        if self.erase_mode or getattr(event,'alt',False):
+            removed=erase(obj,p,context.scene)
+            if removed:self.report({'INFO'},'Removed '+removed);return {'FINISHED'}
+            self.report({'INFO'},'No road marking under the cursor');return {'CANCELLED'}
         try:add(obj,p,settings.asset,settings.scale,settings.rotation)
         except ValueError as e:self.report({'WARNING'},str(e));return {'CANCELLED'}
         return {'FINISHED'}
+
+class ROADLAB_OT_stamp_restore_auto(bpy.types.Operator):
+    bl_idname='roadlab.stamp_restore_auto';bl_label='Restore erased lane markings';bl_options={'REGISTER','UNDO'}
+    @classmethod
+    def poll(cls,context):return road(context) is not None and bool(json.loads(road(context).get('roadlab_hidden_lane_markings','[]')))
+    def execute(self,context):
+        from . import lane_editor
+        obj=road(context);obj['roadlab_hidden_lane_markings']='[]';lane_editor.rebuild(obj,context.scene,True);return {'FINISHED'}
+
 
 class ROADLAB_OT_stamp_remove(bpy.types.Operator):
     bl_idname='roadlab.stamp_remove';bl_label='Remove last stamp';bl_options={'REGISTER','UNDO'}
@@ -188,7 +250,7 @@ def watch_view():
 
 class ROADLAB_WST_marking_stamp(bpy.types.WorkSpaceTool):
     bl_space_type='VIEW_3D';bl_context_mode='OBJECT';bl_idname='roadlab.marking_stamp';bl_label='Marking Stamp';bl_description='Place manual decals on a selected RoadLab road in top-down orthographic view';bl_icon='brush.paint_texture.clone';bl_widget=None
-    bl_keymap=(('roadlab.stamp_hover',{'type':'MOUSEMOVE','value':'ANY'},{}),('roadlab.stamp_place',{'type':'LEFTMOUSE','value':'PRESS'},{}))
+    bl_keymap=(('roadlab.stamp_hover',{'type':'MOUSEMOVE','value':'ANY'},{}),('roadlab.stamp_place',{'type':'LEFTMOUSE','value':'PRESS','alt':True},{'properties':[('erase_mode',True)]}),('roadlab.stamp_place',{'type':'LEFTMOUSE','value':'PRESS'},{}))
     draw_settings=staticmethod(draw_settings)
 
 class ROADLAB_WST_marking_stamp_edit(bpy.types.WorkSpaceTool):
@@ -203,12 +265,13 @@ class ROADLAB_PT_marking_stamp(bpy.types.Panel):
     def draw(self,context):
         self.layout.operator('wm.tool_set_by_id',text='Use Marking Stamp',icon='BRUSH_DATA').name='roadlab.marking_stamp'
         draw_settings(context,self.layout,None)
-        self.layout.label(text='Click to place · green fits · red is outside road')
+        self.layout.label(text='Click to place · Alt-click to erase')
         self.layout.operator('roadlab.stamp_remove')
+        if ROADLAB_OT_stamp_restore_auto.poll(context):self.layout.operator('roadlab.stamp_restore_auto')
         if context.active_object.get('roadlab_manual_marking_skipped',0):self.layout.label(text='Some stamps no longer fit the edited road',icon='INFO')
         if context.active_object.get('roadlab_manual_marking_error'):self.layout.label(text=context.active_object['roadlab_manual_marking_error'],icon='ERROR')
 
-classes=(StampSettings,ROADLAB_OT_stamp_hover,ROADLAB_OT_stamp_place,ROADLAB_OT_stamp_remove,ROADLAB_PT_marking_stamp)
+classes=(StampSettings,ROADLAB_OT_stamp_hover,ROADLAB_OT_stamp_place,ROADLAB_OT_stamp_restore_auto,ROADLAB_OT_stamp_remove,ROADLAB_PT_marking_stamp)
 def register():
     global _draw
     for cls in classes:bpy.utils.register_class(cls)
