@@ -5,7 +5,7 @@ from bpy.props import EnumProperty,FloatProperty,BoolProperty,PointerProperty,In
 from mathutils import Vector
 from .native_extension import socket,set_input
 KINDS=[('SIDEWALK','Sidewalk','Concrete pad or widened pedestrian area'),('ISLAND','Curb island','Grass island enclosed by curb'),('MEDIAN','Median','Raised grass median enclosed by curb'),('PARKING','Parking lot','Asphalt area defined by an editable outline')]
-PRESETS={'SIDEWALK':(.1524,.1,False,'sidewalk'),'ISLAND':(.02,.08,True,'grass'),'MEDIAN':(.02,.08,True,'grass'),'PARKING':(.015,.08,False,'asphalt')}
+PRESETS={'SIDEWALK':(.1524,.2,False,'sidewalk'),'ISLAND':(.02,.08,True,'grass'),'MEDIAN':(.02,.08,True,'grass'),'PARKING':(.015,.08,False,'asphalt')}
 
 def group():
     name='RoadLab Surface Bounds';g=bpy.data.node_groups.get(name)
@@ -14,7 +14,7 @@ def group():
     else:g=bpy.data.node_groups.new(name,'GeometryNodeTree')
     g['roadlab_schema']=1
     socket(g,'Geometry','INPUT','NodeSocketGeometry');socket(g,'Geometry','OUTPUT','NodeSocketGeometry')
-    for name,kind,default in [('Terrain detail','NodeSocketInt',3),('Existing surfaces','NodeSocketCollection',None),('Terrain','NodeSocketObject',None),('Road','NodeSocketObject',None),('Follow terrain','NodeSocketBool',True),('Trim at road','NodeSocketBool',True),('Surface height','NodeSocketFloat',.1524),('Thickness','NodeSocketFloat',.1),('Corner radius','NodeSocketFloat',.5),('Curb','NodeSocketBool',False),('Curb width','NodeSocketFloat',.25),('Curb height','NodeSocketFloat',.1524),('Surface material','NodeSocketMaterial',None),('Curb material','NodeSocketMaterial',None)]:socket(g,name,'INPUT',kind,default)
+    for name,kind,default in [('Terrain detail','NodeSocketInt',3),('Existing surfaces','NodeSocketCollection',None),('Terrain','NodeSocketObject',None),('Road','NodeSocketObject',None),('Follow terrain','NodeSocketBool',True),('Trim at road','NodeSocketBool',True),('Surface height','NodeSocketFloat',.1524),('Thickness','NodeSocketFloat',.2),('Corner radius','NodeSocketFloat',.5),('Curb','NodeSocketBool',False),('Curb width','NodeSocketFloat',.25),('Curb height','NodeSocketFloat',.1524),('Surface material','NodeSocketMaterial',None),('Curb material','NodeSocketMaterial',None)]:socket(g,name,'INPUT',kind,default)
     N=g.nodes;L=g.links
     def node(kind,label):
         n=N.new(kind);n.label=label;return n
@@ -175,7 +175,7 @@ class RoadLabSurfaceSettings(bpy.types.PropertyGroup):
     follow:BoolProperty(name='Follow terrain',default=True,description='Fit boundary to assigned terrain and ground-contact road; disable to edit elevations',update=update)
     trim:BoolProperty(name='Trim overlaps',default=True,description='Remove overlap with the assigned road and existing curb/sidewalk layers',update=update)
     rise:FloatProperty(name='Surface height (m)',default=.1524,min=0,max=5,update=update)
-    thickness:FloatProperty(name='Slab thickness (m)',default=.1,min=.01,max=2,update=update)
+    thickness:FloatProperty(name='Slab thickness (m)',default=.2,min=.01,max=2,update=update)
     radius:FloatProperty(name='Corner radius (m)',default=.5,min=0,max=20,update=update)
     curb:BoolProperty(name='Boundary curb',default=False,update=update)
     curb_width:FloatProperty(name='Curb width (m)',default=.25,min=.05,max=2,update=update)

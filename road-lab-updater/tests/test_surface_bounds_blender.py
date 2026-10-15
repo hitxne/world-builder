@@ -29,6 +29,7 @@ for i,kind in enumerate(('SIDEWALK','ISLAND','MEDIAN','PARKING')):
  assert len(obj.data.vertices)==6 and len(obj.data.polygons)==1
  expected=.1524 if kind in ('SIDEWALK','ISLAND','MEDIAN') else .015
  assert abs(max(p.z for p in v)-expected)<.002,(kind,max(p.z for p in v))
+ if kind=='SIDEWALK':assert min(p.z for p in v)<-.04,'Default slab must extend below grade'
  obj.roadlab_surface.radius=0;oldmax=max(p.x for p in evaluated(obj)[0]);obj.data.vertices[1].co.x+=2;obj.data.update();assert max(p.x for p in evaluated(obj)[0])>oldmax+1.5
 # A simple sloping terrain demonstrates height conformity and live terrain edits.
 mesh=bpy.data.meshes.new('Sloping terrain');mesh.from_pydata([(-100,-100,-15),(100,-100,5),(100,100,15),(-100,100,-5)],[],[(0,1,2,3)]);mesh.update()

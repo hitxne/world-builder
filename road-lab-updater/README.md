@@ -1,6 +1,6 @@
 # RoadLab Blender extension and update repository
 
-The full RoadLab 0.18.11 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
+The full RoadLab 0.18.12 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
 
 ## Install once
 
@@ -115,3 +115,5 @@ For a starting square instead, use **RoadLab > Surface Bounds > Create editable 
 **Trim overlaps** removes overlap with the assigned ground road and existing enabled curb/sidewalk layers. Trimming uses nearby face bounds, including long planar slabs. Existing road sources and layers remain editable. Bridge-cut road decks are excluded from the road footprint. Save/reopen preserves surface type, unique identity, source plane, targets and node settings.
 
 This feature defines editable surface geometry. Parking stalls, planter-island cutouts, NPC lane connections and automatic crosswalk routing across new pads are separate systems; surface type alone does not generate them.
+
+The 0.18.12 sidewalk preset uses a 0.20 m slab below its 0.1524 m surface rise, so a new pad embeds into grade instead of floating over it. Existing custom thickness settings remain unchanged.
