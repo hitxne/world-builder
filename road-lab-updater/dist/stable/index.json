@@ -7,16 +7,16 @@
       "id": "road_lab",
       "name": "RoadLab",
       "tagline": "Tools for procedural road and lane editing",
-      "version": "0.18.6",
+      "version": "0.18.7",
       "type": "add-on",
       "maintainer": "Road Lab Team",
       "license": [
         "SPDX:LicenseRef-Proprietary"
       ],
       "blender_version_min": "5.1.0",
-      "archive_url": "./road_lab-0.18.6.zip",
-      "archive_size": 1728182,
-      "archive_hash": "sha256:235d43a5efaa3ea95efdc68738172d349b811643bf443335951f1d3e3445b9cb"
+      "archive_url": "./road_lab-0.18.7.zip",
+      "archive_size": 1729026,
+      "archive_hash": "sha256:984595b83bcf0401386392f1614aba4a1929ea0aa9b5ce6442254d777ea79763"
     }
   ]
 }
