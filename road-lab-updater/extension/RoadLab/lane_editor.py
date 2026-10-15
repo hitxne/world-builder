@@ -24,13 +24,63 @@ def segments(obj):
         offset+=count
     return result
 
+def split_lane_assignments(obj,configs,new_ids,records):
+    """Migrate an assigned edge through newly inserted points on its source spline.
+
+    Existing unrelated routes are never used to repair a removed connection.
+    Lane orientation and controls at the two original endpoints are preserved.
+    """
+    valid={frozenset((a,b)) for _,_,a,b in segments(obj)};splines=[];offset=0
+    for spline in obj.data.splines:
+        ids=[row['id'] for row in records[offset:offset+len(spline.points)]];offset+=len(spline.points)
+        splines.append((ids,spline.use_cyclic_u))
+    lookup={row['id']:i for i,row in enumerate(records)};result=[]
+    for config in configs:
+        a,b=config['endpoints']
+        if frozenset((a,b)) in valid:result.append(config);continue
+        routes=[]
+        for ids,cyclic in splines:
+            if a not in ids or b not in ids:continue
+            first,last=ids.index(a),ids.index(b)
+            for step in ((1,-1) if cyclic else ((1,) if first<last else (-1,))):
+                path=[a];index=first
+                for _ in range(len(ids)-1):
+                    index=(index+step)%len(ids);path.append(ids[index])
+                    if ids[index]==b:break
+                if path[-1]!=b or len(path)<=2:continue
+                delta=Vector(records[lookup[b]]['co'])-Vector(records[lookup[a]]['co']);length2=delta.length_squared
+                def on_original_edge(ident):
+                    point=Vector(records[lookup[ident]]['co'])-Vector(records[lookup[a]]['co'])
+                    t=point.dot(delta)/max(length2,1e-12)
+                    return 0<t<1 and (point-delta*t).length<1e-5
+                if all(i in new_ids for i in path[1:-1]) or all(on_original_edge(i) for i in path[1:-1]):routes.append(path)
+        if len(routes)!=1:result.append(config);continue
+        path=routes[0];coords=[Vector(records[lookup[i]]['co']) for i in path]
+        lengths=[(y-x).length for x,y in zip(coords,coords[1:])];total=sum(lengths);distance=0.
+        from .road_core import values
+        default=values(obj)['road width'];wa=point_settings.width(obj,lookup[a],default);wb=point_settings.width(obj,lookup[b],default)
+        for index,ident in enumerate(path[1:-1],1):
+            distance+=lengths[index-1]
+            if 'width' not in records[lookup[ident]]:records[lookup[ident]]['width']=wa+(wb-wa)*distance/max(total,1e-9)
+        for index,(x,y) in enumerate(zip(path,path[1:])):
+            child=json.loads(json.dumps(config));child['endpoints']=[x,y]
+            if index>0:child['control_outgoing']='NONE'
+            if index<len(path)-2:child['control_incoming']='NONE'
+            result.append(child)
+    return result
+
+
 def inherit_extensions(obj):
     """Copy a lane profile only onto newly created, unambiguous endpoint extensions."""
     records=point_settings.records(obj);ids={row['id'] for row in records}
     known=set(json.loads(obj.get('roadlab_lane_known_points',json.dumps(sorted(ids)))))
     new=ids-known;obj['roadlab_lane_known_points']=json.dumps(sorted(ids))
-    if not new or 'roadlab_lanes' not in obj:return
-    configs=state(obj);ps=point_settings.points(obj);lookup={row['id']:i for i,row in enumerate(records)}
+    if 'roadlab_lanes' not in obj:return
+    configs=split_lane_assignments(obj,state(obj),new,records)
+    if not new:
+        if configs!=state(obj):obj['roadlab_lanes']=json.dumps(configs);point_settings.save(obj,records)
+        return
+    ps=point_settings.points(obj);lookup={row['id']:i for i,row in enumerate(records)}
     position=lambda ident:tuple(round(float(v),6) for v in ps[lookup[ident]].co[:3])
     segs=segments(obj);neighbors={}
     for _,_,a,b in segs:
@@ -121,10 +171,11 @@ def paint_material(asset):
 
 
 def rebuild(obj,scene,force=False):
+    if obj.get('roadlab_new_core'):inherit_extensions(obj)
     configs=state(obj);output=obj.get('roadlab_core_mesh')
     if output is None:return
     side=scene.roadlab_map_settings.traffic_side
-    signature=hashlib.sha256(json.dumps(['connected-bends-v3',[(row.get('co'),row.get('connection_mode')) for row in point_settings.records(obj) if row.get('connection_mode')],obj.get('roadlab_hidden_lane_markings','[]'),configs,obj.get('roadlab_core_signature'),output.data.as_pointer(),side],sort_keys=True).encode()).hexdigest()
+    signature=hashlib.sha256(json.dumps(['branch-preservation-v4',[(row.get('co'),row.get('connection_mode')) for row in point_settings.records(obj) if row.get('connection_mode')],obj.get('roadlab_hidden_lane_markings','[]'),configs,obj.get('roadlab_core_signature'),output.data.as_pointer(),side],sort_keys=True).encode()).hexdigest()
     existing=obj.get('roadlab_marking_object')
     owned=existing is not None and (existing.get('roadlab_markings_owner_object')==obj or existing.get('roadlab_markings_owner')==obj.name)
     if not force and owned and obj.get('roadlab_marking_signature')==signature:
@@ -153,14 +204,18 @@ def rebuild(obj,scene,force=False):
         overrides=point_settings.junction_overrides(obj).get(key(co),{})
         radius=max(overrides.get(c,values(obj)['corner '+c]) for c in ('NW','NE','SW','SE'))
         return max([width,*touching])/2+radius+1.
+    def available(start,finish):
+        neighbors=nodes.get(key(finish),set())
+        return lane_logic.available_movements(key(start),key(finish),neighbors) if len(neighbors)>=3 else None
     plans=[];warnings=[];hidden=set(json.loads(obj.get('roadlab_hidden_lane_markings','[]')))
     for config in configs:
         a,b=config['endpoints']
         if a not in lookup or b not in lookup or frozenset((a,b)) not in valid:
             warnings.append('Lane assignment needs reselection after topology edit');continue
         ia,ib=lookup[a],lookup[b];pa,pb=tuple(points[ia].co[:3]),tuple(points[ib].co[:3]);width=min(point_settings.width(obj,ia,default),point_settings.width(obj,ib,default))
+        try:validate_approach(obj,config['endpoints'],entries(config['incoming'],'i'),entries(config['outgoing'],'o'))
+        except ValueError as error:warnings.append('Lane movements need review: '+str(error))
         try:
-            validate_approach(obj,config['endpoints'],entries(config['incoming'],'i'),entries(config['outgoing'],'o'))
             delta=Vector(pb)-Vector(pa);length=hypot(delta.x,delta.y);cuts=[(0.,pa),(length,pb)]
             if length>1e-6:
                 for junction,neighbors in nodes.items():
@@ -170,7 +225,7 @@ def rebuild(obj,scene,force=False):
                     if 1e-6<t<1-1e-6 and (candidate-Vector(junction)).length<1e-5:cuts.append((length*t,junction))
             cuts.sort(key=lambda cut:cut[0])
             for part,((_,start),(_,finish)) in enumerate(zip(cuts,cuts[1:])):
-                segment_plans=lane_markings.plan(start,finish,entries(config['incoming'],'i'),entries(config['outgoing'],'o'),width,side,config['median'],clearance(start,width,finish),clearance(finish,width,start),config['spacing'],**{k:('STOP' if (k=='control_incoming' and key(finish) in stop_nodes) or (k=='control_outgoing' and key(start) in stop_nodes) else config.get(k,v)) for k,v in [('arrow_approach',35.),('solid_approach',20.),('transition_length',30.),('stop_setback',1.22),('control_incoming','NONE'),('control_outgoing','NONE')]},junction_start=len(nodes.get(key(start),[]))>=3 or key(start) in stop_nodes,junction_end=len(nodes.get(key(finish),[]))>=3 or key(finish) in stop_nodes,emerging_incoming=[i for i,row in enumerate(config['incoming']) if row.get('entry')=='ADDED'],emerging_outgoing=[i for i,row in enumerate(config['outgoing']) if row.get('entry')=='ADDED'])
+                segment_plans=lane_markings.plan(start,finish,entries(config['incoming'],'i'),entries(config['outgoing'],'o'),width,side,config['median'],clearance(start,width,finish),clearance(finish,width,start),config['spacing'],**{k:('STOP' if (k=='control_incoming' and key(finish) in stop_nodes) or (k=='control_outgoing' and key(start) in stop_nodes) else config.get(k,v)) for k,v in [('arrow_approach',35.),('solid_approach',20.),('transition_length',30.),('stop_setback',1.22),('control_incoming','NONE'),('control_outgoing','NONE')]},allowed_incoming=available(start,finish),allowed_outgoing=available(finish,start),junction_start=len(nodes.get(key(start),[]))>=3 or key(start) in stop_nodes,junction_end=len(nodes.get(key(finish),[]))>=3 or key(finish) in stop_nodes,emerging_incoming=[i for i,row in enumerate(config['incoming']) if row.get('entry')=='ADDED'],emerging_outgoing=[i for i,row in enumerate(config['outgoing']) if row.get('entry')=='ADDED'])
                 for co,other in ((start,finish),(finish,start)):
                     if key(co) not in bends or key(co) in stop_nodes:continue
                     neighbor=max(nodes[key(co)],key=lambda n:(Vector(n)-Vector(co)).normalized().dot((Vector(other)-Vector(co)).normalized()))

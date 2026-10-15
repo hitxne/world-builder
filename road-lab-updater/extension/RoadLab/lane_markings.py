@@ -17,7 +17,7 @@ def arrow_id(movements,side='RIGHT'):
     except KeyError:raise ValueError('No marking for this movement combination')
     return 'arrow_uturn_right' if asset=='arrow_uturn_left' and side=='LEFT' else asset
 
-def plan(a,b,incoming,outgoing,width,side='RIGHT',median=0.,trim_start=0.,trim_end=0.,spacing=18.,solid_approach=20.,transition_length=30.,emerging_incoming=(),emerging_outgoing=(),control_incoming="NONE",control_outgoing="NONE",stop_setback=1.22,arrow_approach=35.,junction_start=None,junction_end=None):
+def plan(a,b,incoming,outgoing,width,side='RIGHT',median=0.,trim_start=0.,trim_end=0.,spacing=18.,solid_approach=20.,transition_length=30.,emerging_incoming=(),emerging_outgoing=(),control_incoming="NONE",control_outgoing="NONE",stop_setback=1.22,arrow_approach=35.,junction_start=None,junction_end=None,allowed_incoming=None,allowed_outgoing=None):
     """Incoming travels a -> b. Lane order is each driver's left -> right.
 
     End clearances are supplied by the topology adapter. Never draw through a
@@ -74,6 +74,8 @@ def plan(a,b,incoming,outgoing,width,side='RIGHT',median=0.,trim_start=0.,trim_e
         for lane_index,lane in enumerate(lanes if junction and arrow_approach>0 else []):
             distance=cursor+lane.width/2 if side=='RIGHT' else total-cursor-lane.width/2
             offset=center+sign*direction*(median/2+distance);cursor+=lane.width
+            allowed=allowed_incoming if direction==1 else allowed_outgoing
+            if allowed is not None and not lane.movements.issubset(allowed):continue
             asset=arrow_id(lane.movements,side);w,h=assets[asset]['physical_canvas_m']
             anchor=assets[asset]['anchor_uv'][0]
             scale=min(1.,(lane.width/2-.15)/(w*max(anchor,1-anchor)))

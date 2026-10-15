@@ -1,6 +1,6 @@
 # RoadLab Blender extension and update repository
 
-The full RoadLab 0.18.6 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
+The full RoadLab 0.18.7 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
 
 ## Install once
 
@@ -75,3 +75,9 @@ Lane and marking edits preview in the viewport without modifying saved lane assi
 Two-road connection vertices can be selected with the Lane tool. Choose **Continuous street** for joined curved markings or **Stop-controlled** for separated road-end markings and arrival stop lines. The choice is stored at the vertex, survives extension and later branches, and is independent of corner sharpness. This sets marking control; physical sign assets and traffic simulation are separate.
 
 Endpoint extensions inherit an existing street profile when the continuation is unambiguous. New branches at a multi-road junction are not assigned an arbitrary profile. At two-arm bends, paint follows the same rounded side boundaries as the road surface. Differing lane counts receive divider tapers; on straight connections, Markings > Lane lines > Lane merge length controls the transition corridor. Width remains subject to explicit expansion approval. Unsupported median or opposing one-way changes retain a gap with a warning rather than inventing a crossing. These marking transitions are not simulated traffic routing.
+
+## Preserve markings when adding streets (0.18.7)
+
+Adding a branch preserves the existing lane profiles and center, edge, and divider lines. If a new junction makes a saved movement unavailable, only its unsupported directional arrows are suppressed; the lane window flags the movement for review. Applying a new lane setup still validates its movements.
+
+Subdividing a marked source edge transfers its profile and interpolated width to the resulting edges, preserving travel orientation and the controls at the two original endpoints. Collinear subdivisions already affected by earlier versions are repaired when markings regenerate. Ambiguous or removed routes still require explicit reassignment. New branches remain unassigned rather than copying an arbitrary road profile.

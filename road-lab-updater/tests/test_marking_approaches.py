@@ -42,4 +42,12 @@ class ApproachTests(unittest.TestCase):
  def test_rotation_and_z(self):
   ms=plan((0,0,0),(100,0,10),[Lane('i')],[Lane('o')],8.,trim_end=10,control_incoming='STOP');bar=next(m for m in ms if m['asset']=='stop_bar');self.assertEqual(bar['forward'],[1.,0.]);self.assertAlmostEqual(bar['center'][2],bar['center'][0]/10)
 
+ def test_changed_junction_keeps_lines_but_filters_unavailable_arrows(self):
+  for side in ('RIGHT','LEFT'):
+   ms=plan((0,0,0),(0,100,0),[Lane('i0',3.5,frozenset({'THROUGH'})),Lane('i1',3.5,frozenset({'RIGHT'}))],[Lane('o')],11.5,side,trim_end=12,allowed_incoming={'RIGHT'})
+   self.assertTrue(any(m['role'][0]=='center-yellow' for m in ms))
+   self.assertEqual(len([m for m in ms if m['role'][0]=='outer']),2)
+   self.assertFalse(any(m['asset']=='arrow_through' for m in ms))
+   self.assertTrue(any(m['asset']=='arrow_right' and m['role'][2]==1 for m in ms))
+
 if __name__=='__main__':unittest.main()
