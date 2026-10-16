@@ -117,3 +117,23 @@ For a starting square instead, use **RoadLab > Surface Bounds > Create editable 
 This feature defines editable surface geometry. Parking stalls, planter-island cutouts, NPC lane connections and automatic crosswalk routing across new pads are separate systems; surface type alone does not generate them.
 
 The 0.18.12 sidewalk preset uses a 0.20 m slab below its 0.1524 m surface rise, so a new pad embeds into grade instead of floating over it. Existing custom thickness settings remain unchanged.
+
+### 0.18.13 — offline PBR surfaces
+
+Grass, asphalt, concrete, sidewalks and gutters use bundled CC0 Poly Haven 1K
+base color, roughness and OpenGL normal maps. Maps use world-space meter scale,
+box projection and surface-oriented normals without requiring a UV unwrap.
+Images are shared and packed into saved scenes; no texture download is needed
+at runtime and no displacement subdivision is added. Sidewalks and curbs use
+Concrete Floor 02, asphalt uses Asphalt 03, and grass uses Leafy Grass.
+
+Select a road, assigned terrain or Surface Bounds object and open **RoadLab >
+Surface materials** to adjust shared texture repeat size in meters. Full material
+nodes are editable in Blender's Shader Editor. Original plain RoadLab materials
+upgrade on addon enable or file load. Materials with user-authored nodes are
+preserved. Use Material Preview or Rendered view to see texture detail.
+
+This release adds PBR surfaces, not the terrain paint brush or irregular
+asphalt/grass boundary blend. Those require independent layer masks. Grass is
+a flat ground texture; close-up silhouettes will require optional grass instances.
+Asset URLs and CC0 license information are in `RoadLab/textures/LICENSE.md`.

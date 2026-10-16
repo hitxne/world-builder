@@ -1,4 +1,4 @@
-bl_info={'name':'RoadLab','author':'World Builder','version':(0,18,12),'blender':(5,1,0),'location':'View3D > Sidebar > RoadLab','category':'Object'}
+bl_info={'name':'RoadLab','author':'World Builder','version':(0,18,13),'blender':(5,1,0),'location':'View3D > Sidebar > RoadLab','category':'Object'}
 import bpy,json,math
 from pathlib import Path
 from bpy.props import StringProperty,FloatProperty,BoolProperty,EnumProperty,FloatVectorProperty,CollectionProperty,PointerProperty
@@ -11,7 +11,8 @@ def material(name):
  if not mat:
   mat=bpy.data.materials.new(name);mat.diffuse_color=COLORS.get(name[3:],(.5,.5,.5,1));mat.use_nodes=True
   p=mat.node_tree.nodes.get('Principled BSDF');p.inputs['Base Color'].default_value=mat.diffuse_color;p.inputs['Roughness'].default_value=.88
- return mat
+ from . import pbr_materials
+ return pbr_materials.ensure(mat,name[3:])
 
 def delete_collection(collection):
  for child in list(collection.children):
@@ -395,7 +396,11 @@ def register():
  road_connections.register()
  from . import surface_bounds
  surface_bounds.register()
+ from . import pbr_materials
+ pbr_materials.register()
 def unregister():
+ from . import pbr_materials
+ pbr_materials.unregister()
  from . import surface_bounds
  surface_bounds.unregister()
  from . import road_connections
