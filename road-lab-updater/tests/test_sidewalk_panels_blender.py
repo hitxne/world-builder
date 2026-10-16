@@ -24,7 +24,9 @@ for v in bm.verts:
 print('COMPONENTS',len(components),'straight',[(n,tuple(round(b-a,4) for a,b in zip(lo,hi))) for n,lo,hi in components if lo[0]>4.32 and hi[0]<7.6 and hi[1]<-15][:15],flush=True)
 assert len(components)>200
 assert all(abs(hi[2]-.1724)<1e-5 for n,lo,hi in components),'Flat example panels must share the same top elevation'
-rectangles=[(n,lo,hi) for n,lo,hi in components if n==8 and lo[0]>4.32 and hi[0]<7.6 and hi[1]<-15]
+# End-cap miters extend beyond their source interval; measure ordinary straight
+# blocks away from both the junction and the road-end construction joint.
+rectangles=[(n,lo,hi) for n,lo,hi in components if n==8 and lo[0]>4.32 and hi[0]<7.6 and lo[1]>-50 and hi[1]<-15]
 assert len(rectangles)>10
 for n,lo,hi in rectangles:
  assert 1.45<hi[0]-lo[0]<1.75 and 1.2<hi[1]-lo[1]<1.8,(lo,hi)

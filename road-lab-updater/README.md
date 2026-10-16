@@ -1,6 +1,6 @@
 # RoadLab Blender extension and update repository
 
-The full RoadLab 0.18.16 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
+The full RoadLab 0.18.17 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
 
 ## Install once
 
@@ -211,7 +211,7 @@ width/offset/height values and avoids replacing its attribute mesh.
 
 Panels now use the finished road border's original frame and profile coordinates.
 Open runs are aligned to their stored source direction. Splitting a block can no longer
-invert its height or change the endpoint miter into a protruding road-end spike. The
+invert its height. The
 flat example's 578 panels share the same top height; tests also check straight and rotated
 road-end bounds, upward top normals, point-field persistence and one paint pass per edit.
 Existing sidewalk modifiers upgrade to sweep → planar simplification → surface finish;
@@ -224,3 +224,28 @@ Example load fell from 17.45 s to 5.11 s. Dense sidewalk input fell from about 1
 not a viewport frame-rate claim or a large-map benchmark. Reproduce edit timings with
 `blender -b --factory-startup -t 4 --python road-lab-updater/tools/benchmark_edit.py`.
 Auto mode still defers expensive commits during dragging when they exceed its live budget.
+
+
+### 0.18.17 — correct road-end offset frames
+
+The close-up visual check exposed a second cause of end-cap tips after the height
+fix: subdividing a border interpolated its Free normals around sharp corners. A
+miter using those blended normals pulled adjacent points inward and left pointed
+wings at the corners. Overall bounding-box tests did not detect that pinch.
+
+Border normals are now recomputed from actual neighboring polygon edges. The
+regression checks the entire outer contour against an analytical rectangular
+road-end offset, in addition to straight/rotated bounds, panel heights and normals.
+The previous shape failed by roughly 28 cm at one sampled point; the corrected
+contour passes the 5 mm tolerance. Performance changes from 0.18.16 are retained.
+
+The corrected flat example finishes at approximately 7.5k sidewalk vertices, with
+all 578 panels at their intended top elevation.
+
+Before recomputing border normals (the end-cap pinch is visible):
+
+![End-cap pinch before the normal correction](docs/road-end-panels-before.png)
+
+After the contour correction, with panel edges shown for inspection:
+
+![Straight road-end contour after correction](docs/road-end-panels-fixed.png)

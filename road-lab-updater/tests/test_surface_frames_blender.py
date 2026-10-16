@@ -16,6 +16,11 @@ try:
  assert len(mesh.vertices)>0
  outer=.32+.003+2.2
  assert all(-outer-.002<=v.co.x<=30+outer+.002 and abs(v.co.y)<=4+outer+.002 for v in mesh.vertices),'A road-end panel protrudes beyond its analytical offset bounds'
+ u=mesh.attributes['wb_profile_u'];maximum=max(v.value for v in u.data)
+ for v,value in zip(mesh.vertices,u.data):
+  if value.value<maximum-1e-5:continue
+  edge_error=min(abs(v.co.x+outer),abs(v.co.x-(30+outer)),abs(abs(v.co.y)-(4+outer)))
+  assert edge_error<.005,('Outer edge pinches into a pointed end-cap tip',tuple(v.co),edge_error)
  assert all(abs(v.co.z-.1724)<1e-5 or abs(v.co.z+.0276)<1e-5 for v in mesh.vertices),'A panel frame has inverted its profile height'
  tops=[p for p in mesh.polygons if all(abs(mesh.vertices[i].co.z-.1724)<1e-5 for i in p.vertices)]
  assert tops and all(p.normal.z>.99 for p in tops),'A panel top has flipped normals'

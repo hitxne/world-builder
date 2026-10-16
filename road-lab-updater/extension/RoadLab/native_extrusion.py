@@ -5,11 +5,11 @@ from .native_extension import socket,set_input,road_modifier
 
 def extrusion_group():
     name='WB_EXTENSION_BORDER_EXTRUSION';g=bpy.data.node_groups.get(name)
-    if g and g.get('wb_schema',0)>=17 and any(s.name=='Layer prefix' for s in g.interface.items_tree):return g
+    if g and g.get('wb_schema',0)>=18 and any(s.name=='Layer prefix' for s in g.interface.items_tree):return g
     if g and g.library:g=g.copy();g.name=name+'_v08'
     if g:g.nodes.clear()
     else:g=bpy.data.node_groups.new(name,'GeometryNodeTree')
-    g['wb_schema']=17
+    g['wb_schema']=18
     socket(g,'Geometry','INPUT','NodeSocketGeometry')
     stage_socket=socket(g,'Evaluation stage','INPUT','NodeSocketInt',0)
     if hasattr(stage_socket,'hide_in_modifier'):stage_socket.hide_in_modifier=True
@@ -52,7 +52,12 @@ def extrusion_group():
     miter_store=N.new('GeometryNodeStoreNamedAttribute');miter_store.data_type='FLOAT';miter_store.domain='POINT';miter_store.inputs['Name'].default_value='roadlab_offset_miter';L.new(subdivided.outputs['Curve'],miter_store.inputs['Geometry']);L.new(reciprocal.outputs[0],miter_store.inputs['Value'])
     edge_position=N.new('GeometryNodeInputPosition');edge_z=N.new('ShaderNodeSeparateXYZ');L.new(edge_position.outputs['Position'],edge_z.inputs['Vector'])
     edge_store=N.new('GeometryNodeStoreNamedAttribute');edge_store.data_type='FLOAT';edge_store.domain='POINT';edge_store.inputs['Name'].default_value='wb_edge_elevation';L.new(edge_z.outputs['Z'],edge_store.inputs['Value']);L.new(miter_store.outputs['Geometry'],edge_store.inputs['Geometry'])
-    source_normal=N.new('GeometryNodeInputNormal');normal_store=N.new('GeometryNodeStoreNamedAttribute');normal_store.data_type='FLOAT_VECTOR';normal_store.domain='POINT';normal_store.inputs['Name'].default_value='wb_edge_normal';L.new(edge_store.outputs['Geometry'],normal_store.inputs['Geometry']);L.new(source_normal.outputs['Normal'],normal_store.inputs['Value'])
+    # Subdivision interpolates a Free normal across sharp polygon corners.
+    # Recompute the frame from actual neighboring edge directions instead.
+    tangent_sum=N.new('ShaderNodeVectorMath');tangent_sum.operation='ADD';L.new(directions[0],tangent_sum.inputs[0]);L.new(directions[1],tangent_sum.inputs[1])
+    unit_tangent=N.new('ShaderNodeVectorMath');unit_tangent.operation='NORMALIZE';L.new(tangent_sum.outputs['Vector'],unit_tangent.inputs[0])
+    source_normal=N.new('ShaderNodeVectorMath');source_normal.operation='CROSS_PRODUCT';source_normal.inputs[1].default_value=(0,0,1);L.new(unit_tangent.outputs['Vector'],source_normal.inputs[0])
+    normal_store=N.new('GeometryNodeStoreNamedAttribute');normal_store.data_type='FLOAT_VECTOR';normal_store.domain='POINT';normal_store.inputs['Name'].default_value='wb_edge_normal';L.new(edge_store.outputs['Geometry'],normal_store.inputs['Geometry']);L.new(source_normal.outputs['Vector'],normal_store.inputs['Value'])
     position_store=N.new('GeometryNodeStoreNamedAttribute');position_store.data_type='FLOAT_VECTOR';position_store.domain='POINT';position_store.inputs['Name'].default_value='wb_edge_position';L.new(normal_store.outputs['Geometry'],position_store.inputs['Geometry']);L.new(edge_position.outputs['Position'],position_store.inputs['Value'])
     source_tangent=N.new('GeometryNodeInputTangent');tangent_store=N.new('GeometryNodeStoreNamedAttribute');tangent_store.data_type='FLOAT_VECTOR';tangent_store.domain='POINT';tangent_store.inputs['Name'].default_value='wb_edge_tangent';L.new(position_store.outputs['Geometry'],tangent_store.inputs['Geometry']);L.new(source_tangent.outputs['Tangent'],tangent_store.inputs['Value'])
     profile=N.new('GeometryNodeObjectInfo');profile.transform_space='ORIGINAL';L.new(inp.outputs['Profile curve'],profile.inputs['Object'])
