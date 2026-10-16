@@ -1,6 +1,6 @@
 # RoadLab Blender extension and update repository
 
-The full RoadLab 0.18.15 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
+The full RoadLab 0.18.16 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
 
 ## Install once
 
@@ -196,3 +196,31 @@ area free of automatic approach arrows.
 Actual Blender render of a through lane, its receiving lane and downstream merge:
 
 ![Through lane and downstream merge](docs/lane-through-merge.png)
+
+### 0.18.16 — lighter surface updates and stable panel frames
+
+Road edits now defer paint and ramp regeneration until terrain seam updates finish.
+One committed edit makes one final marking pass instead of repeatedly evaluating all
+curb and sidewalk geometry for tactile-pad projection. Sidewalk slabs simplify before
+Boolean cleanup. Extra cross-section samples are generated only on panels close enough
+to reach a crosswalk ramp; ordinary blocks keep their simple cross-section. Exact cleanup
+is retained, and the final surface still uses the existing corner and ramp controls.
+Road mesh attributes, UVs and perimeter coordinates use batch writes. Unrelated depsgraph
+updates no longer resynchronize every layer model. Moving a point retains its custom
+width/offset/height values and avoids replacing its attribute mesh.
+
+Panels now use the finished road border's original frame and profile coordinates.
+Open runs are aligned to their stored source direction. Splitting a block can no longer
+invert its height or change the endpoint miter into a protruding road-end spike. The
+flat example's 578 panels share the same top height; tests also check straight and rotated
+road-end bounds, upward top normals, point-field persistence and one paint pass per edit.
+Existing sidewalk modifiers upgrade to sweep → planar simplification → surface finish;
+layer controls stay in the same sidebar sections.
+
+Measured in Blender 5.1 background mode with four worker threads on the supplied example
+with tactile crosswalks: a small committed point edit fell from 14.56 s to 1.79–2.13 s.
+Example load fell from 17.45 s to 5.11 s. Dense sidewalk input fell from about 108k to
+33k vertices, with approximately 8.4k final vertices. These are sample-scene measurements,
+not a viewport frame-rate claim or a large-map benchmark. Reproduce edit timings with
+`blender -b --factory-startup -t 4 --python road-lab-updater/tools/benchmark_edit.py`.
+Auto mode still defers expensive commits during dragging when they exceed its live budget.

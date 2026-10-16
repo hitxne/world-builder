@@ -14,7 +14,9 @@ def mesh_info():
  try:return len(mesh.vertices),BVHTree.FromPolygons([v.co for v in mesh.vertices],[tuple(p.vertices) for p in mesh.polygons]),all(not p.use_smooth for p in mesh.polygons)
  finally:ev.to_mesh_clear()
 finish.show_viewport=False;raw,rawtree,_=mesh_info();finish.show_viewport=True;simple,tree,flat=mesh_info()
-assert simple<raw*.15,(raw,simple)
+# Adaptive cross-sections now avoid generating most of the old dense input.
+# Keep an absolute final budget without requiring wasteful raw geometry.
+assert simple<10000 and simple<raw*.5,(raw,simple)
 assert flat,'Concrete profile edges must not shade as inflated smooth surfaces'
 checked=0
 for x in (4.2,4.6,5.2,6.2,7.):

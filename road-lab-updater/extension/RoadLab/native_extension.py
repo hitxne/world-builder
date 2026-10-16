@@ -30,8 +30,12 @@ def socket(group,name,direction,kind,default=None):
 
 def set_input(mod,name,value):
     item=next(s for s in mod.node_group.interface.items_tree if getattr(s,'in_out',None)=='INPUT' and s.name==name)
-    if item.identifier in mod and mod[item.identifier]==value and not (isinstance(value,bool) and not isinstance(mod[item.identifier],bool)):return
-    mod[item.identifier]=value;mod.id_data.update_tag()
+    targets=[mod]
+    if name!='Evaluation stage' and mod.id_data.get('roadlab_staged_surface'):
+        targets=[m for m in mod.id_data.modifiers if m.type=='NODES' and m.node_group==mod.node_group]
+    for target in targets:
+        if item.identifier in target and target[item.identifier]==value and not (isinstance(value,bool) and not isinstance(target[item.identifier],bool)):continue
+        target[item.identifier]=value;target.id_data.update_tag()
 
 
 def cleanup_quality(self,context):
@@ -198,6 +202,8 @@ class WB_OT_edit_native_profile(bpy.types.Operator):
 
 
 def draw_input(layout,modifier,name,label):
+    if name in ('Material','Junction cleanup','Precise viewport cleanup') and modifier.id_data.get('roadlab_staged_surface'):
+        modifier=modifier.id_data.modifiers.get('RoadLab Surface Finish') or modifier
     item=next((p for p in modifier.node_group.interface.items_tree if p.name==name and getattr(p,'in_out',None)=='INPUT'),None)
     layout.use_property_split=True;layout.use_property_decorate=False
     if item:layout.prop(modifier,'["'+item.identifier+'"]',text=label)

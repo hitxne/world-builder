@@ -205,9 +205,17 @@ def sync_model(model):
     if not road:return
     current=[tuple(p.co[:3]) for p in points(road)];old=[tuple(v.co) for v in model.data.vertices]
     if current==old:return
-    if len(current)==len(old):
+    from collections import Counter
+    reordered=len(current)==len(old) and Counter(current)==Counter(old)
+    if len(current)==len(old) and not reordered:
         for v,co in zip(model.data.vertices,current):v.co=co
         model.data.update();model.update_tag()
+        if road.get('roadlab_surface_contacts'):
+            from .surface_bounds import sync_contacts
+            sync_contacts(road)
+        # Movement changes positions, not the per-point attribute assignment.
+        # Rebuilding below discards edits on moved points and dirties every layer.
+        return
     road=model.get('wb_road')
     if road and road.get('roadlab_surface_contacts'):
         from .surface_bounds import sync_contacts
@@ -275,6 +283,7 @@ class WB_PT_layer_controls(bpy.types.Panel):
                 for mod in layer.object.modifiers:
                     if mod.type=='NODES' and mod.node_group and mod.node_group.name.startswith('WB_EXTENSION_BORDER_EXTRUSION'):
                         for name in ('Sidewalk panels','Slab length','Slab width','Joint gap'):draw_input(box,mod,name,name if name=='Sidewalk panels' else name+' (m)')
+                        break
             col.prop(layer,'vertex_enabled');col.prop(layer,'width');col.prop(layer,'offset');col.prop(layer,'zpos',text='Inner height offset (m)' if layer.kind=='grass' else 'Height offset (m)')
 
 class WB_PT_curbs(WB_PT_layer_controls):bl_idname='WB_PT_curbs';bl_label='Curbs';bl_order=0;kind='curb'
@@ -290,8 +299,11 @@ def sync_controls(scene,depsgraph):
     try:
         from .grass_surface import sync_bases
         sync_bases(scene)
+        changed={update.id.original for update in depsgraph.updates}
         for model in list(scene.objects):
-            if model.get('wb_layer_model'):sync_model(model)
+            if not model.get('wb_layer_model'):continue
+            road=model.get('wb_road')
+            if road and (road in changed or road.data in changed):sync_model(model)
     finally:_busy=False
 
 # Panels register after their native parent panel.

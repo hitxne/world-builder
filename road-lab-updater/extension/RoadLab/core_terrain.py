@@ -194,7 +194,9 @@ def rebuild(scene,force=False):
     _STATE[terrain.as_pointer()]=state;terrain['roadlab_core_terrain_signature']=signature;terrain['roadlab_core_terrain_error']='';terrain['roadlab_core_terrain_report']=json.dumps(report);terrain.update_tag()
     from . import lane_editor
     for road in roads:
-        if any(c.get('crosswalk_tactile') and (c.get('crosswalk_incoming') or c.get('crosswalk_outgoing')) for c in lane_editor.state(road)):lane_editor.rebuild(road,scene)
+        if any(c.get('crosswalk_tactile') and (c.get('crosswalk_incoming') or c.get('crosswalk_outgoing')) for c in lane_editor.state(road)):
+            from . import road_core
+            road_core.refresh_markings(road)
 
 
 def settings_changed(obj,context):

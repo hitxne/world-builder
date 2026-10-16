@@ -23,6 +23,7 @@ for v in bm.verts:
  components.append((len(vs),lo,hi))
 print('COMPONENTS',len(components),'straight',[(n,tuple(round(b-a,4) for a,b in zip(lo,hi))) for n,lo,hi in components if lo[0]>4.32 and hi[0]<7.6 and hi[1]<-15][:15],flush=True)
 assert len(components)>200
+assert all(abs(hi[2]-.1724)<1e-5 for n,lo,hi in components),'Flat example panels must share the same top elevation'
 rectangles=[(n,lo,hi) for n,lo,hi in components if n==8 and lo[0]>4.32 and hi[0]<7.6 and hi[1]<-15]
 assert len(rectangles)>10
 for n,lo,hi in rectangles:

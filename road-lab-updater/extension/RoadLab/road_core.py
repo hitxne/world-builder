@@ -8,6 +8,8 @@ from .native_extension import socket,set_input
 EPS=1e-6
 SCHEMA=8
 _busy=False
+_defer_markings=False
+_deferred_markings=set()
 _pending={}
 _last_edit=0.
 _edit_costs={}
@@ -159,21 +161,21 @@ def _rebuild(road,force=False):
     report['lane_pockets']=len(pockets)
     report['sculpt_samples']=len(sculpt);report['lifted_corners']=sum(bool(v) for values in lifts.values() for v in values.values())
     mesh=bpy.data.meshes.new('RoadLab Core Mesh');mesh.from_pydata(verts,[],faces);mesh.update()
-    for polygon in mesh.polygons:polygon.use_smooth=True
+    mesh.polygons.foreach_set('use_smooth',[True]*len(faces))
     from . import sidewalk_guard
     limit=mesh.attributes.new('roadlab_offset_limit','FLOAT','POINT')
-    for value,height in zip(limit.data,sidewalk_guard.limits(verts,loops,report)):value.value=height
+    limit.data.foreach_set('value',sidewalk_guard.limits(verts,loops,report))
     sidewalk_guard.border_fields(mod.node_group,output)
     region=mesh.attributes.new('roadlab_region','INT','FACE')
-    for x,v in zip(region.data,regions):x.value=v
+    region.data.foreach_set('value',regions)
     from . import road_paths
     cuts=json.loads(road.get('roadlab_bridge_cuts','[]'))
     mask=road_paths.contact_mask([path[0] for path in paths],cuts,verts,faces) if cuts else [True]*len(faces)
     contact=mesh.attributes.new('roadlab_ground_contact','BOOLEAN','FACE')
-    for x,v in zip(contact.data,mask):x.value=v
+    contact.data.foreach_set('value',mask)
     report['bridge_spans']=len(cuts);report['bridge_faces']=sum(not v for v in mask)
     uv=mesh.uv_layers.new(name='UVMap')
-    for loop in mesh.loops:uv.data[loop.index].uv=mesh.vertices[loop.vertex_index].co.xy
+    uv.data.foreach_set('uv',[c for face in faces for index in face for c in verts[index][:2]])
     from . import terrain_quads
     terrain_quads.release_seam(output)
     previous=output.data;output.data=mesh
@@ -181,12 +183,26 @@ def _rebuild(road,force=False):
     outline.data.splines.clear()
     for loop in loops:
         spline=outline.data.splines.new('POLY');spline.points.add(len(loop)-1);spline.use_cyclic_u=True
-        for point,index in zip(spline.points,loop):point.co=(*verts[index],1)
+        spline.points.foreach_set('co',[c for index in loop for c in (*verts[index],1)])
     outline.data.update_tag();road['roadlab_core_signature']=signature;road['roadlab_core_report']=json.dumps(report);road['roadlab_core_error']='';road.update_tag()
     refresh_markings(road)
 
 
 def refresh_markings(road):
+    if _defer_markings:
+        _deferred_markings.add(road);return
+    _refresh_markings_now(road)
+
+
+def _flush_markings():
+    roads=list(_deferred_markings);_deferred_markings.clear()
+    for road in roads:
+        try:
+            if road.name in bpy.data.objects:_refresh_markings_now(road)
+        except ReferenceError:continue
+
+
+def _refresh_markings_now(road):
     from . import marking_stamp
     try:
         marking_stamp.rebuild(road);road['roadlab_manual_marking_error']=''
@@ -259,9 +275,9 @@ def is_pending(scene):return scene.as_pointer() in _pending
 
 
 def flush_pending(force=False,live=False):
-    global _busy
+    global _busy,_defer_markings
     if _busy or (not force and not live and interaction_active()):return False
-    items=list(_pending.values());_pending.clear();_busy=True
+    items=list(_pending.values());_pending.clear();_busy=True;_defer_markings=True
     try:
         from . import core_terrain
         for scene,roads in items:
@@ -279,10 +295,16 @@ def flush_pending(force=False,live=False):
                     terrain=scene.wb_native.terrain
                     if terrain:terrain['roadlab_core_terrain_error']=str(exc)
             except ReferenceError:continue
+            # Terrain can add seam vertices and invalidate tactile projection.
+            # Build paint and ramps only after those inputs reach their final state.
+            _flush_markings()
             changed=any(road.get('roadlab_core_signature')!=old_signatures.get(road.as_pointer()) for road in roads) or (terrain and terrain.get('roadlab_core_terrain_signature')!=old_terrain)
             if changed:_edit_costs[scene.as_pointer()]=time.perf_counter()-started
             if live:_live_refresh[scene.as_pointer()]=time.monotonic()
-    finally:_busy=False
+    finally:
+        _defer_markings=False
+        try:_flush_markings()
+        finally:_busy=False
     for window in bpy.context.window_manager.windows:
         for area in window.screen.areas:
             if area.type=='VIEW_3D':area.tag_redraw()

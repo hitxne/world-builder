@@ -39,7 +39,11 @@ def curves(group,wire,enabled,block_length,gap):
     fraction=math('MINIMUM',math('DIVIDE',half_gap,length_node.outputs['Length']),.1)
     trim=N.new('GeometryNodeTrimCurve');trim.mode='FACTOR';L.new(curve.outputs['Curve'],trim.inputs['Curve']);L.new(fraction,trim.inputs['Start']);L.new(math('SUBTRACT',1.,fraction),trim.inputs['End'])
     select=N.new('GeometryNodeSwitch');select.input_type='GEOMETRY';L.new(enabled,select.inputs['Switch']);L.new(curve.outputs['Curve'],select.inputs['False']);L.new(trim.outputs['Curve'],select.inputs['True'])
-    return select.outputs['Output']
+    original=N.new('GeometryNodeInputNamedAttribute');original.data_type='FLOAT_VECTOR';original.inputs['Name'].default_value='wb_edge_tangent'
+    tangent=N.new('GeometryNodeInputTangent');alignment=N.new('ShaderNodeVectorMath');alignment.operation='DOT_PRODUCT';L.new(original.outputs['Attribute'],alignment.inputs[0]);L.new(tangent.outputs['Tangent'],alignment.inputs[1])
+    mean=N.new('GeometryNodeFieldOnDomain');mean.data_type='FLOAT';mean.domain='CURVE';L.new(alignment.outputs['Value'],mean.inputs['Value'])
+    reverse=N.new('GeometryNodeReverseCurve');L.new(select.outputs['Output'],reverse.inputs['Curve']);L.new(math('LESS_THAN',mean.outputs['Value'],0.),reverse.inputs['Selection'])
+    return reverse.outputs['Curve']
 
 def columns(group,geometry,controls,width_attribute,enabled,slab_width,gap):
     N,L=group.nodes,group.links
