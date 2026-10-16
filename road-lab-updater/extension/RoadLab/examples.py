@@ -6,7 +6,27 @@ from . import road_core,core_terrain,lane_editor
 def load_editable_example(context):
     lane_editor.stop_lane_preview();lane_editor.clear_approach_preview()
     if context.mode!='OBJECT':bpy.ops.object.mode_set(mode='OBJECT')
-    scene=bpy.data.scenes.new('RoadLab Example');context.window.scene=scene
+    source=context.scene
+    scene=bpy.data.scenes.new('RoadLab Example')
+    # Keep the environment, but give the example its own editable World.
+    scene.world=source.world.copy() if source.world else None
+    scene.render.engine=source.render.engine
+    scene.display_settings.display_device=source.display_settings.display_device
+    for name in ('view_transform','look','exposure','gamma','use_curve_mapping'):
+        try:setattr(scene.view_settings,name,getattr(source.view_settings,name))
+        except (AttributeError,TypeError):pass
+    if source.view_settings.use_curve_mapping:
+        old=source.view_settings.curve_mapping;new=scene.view_settings.curve_mapping
+        for name in ('black_level','white_level','use_clip','clip_min_x','clip_min_y','clip_max_x','clip_max_y'):
+            setattr(new,name,getattr(old,name))
+        for original,target in zip(old.curves,new.curves):
+            for point in list(target.points)[1:-1]:target.points.remove(point)
+            target.points[0].location=original.points[0].location;target.points[-1].location=original.points[-1].location
+            for point in list(original.points)[1:-1]:target.points.new(*point.location)
+            for a,b in zip(original.points,target.points):b.handle_type=a.handle_type
+        new.update()
+    scene['roadlab_example_parent_scene']=source.name
+    context.window.scene=scene
     # Keep the authoring terrain as one ordinary editable quad.
     mesh=bpy.data.meshes.new('RoadLab Terrain Plane')
     mesh.from_pydata([(-100,-100,0),(100,-100,0),(100,100,0),(-100,100,0)],[],[(0,1,2,3)]);mesh.update()
@@ -43,7 +63,7 @@ def load_editable_example(context):
         for area in screen.areas:
             if area.type=='VIEW_3D':
                 from mathutils import Quaternion
-                space=area.spaces.active;space.shading.type='MATERIAL'
+                space=area.spaces.active
                 space.region_3d.view_rotation=Quaternion((1,0,0,0));space.region_3d.view_perspective='ORTHO'
                 space.region_3d.view_location=(0,0,0);space.region_3d.view_distance=145
     scene['roadlab_editable_example']=True

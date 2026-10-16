@@ -48,6 +48,8 @@ jobs:
         run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_surface_bounds_blender.py
       - name: Test offline PBR materials
         run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_pbr_materials_blender.py
+      - name: Test example World preservation
+        run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_example_world_blender.py
       - name: Validate and build repository
         env:
           BLENDER: /tmp/roadlab-blender/blender

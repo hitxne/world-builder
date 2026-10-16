@@ -137,3 +137,14 @@ This release adds PBR surfaces, not the terrain paint brush or irregular
 asphalt/grass boundary blend. Those require independent layer masks. Grass is
 a flat ground texture; close-up silhouettes will require optional grass instances.
 Asset URLs and CC0 license information are in `RoadLab/textures/LICENSE.md`.
+
+### 0.18.14 — preserve the example environment
+
+Load Example copies the current scene's World (sky/HDRI nodes and settings),
+render engine and color management into the separate example scene. The World
+copy is independent, so changing it does not change the original scene's World.
+The viewport keeps its existing shading mode and environment preview settings.
+Your original scene stays available in Blender's scene selector.
+
+This release contains the environment-preservation fix only. The new lane-pocket
+and sidewalk-panel work is not included until its final validation can complete.
