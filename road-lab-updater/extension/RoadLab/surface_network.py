@@ -24,7 +24,9 @@ def distance(p,a,b):
 
 def intersection(a,u,b,v):
     den=cross(u,v)
-    if abs(den)<1e-9:return None
+    # Unit directions below one microradian are numerically parallel at
+    # road-mesh precision; intersecting them produces unstable huge miters.
+    if abs(den)<1e-6:return None
     return a+u*(cross(b-a,v)/den)
 
 def cached(key,make,stats):
@@ -86,6 +88,9 @@ def junction(center,neighbors,edges,spacing,radii,budgets):
         applied=min(requested,maximum);cc=origin+(unit_center-origin)*(direction*applied);pa=cc-a['n']*(direction*applied);pb=cc+b['n']*(direction*applied)
         start=math.atan2((pa-cc).y,(pa-cc).x);sweep=theta-math.pi
         count=max(3,math.ceil(applied*abs(sweep)/spacing));curve=[cc+Vector((math.cos(start+sweep*j/count),math.sin(start+sweep*j/count)))*applied for j in range(count+1)]
+        # A sub-micron arc collapses to a line at the output's coordinate
+        # precision. Keep its miter instead of emitting collinear arc triangles.
+        if applied*(1-math.cos(sweep/2))<EPS:curve=[origin]
         a['gate']=max(a['gate'],pa.dot(u)+spacing*.2);b['gate']=max(b['gate'],pb.dot(v)+spacing*.2)
         limits.append(dict(corner=label,kind='exterior' if exterior else 'interior',angle_degrees=math.degrees(theta),requested=requested,applied=applied,minimum=.02,maximum=maximum,arc_center=[cc.x+c.x,cc.y+c.y],height_anchor=[curve[len(curve)//2].x+c.x,curve[len(curve)//2].y+c.y],height_falloff=max(a['w'],b['w'],applied)*1.5))
         corners.append(curve)

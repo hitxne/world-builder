@@ -5,6 +5,8 @@ from . import road_core,core_terrain,lane_editor
 
 def load_editable_example(context):
     lane_editor.stop_lane_preview();lane_editor.clear_approach_preview()
+    from . import lane_add
+    lane_add.cleanup()
     if context.mode!='OBJECT':bpy.ops.object.mode_set(mode='OBJECT')
     source=context.scene
     scene=bpy.data.scenes.new('RoadLab Example')

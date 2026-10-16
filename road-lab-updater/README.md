@@ -1,6 +1,6 @@
 # RoadLab Blender extension and update repository
 
-The full RoadLab 0.18.12 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
+The full RoadLab 0.18.15 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
 
 ## Install once
 
@@ -148,3 +148,51 @@ Your original scene stays available in Blender's scene selector.
 
 This release contains the environment-preservation fix only. The new lane-pocket
 and sidewalk-panel work is not included until its final validation can complete.
+
+
+### 0.18.15 — local lanes and concrete panels
+
+In road curve Edit Mode, select a point or a connected run and choose **Add lane**
+from the Lane toolbar tool or RoadLab > Lanes. A blue preview evaluates the actual
+pavement, curb and sidewalk geometry. **Change side of street** flips the widening.
+Confirm **Add lane** to save; Cancel removes the preview without changing the road.
+The authored curve points stay intact. A single point makes a local pocket; a run
+spans those points. Adding an adjacent point extends the existing pocket, retaining
+its width and entrance instead of stacking a second widening. Remove a saved pocket
+with its trash button in Lanes.
+
+Selecting a junction offers its actual compass-named approaches. **Turn lane** adds
+a dedicated curb-side or median-side turn and checks that its destination exists
+and has sufficient receiving lanes. **Through lane** creates a linked receiving lane
+on the actual opposite street, then merges it back after the junction by default.
+Both halves preview and save together; removing the through lane removes its merge.
+The receiver must have enough length for the full-width section and taper. Ambiguous
+through destinations and overlaps show a message before commit. Traffic side comes
+from the global map setting. These are geometry and marking controls; NPC traffic
+routing and signal timing are not implemented by this update.
+
+The receiving merge defaults to 71.46 m for a 3.5 m lane at an assumed 35 mph. This
+uses the merging-taper equation in the [2026 FDOT Design Manual, section 212.6](https://fdotwww.blob.core.windows.net/sitefinity/docs/default-source/roadway/fdm/2026/2026fdm212intersections.pdf?sfvrsn=cb5713fa_6):
+L = W × S² / 60 at 40 mph and below, L = W × S at 45 mph and above, with W and L in
+feet. The width conversion cancels when both use meters. The merge length is editable;
+the default is a game-authoring starting point, not a complete road-safety assessment.
+Turn-pocket storage and entry tapers remain separate controls. Long gentle tapers
+avoid sub-micron arc triangles that would collapse at mesh coordinate precision.
+
+Sidewalks now form capped concrete panels with separate slab length, slab width and
+joint-gap controls inside the sidewalk layer. Defaults target approximately 1.5 m
+blocks with 3 mm joints. Straight slabs dissolve to simple flat faces; curves and
+crosswalk ramps retain the geometry needed for their shape. Untouched stock profiles
+embed below grade, and the layer stack separates the curb and sidewalk with a small
+construction joint. Custom profile shapes are preserved during upgrade. These changes
+do not add terrain painting or an irregular asphalt/grass blending mask.
+
+
+Curved marking paths now retain surface-projection samples along their length.
+A single edge-of-road ray miss no longer removes an entire long line on a neighboring
+street when a widened junction shifts its end. Receiving merge lanes keep the departure
+area free of automatic approach arrows.
+
+Actual Blender render of a through lane, its receiving lane and downstream merge:
+
+![Through lane and downstream merge](docs/lane-through-merge.png)

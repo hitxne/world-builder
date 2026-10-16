@@ -87,7 +87,7 @@ def connect(bends,arms,hidden):
                 if length<1e-5 or delta.length<1e-5:continue
                 delta.normalize();identity=hashlib.sha256(json.dumps(['bend',p,a,b,family,index]).encode()).hexdigest()
                 if identity in hidden:continue
-                plans.append(dict(asset=ra['asset'],center=list(resample([Vector(x) for x in path],.5)),forward=[delta.x,delta.y],size=[ra['width'],length],path=path,role=['bend',family,index],id=identity))
+                plans.append(dict(asset=ra['asset'],center=list(resample([Vector(x) for x in path],.5)),forward=[delta.x,delta.y],size=[ra['width'],length],path=path,role=['bend',family,index],id=identity,edge_inset=(ra.get('edge_inset',.5)+rb.get('edge_inset',.5))/2))
     return plans,warnings
 
 def profile_transitions(nodes,edges,configs,positions,settings,stop_nodes=()):

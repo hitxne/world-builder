@@ -5,14 +5,16 @@ from .native_extension import socket,set_input,road_modifier
 
 def extrusion_group():
     name='WB_EXTENSION_BORDER_EXTRUSION';g=bpy.data.node_groups.get(name)
-    if g and g.get('wb_schema',0)>=15 and any(s.name=='Layer prefix' for s in g.interface.items_tree):return g
+    if g and g.get('wb_schema',0)>=16 and any(s.name=='Layer prefix' for s in g.interface.items_tree):return g
     if g and g.library:g=g.copy();g.name=name+'_v08'
     if g:g.nodes.clear()
     else:g=bpy.data.node_groups.new(name,'GeometryNodeTree')
-    g['wb_schema']=15
+    g['wb_schema']=16
     socket(g,'Geometry','INPUT','NodeSocketGeometry')
-    for n,k,d in [('Flatten curb at crossing','NodeSocketBool',False),('Safe sidewalk offset','NodeSocketBool',False),('Grass surface','NodeSocketBool',False),('Terrain base','NodeSocketObject',None),('Vertex controls','NodeSocketObject',None),('Layer prefix','NodeSocketString',''),('Use vertex controls','NodeSocketBool',False),('Use layer order','NodeSocketBool',False),('Junction cleanup','NodeSocketBool',True),('Precise viewport cleanup','NodeSocketBool',False),('Editing preview','NodeSocketBool',False),('Road surfaces','NodeSocketCollection',None),('Enabled','NodeSocketBool',True),('Road','NodeSocketObject',None),('Profile curve','NodeSocketObject',None),('Path curve','NodeSocketObject',None),('Use custom path','NodeSocketBool',False),('Profile width scale','NodeSocketFloat',1.),('Profile height scale','NodeSocketFloat',1.),('Setback','NodeSocketFloat',0.),('Height offset','NodeSocketFloat',0.),('Crosswalk areas','NodeSocketObject',None),('Crossing road','NodeSocketObject',None),('Lower at crossing','NodeSocketBool',False),('Transition length','NodeSocketFloat',3.),('Material','NodeSocketMaterial',None)]:
+    for n,k,d in [('Sidewalk panels','NodeSocketBool',False),('Slab length','NodeSocketFloat',1.5),('Slab width','NodeSocketFloat',1.5),('Joint gap','NodeSocketFloat',.003),('Flatten curb at crossing','NodeSocketBool',False),('Safe sidewalk offset','NodeSocketBool',False),('Grass surface','NodeSocketBool',False),('Terrain base','NodeSocketObject',None),('Vertex controls','NodeSocketObject',None),('Layer prefix','NodeSocketString',''),('Use vertex controls','NodeSocketBool',False),('Use layer order','NodeSocketBool',False),('Junction cleanup','NodeSocketBool',True),('Precise viewport cleanup','NodeSocketBool',False),('Editing preview','NodeSocketBool',False),('Road surfaces','NodeSocketCollection',None),('Enabled','NodeSocketBool',True),('Road','NodeSocketObject',None),('Profile curve','NodeSocketObject',None),('Path curve','NodeSocketObject',None),('Use custom path','NodeSocketBool',False),('Profile width scale','NodeSocketFloat',1.),('Profile height scale','NodeSocketFloat',1.),('Setback','NodeSocketFloat',0.),('Height offset','NodeSocketFloat',0.),('Crosswalk areas','NodeSocketObject',None),('Crossing road','NodeSocketObject',None),('Lower at crossing','NodeSocketBool',False),('Transition length','NodeSocketFloat',3.),('Material','NodeSocketMaterial',None)]:
         item=socket(g,n,'INPUT',k,d)
+        if n in ('Slab length','Slab width'):item.min_value=.5;item.max_value=6
+        if n=='Joint gap':item.min_value=.001;item.max_value=.02
         if n in ('Profile width scale','Profile height scale','Transition length'):item.min_value=.01
     socket(g,'Geometry','OUTPUT','NodeSocketGeometry')
     N=g.nodes;L=g.links;inp=N.new('NodeGroupInput');out=N.new('NodeGroupOutput')
@@ -76,20 +78,26 @@ def extrusion_group():
     controls=N.new('GeometryNodeObjectInfo');controls.transform_space='RELATIVE';L.new(inp.outputs['Vertex controls'],controls.inputs['Object'])
     edge_pos_attr=N.new('GeometryNodeInputNamedAttribute');edge_pos_attr.data_type='FLOAT_VECTOR';edge_pos_attr.inputs['Name'].default_value='wb_edge_position'
     nearest=N.new('GeometryNodeSampleNearest');nearest.domain='POINT';L.new(controls.outputs['Geometry'],nearest.inputs['Geometry']);L.new(edge_pos_attr.outputs['Attribute'],nearest.inputs['Sample Position'])
-    fields={}
+    fields={};control_fields={}
     for key in ('enabled','width','offset','zpos','stack'):
         text=N.new('GeometryNodeStringJoin');text.inputs['Delimiter'].default_value='';suffix=N.new('FunctionNodeInputString');suffix.string=key;L.new(suffix.outputs['String'],text.inputs['Strings']);L.new(inp.outputs['Layer prefix'],text.inputs['Strings'])
         attr_field=N.new('GeometryNodeInputNamedAttribute');attr_field.data_type='FLOAT';L.new(text.outputs['String'],attr_field.inputs['Name'])
+        control_fields[key]=attr_field.outputs['Attribute']
         value=N.new('GeometryNodeSampleIndex');value.data_type='FLOAT';value.domain='POINT';L.new(controls.outputs['Geometry'],value.inputs['Geometry']);L.new(attr_field.outputs['Attribute'],value.inputs['Value']);L.new(nearest.outputs['Index'],value.inputs['Index']);fields[key]=value.outputs['Value']
     # Delete mesh edges to create connected enabled runs, capped only at real gaps.
-    wire=N.new('GeometryNodeCurveToMesh');L.new(position_store.outputs['Geometry'],wire.inputs['Curve'])
+    from . import sidewalk_panels
+    columns_enabled=N.new('FunctionNodeBooleanMath');columns_enabled.operation='AND';L.new(inp.outputs['Sidewalk panels'],columns_enabled.inputs[0]);L.new(inp.outputs['Use vertex controls'],columns_enabled.inputs[1])
+    column_profile=sidewalk_panels.columns(g,profile_us.outputs['Geometry'],controls.outputs['Geometry'],control_fields['width'],columns_enabled.outputs[0],inp.outputs['Slab width'],inp.outputs['Joint gap'])
+    L.new(column_profile,orient.inputs['Geometry'])
+    panel_path=sidewalk_panels.prepare(g,position_store.outputs['Geometry'])
+    wire=N.new('GeometryNodeCurveToMesh');L.new(panel_path,wire.inputs['Curve'])
     disabled=N.new('ShaderNodeMath');disabled.operation='LESS_THAN';disabled.inputs[1].default_value=.5;L.new(fields['enabled'],disabled.inputs[0])
-    delete_edges=N.new('GeometryNodeDeleteGeometry');delete_edges.domain='EDGE';L.new(wire.outputs['Mesh'],delete_edges.inputs['Geometry']);L.new(disabled.outputs[0],delete_edges.inputs['Selection'])
-    segments=N.new('GeometryNodeMeshToCurve');L.new(delete_edges.outputs['Geometry'],segments.inputs['Mesh'])
+    delete_edges=N.new('GeometryNodeDeleteGeometry');delete_edges.domain='EDGE';L.new(wire.outputs['Mesh'],delete_edges.inputs['Geometry']);active_disabled=N.new('FunctionNodeBooleanMath');active_disabled.operation='AND';L.new(disabled.outputs[0],active_disabled.inputs[0]);L.new(inp.outputs['Use vertex controls'],active_disabled.inputs[1]);L.new(active_disabled.outputs[0],delete_edges.inputs['Selection'])
+    panel_curves=sidewalk_panels.curves(g,delete_edges.outputs['Geometry'],inp.outputs['Sidewalk panels'],inp.outputs['Slab length'],inp.outputs['Joint gap'])
     normal_attr=N.new('GeometryNodeInputNamedAttribute');normal_attr.data_type='FLOAT_VECTOR';normal_attr.inputs['Name'].default_value='wb_edge_normal'
-    segment_normals=N.new('GeometryNodeSetCurveNormal');segment_normals.inputs['Mode'].default_value='Free';L.new(segments.outputs['Curve'],segment_normals.inputs['Curve']);L.new(normal_attr.outputs['Attribute'],segment_normals.inputs['Normal'])
+    segment_normals=N.new('GeometryNodeSetCurveNormal');segment_normals.inputs['Mode'].default_value='Free';L.new(panel_curves,segment_normals.inputs['Curve']);L.new(normal_attr.outputs['Attribute'],segment_normals.inputs['Normal'])
     masked_sweep=N.new('GeometryNodeCurveToMesh');masked_sweep.inputs['Fill Caps'].default_value=True;L.new(segment_normals.outputs['Curve'],masked_sweep.inputs['Curve']);L.new(use_divided_profile.outputs['Output'],masked_sweep.inputs['Profile Curve'])
-    choose_sweep=N.new('GeometryNodeSwitch');choose_sweep.input_type='GEOMETRY';L.new(inp.outputs['Use vertex controls'],choose_sweep.inputs['Switch']);L.new(sweep.outputs['Mesh'],choose_sweep.inputs['False']);L.new(masked_sweep.outputs['Mesh'],choose_sweep.inputs['True'])
+    choose_sweep=N.new('GeometryNodeSwitch');choose_sweep.input_type='GEOMETRY';use_segment_sweep=N.new('FunctionNodeBooleanMath');use_segment_sweep.operation='OR';L.new(inp.outputs['Use vertex controls'],use_segment_sweep.inputs[0]);L.new(inp.outputs['Sidewalk panels'],use_segment_sweep.inputs[1]);L.new(use_segment_sweep.outputs[0],choose_sweep.inputs['Switch']);L.new(sweep.outputs['Mesh'],choose_sweep.inputs['False']);L.new(masked_sweep.outputs['Mesh'],choose_sweep.inputs['True'])
     u_attr=N.new('GeometryNodeInputNamedAttribute');u_attr.data_type='FLOAT';u_attr.inputs['Name'].default_value='wb_profile_u'
     x_attr=N.new('GeometryNodeInputNamedAttribute');x_attr.data_type='FLOAT';x_attr.inputs['Name'].default_value='wb_profile_x'
     width_product=N.new('ShaderNodeMath');width_product.operation='MULTIPLY';L.new(fields['width'],width_product.inputs[0]);L.new(inp.outputs['Profile width scale'],width_product.inputs[1])
@@ -224,14 +232,15 @@ def add_extrusion(scene,road,kind):
     if collection is None:collection=bpy.data.collections.new('ROADLAB_FEATURES');scene.collection.children.link(collection)
     profiles=next((c for c in scene.collection.children if c.name.split('.')[0]=='WB_EDITABLE_PROFILES'),None)
     if profiles is None:profiles=bpy.data.collections.new('WB_EDITABLE_PROFILES');scene.collection.children.link(profiles)
-    coords={'curb':[(0,0),(.035,.1324),(.065,.1524),(.32,.1524),(.32,0)],'sidewalk':[(.32,.1524),(2.52,.1524),(2.52,.0524),(.32,.0524)],'grass':[(0,0),(1.2,0)]}[kind]
+    coords={'curb':[(0,0),(.035,.1324),(.065,.1524),(.32,.1524),(.32,0)],'sidewalk':[(.32,.1524),(2.52,.1524),(2.52,-.0476),(.32,-.0476)],'grass':[(0,0),(1.2,0)]}[kind]
     curve=bpy.data.curves.new('WB_Profile_'+kind,'CURVE');curve.dimensions='2D';curve.fill_mode='NONE';spline=curve.splines.new('POLY');spline.points.add(len(coords)-1);spline.use_cyclic_u=kind!='grass'
     for p,(x,y) in zip(spline.points,coords):p.co=(x,y,0,1)
     profile=bpy.data.objects.new('WB_Profile_'+kind,curve);profiles.objects.link(profile);profile.hide_render=True;profile.hide_set(True);profile['wb_native_feature']='profile'
+    if kind=='sidewalk':profile['roadlab_slab_foundation_upgraded']=True
     obj=bpy.data.objects.new('WB_'+kind+'_'+road.name,bpy.data.meshes.new('WB_'+kind));collection.objects.link(obj);obj['wb_native_feature']=kind
     mod=obj.modifiers.new('WB optional '+kind+' extrusion','NODES');mod.node_group=extrusion_group();set_input(mod,'Road',road);set_input(mod,'Profile curve',profile);set_input(mod,'Precise viewport cleanup',scene.wb_native.precise_cleanup);set_input(mod,'Material',material({'curb':'concrete','sidewalk':'sidewalk','grass':'grass'}[kind]));
     if kind=='curb':set_input(mod,'Flatten curb at crossing',True)
-    if kind=='sidewalk':set_input(mod,'Safe sidewalk offset',True)
+    if kind=='sidewalk':set_input(mod,'Safe sidewalk offset',True);set_input(mod,'Sidewalk panels',True);obj['roadlab_panels_upgraded']=True
     if kind=='grass':
         from .grass_surface import configure
         configure(scene,obj,mod)
@@ -249,3 +258,18 @@ def simplify_sidewalk(obj):
     if modifier is None:modifier=obj.modifiers.new('RoadLab Planar Slabs','DECIMATE')
     modifier.decimate_type='DISSOLVE';modifier.angle_limit=.00174533
     modifier.use_dissolve_boundaries=True;modifier.delimit={'MATERIAL','SEAM'}
+
+
+def upgrade_sidewalk_foundation(obj):
+    """Only upgrade untouched stock profiles; preserve artist-authored profiles."""
+    from .native_contacts import input_value
+    for modifier in obj.modifiers:
+        if modifier.type!='NODES' or not modifier.node_group or not modifier.node_group.name.startswith('WB_EXTENSION_BORDER_EXTRUSION'):continue
+        profile=input_value(modifier,'Profile curve')
+        if not profile or profile.get('roadlab_slab_foundation_upgraded'):continue
+        splines=profile.data.splines
+        stock=[(.32,.1524),(2.52,.1524),(2.52,.0524),(.32,.0524)]
+        if len(splines)==1 and splines[0].type=='POLY' and len(splines[0].points)==4 and all(abs(p.co.x-x)<1e-6 and abs(p.co.y-y)<1e-6 for p,(x,y) in zip(splines[0].points,stock)):
+            for p in list(splines[0].points)[2:]:p.co.y=-.0476
+            profile.data.update_tag()
+        profile['roadlab_slab_foundation_upgraded']=True

@@ -48,8 +48,20 @@ jobs:
         run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_surface_bounds_blender.py
       - name: Test offline PBR materials
         run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_pbr_materials_blender.py
+      - name: Test lane pocket taper logic
+        run: python road-lab-updater/tests/test_lane_pockets.py
+      - name: Test sidewalk panel topology
+        run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_sidewalk_panels_blender.py
+      - name: Test lane pocket geometry and markings
+        run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_lane_pockets_blender.py
+      - name: Test lane preview isolation and realization
+        run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_lane_add_preview_blender.py
       - name: Test example World preservation
         run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_example_world_blender.py
+      - name: Test curved lane pocket markings
+        run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_curved_lane_pocket_blender.py
+      - name: Test through lanes and receiving merges
+        run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_through_lane_blender.py
       - name: Validate and build repository
         env:
           BLENDER: /tmp/roadlab-blender/blender

@@ -143,7 +143,11 @@ def patch_grid(marking,max_step=.4):
     from math import ceil
     if marking.get('path'):
         from mathutils import Vector
-        path=[Vector(p) for p in marking['path']];verts=[];uv=[];distance=0.;length=marking['size'][1];width=marking['size'][0]
+        source=[Vector(p) for p in marking['path']];path=[]
+        for a,b in zip(source,source[1:]):
+            steps=max(1,ceil((b-a).length/max_step))
+            path.extend(a+(b-a)*(i/steps) for i in range(steps))
+        path.append(source[-1]);verts=[];uv=[];distance=0.;length=marking['size'][1];width=marking['size'][0]
         period=manifest()[marking['asset']]['physical_canvas_m'][1]
         repeat=marking['asset'] in ('broken_white','dotted_white')
         for i,p in enumerate(path):

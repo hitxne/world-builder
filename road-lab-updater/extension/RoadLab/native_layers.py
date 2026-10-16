@@ -75,6 +75,7 @@ def refresh_stack(model):
     offset=[0.]*len(model.data.vertices)
     for layer in model.wb_layers:
         base=prefix(layer);gaps=read(model,base+'offset');widths=read(model,base+'width');enabled=read(model,base+'enabled')
+        if layer.enabled and layer.kind=='sidewalk':offset=[o+.003*e for o,e in zip(offset,enabled)]
         write(model,base+'stack',offset)
         if layer.enabled:
             offset=[o+(w+gap)*e for o,w,gap,e in zip(offset,widths,gaps,enabled)]
@@ -269,6 +270,11 @@ class WB_PT_layer_controls(bpy.types.Panel):
                 for action,label in [('READ','Read first'),('DISABLE','Exclude'),('RESTORE','Include')]:
                     op=row.operator('wb.native_vertex_settings',text=label);op.action=action;op.uid=layer.uid
             col=box.column();col.enabled=context.mode=='OBJECT' or bool(indices)
+            if layer.kind=='sidewalk' and layer.object:
+                from .native_extension import draw_input
+                for mod in layer.object.modifiers:
+                    if mod.type=='NODES' and mod.node_group and mod.node_group.name.startswith('WB_EXTENSION_BORDER_EXTRUSION'):
+                        for name in ('Sidewalk panels','Slab length','Slab width','Joint gap'):draw_input(box,mod,name,name if name=='Sidewalk panels' else name+' (m)')
             col.prop(layer,'vertex_enabled');col.prop(layer,'width');col.prop(layer,'offset');col.prop(layer,'zpos',text='Inner height offset (m)' if layer.kind=='grass' else 'Height offset (m)')
 
 class WB_PT_curbs(WB_PT_layer_controls):bl_idname='WB_PT_curbs';bl_label='Curbs';bl_order=0;kind='curb'
@@ -295,12 +301,20 @@ def upgrade_layers(_unused):
     migrate_saved_data()
     for scene in bpy.data.scenes:
         if any(o.get('wb_native_feature') in KINDS for o in scene.objects):migrate_scene(scene)
-        from .native_extrusion import extrusion_group,simplify_sidewalk
+        from .native_extrusion import extrusion_group,simplify_sidewalk,upgrade_sidewalk_foundation
         for obj in scene.objects:
             if obj.get('wb_native_feature') in ('curb','sidewalk'):
                 for mod in obj.modifiers:
                     if mod.type=='NODES' and mod.node_group and mod.node_group.name.startswith('WB_EXTENSION_BORDER_EXTRUSION'):mod.node_group=extrusion_group()
-            if obj.get('wb_native_feature')=='sidewalk':simplify_sidewalk(obj)
+            if obj.get('wb_native_feature')=='sidewalk':
+                simplify_sidewalk(obj);upgrade_sidewalk_foundation(obj)
+                for mod in obj.modifiers:
+                    if mod.type=='NODES' and mod.node_group and mod.node_group.name.startswith('WB_EXTENSION_BORDER_EXTRUSION'):
+                        if not obj.get('roadlab_panels_upgraded'):
+                            set_input(mod,'Sidewalk panels',True);obj['roadlab_panels_upgraded']=True
+
+        for model in scene.objects:
+            if model.get('wb_layer_model'):refresh_stack(model)
 
 def deferred_upgrade():
     """Addon registration runs under Blender's restricted data context."""

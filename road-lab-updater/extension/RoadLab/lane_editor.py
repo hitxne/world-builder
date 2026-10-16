@@ -268,7 +268,11 @@ def _rebuild(obj,scene,force=False):
                 if key(start)!=key(pa):paint_settings['crosswalk_outgoing']=False;paint_settings['control_outgoing']='NONE'
                 if key(finish) in stop_nodes:paint_settings['control_incoming']='STOP'
                 if key(start) in stop_nodes:paint_settings['control_outgoing']='STOP'
-                segment_plans=lane_markings.plan(start,finish,entries(config['incoming'],'i'),entries(config['outgoing'],'o'),width,side,config['median'],clearance(start,width,finish),clearance(finish,width,start),config['spacing'],**paint_settings,allowed_incoming=available(start,finish),allowed_outgoing=available(finish,start),junction_start=len(nodes.get(key(start),[]))>=3 or key(start) in stop_nodes,junction_end=len(nodes.get(key(finish),[]))>=3 or key(finish) in stop_nodes,emerging_incoming=[i for i,row in enumerate(config['incoming']) if row.get('entry')=='ADDED'],emerging_outgoing=[i for i,row in enumerate(config['outgoing']) if row.get('entry')=='ADDED'])
+                from . import lane_pocket_markings
+                start_width=lane_pocket_markings.effective_width(obj,config,start,width);end_width=lane_pocket_markings.effective_width(obj,config,finish,width)
+                segment_plans=lane_markings.plan(start,finish,entries(config['incoming'],'i'),entries(config['outgoing'],'o'),width,side,config['median'],clearance(start,start_width,finish),clearance(finish,end_width,start),config['spacing'],**paint_settings,allowed_incoming=available(start,finish),allowed_outgoing=available(finish,start),junction_start=len(nodes.get(key(start),[]))>=3 or key(start) in stop_nodes,junction_end=len(nodes.get(key(finish),[]))>=3 or key(finish) in stop_nodes,emerging_incoming=[i for i,row in enumerate(config['incoming']) if row.get('entry')=='ADDED'],emerging_outgoing=[i for i,row in enumerate(config['outgoing']) if row.get('entry')=='ADDED'])
+                from . import lane_pocket_markings
+                segment_plans=lane_pocket_markings.adapt(obj,config,segment_plans,side)
                 for co,other in ((start,finish),(finish,start)):
                     if key(co) not in bends or key(co) in stop_nodes:continue
                     neighbor=max(nodes[key(co)],key=lambda n:(Vector(n)-Vector(co)).normalized().dot((Vector(other)-Vector(co)).normalized()))
@@ -279,7 +283,7 @@ def _rebuild(obj,scene,force=False):
                         semantic=tuple(role[:3] if family=='divider' else role[:2])
                         if semantic in seen:continue
                         seen.add(semantic);lateral=(Vector(mark['center'])-Vector(co)).dot(normal)
-                        arm.append(dict(family=family,flow=1 if Vector((*mark['forward'],0)).dot(u)>0 else -1,asset=mark['asset'],fraction=.5+lateral/(Vector(bends[key(co)][2][neighbor][-1])-Vector(bends[key(co)][2][neighbor][0])).length,width=mark['size'][0]))
+                        arm.append(dict(family=family,flow=1 if Vector((*mark['forward'],0)).dot(u)>0 else -1,asset=mark['asset'],fraction=.5+lateral/(Vector(bends[key(co)][2][neighbor][-1])-Vector(bends[key(co)][2][neighbor][0])).length,width=mark['size'][0],edge_inset=max(.05,(width-sum(r['width'] for field in ('incoming','outgoing') for r in config[field])-config['median'])/2)))
                     bend_arms[(key(co),neighbor)]=arm
                 for mark in segment_plans:
                     if mark['role'][0]=='crosswalk':
@@ -287,7 +291,9 @@ def _rebuild(obj,scene,force=False):
                     mark['id']=hashlib.sha256(json.dumps([config['endpoints'],part,mark['role']],sort_keys=True).encode()).hexdigest()
                     if mark['id'] not in hidden:plans.append(mark)
         except ValueError as error:warnings.append(str(error))
-    connectors,notes=lane_bends.connect(bends,bend_arms,hidden);plans.extend(connectors);warnings.extend(notes)
+    connectors,notes=lane_bends.connect(bends,bend_arms,hidden)
+    from . import lane_pocket_markings
+    connectors=lane_pocket_markings.adapt_connectors(obj,connectors,side);plans.extend(connectors);warnings.extend(notes)
     obj['roadlab_generated_marking_catalog']=json.dumps(plans)
     from . import crosswalk_ramps
     crosswalk_ramps.rebuild(obj,scene,crossing_definitions)
@@ -976,7 +982,8 @@ class ROADLAB_WST_lanes(bpy.types.WorkSpaceTool):
     @staticmethod
     def draw_settings(context,layout,tool):
         layout.label(text='Shift-click: select section | Click: lane window')
-        layout.operator('roadlab.lane_window',text='Open lanes')
+        layout.operator('roadlab.add_lane',text='Add lane',icon='ADD')
+        layout.operator('roadlab.lane_window',text='Lane details')
 
 
 class ROADLAB_PT_lanes(bpy.types.Panel):
@@ -985,7 +992,12 @@ class ROADLAB_PT_lanes(bpy.types.Panel):
     def poll(cls,context):return ROADLAB_OT_lane_pick.poll(context)
     def draw(self,context):
         self.layout.operator('wm.tool_set_by_id',text='Lane toolbar tool').name='roadlab.lanes'
-        self.layout.operator('roadlab.lane_window',text='Open lane window')
+        self.layout.operator('roadlab.add_lane',text='Add lane',icon='ADD')
+        self.layout.operator('roadlab.lane_window',text='Lane details')
+        for index,pocket in enumerate(json.loads(road(context).get('roadlab_lane_pockets','[]'))):
+            if pocket.get('receiving'):continue
+            label='Through lane + merge' if pocket.get('movement')=='THROUGH' else 'Lane pocket'
+            row=self.layout.row(align=True);row.label(text=f'{label} · {pocket["width"]:.1f} m');row.operator('roadlab.remove_lane_pocket',text='',icon='TRASH').pocket_id=pocket['id']
         for warning in json.loads(road(context).get('roadlab_marking_warnings','[]')):self.layout.label(text=warning,icon='ERROR')
 
 def refresh_loaded_markings():

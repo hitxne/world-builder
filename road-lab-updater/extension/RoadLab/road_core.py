@@ -6,7 +6,7 @@ import bpy
 from mathutils import Vector
 from .native_extension import socket,set_input
 EPS=1e-6
-SCHEMA=7
+SCHEMA=8
 _busy=False
 _pending={}
 _last_edit=0.
@@ -108,16 +108,17 @@ def _rebuild(road,force=False):
     items=point_settings.sync(road)
     from .lane_editor import inherit_extensions
     inherit_extensions(road);items=point_settings.records(road)
-    settings=values(road);paths=[];tilts=[];offset=0
+    settings=values(road);paths=[];tilts=[];ids_by_path=[];offset=0
     for spline in road.data.splines:
         if spline.type!='POLY':raise ValueError('Prototype accepts POLY splines only')
+        ids_by_path.append([items[offset+i]['id'] for i in range(len(spline.points))])
         radii=[items[offset+i].get('width',settings['road width']*p.radius)/settings['road width'] for i,p in enumerate(spline.points)]
         offset+=len(spline.points)
         angles=[float(p.tilt) for p in spline.points]
         coords=[tuple(p.co[:3]) for p in spline.points]
         if spline.use_cyclic_u and coords:coords.append(coords[0]);radii.append(radii[0]);angles.append(angles[0])
         paths.append((coords,radii));tilts.append(angles)
-    shape_signature=hashlib.sha256(json.dumps([SCHEMA,paths,tilts,settings,[(list(k),v) for k,v in point_settings.junction_overrides(road).items()],[(list(k),v) for k,v in point_settings.corner_lifts(road).items()]],sort_keys=True).encode()).hexdigest()
+    shape_signature=hashlib.sha256(json.dumps([SCHEMA,paths,tilts,settings,road.get('roadlab_lane_pockets','[]'),[(list(k),v) for k,v in point_settings.junction_overrides(road).items()],[(list(k),v) for k,v in point_settings.corner_lifts(road).items()]],sort_keys=True).encode()).hexdigest()
     signature=hashlib.sha256((shape_signature+road.get('roadlab_sculpt_field','')+road.get('roadlab_bridge_cuts','')).encode()).hexdigest()
     output=road.get('roadlab_core_mesh');outline=road.get('roadlab_core_outline')
     if output is None or outline is None:raise ValueError('Generated references are missing; reopen the prototype scene')
@@ -131,15 +132,31 @@ def _rebuild(road,force=False):
         if road.get('roadlab_core_error'):road['roadlab_core_error']=''
         refresh_markings(road)
         return
-    verts,faces,regions,loops,report=build(paths,settings['road width'],settings['resolution'],{k:settings['corner '+k] for k in ('NW','NE','SW','SE')},point_settings.junction_overrides(road))
+    derived_overrides=point_settings.junction_overrides(road);junction_shifts={};source_positions={}
+    pockets=json.loads(road.get('roadlab_lane_pockets','[]'))
+    if pockets:
+        from . import lane_pockets
+        nodes,_,_=graph(paths,settings['road width'])
+        junction_shifts=lane_pockets.junction_shifts(paths,ids_by_path,pockets,[p for p,n in nodes.items() if len(n)>=3],settings['road width'],max(settings['corner '+k] for k in ('NW','NE','SW','SE')))
+        derived_overrides={(co[0]+junction_shifts.get(co,(0,0))[0],co[1]+junction_shifts.get(co,(0,0))[1],co[2]):v for co,v in derived_overrides.items()}
+        paths,tilts,pocket_details=lane_pockets.expand(paths,ids_by_path,pockets,settings['road width'],tilts,[p for p,n in nodes.items() if len(n)>=3],max(settings['corner '+k] for k in ('NW','NE','SW','SE')))
+        source_positions={key(co):key(p) for detail in pocket_details for co,p in detail['source_positions'].items()}
+        derived_overrides={source_positions.get(co,co):v for co,v in point_settings.junction_overrides(road).items()}
+    verts,faces,regions,loops,report=build(paths,settings['road width'],settings['resolution'],{k:settings['corner '+k] for k in ('NW','NE','SW','SE')},derived_overrides)
     from . import road_heightfield,road_sculpt
     from . import curve_bank
     if any(abs(a)>1e-8 for row in tilts for a in row):verts=[(x,y,z+curve_bank.displacement([p[0] for p in paths],tilts,settings['road width'],x,y)) for x,y,z in verts]
-    lifts=point_settings.corner_lifts(road)
+    lifts={source_positions.get(co,co):v for co,v in point_settings.corner_lifts(road).items()}
     verts=[(x,y,z+road_heightfield.corner_displacement(x,y,report['radius_limits'],lifts)) for x,y,z in verts]
     road_sculpt.remember(road,verts,faces,shape_signature)
     sculpt=road_heightfield.decode(road.get('roadlab_sculpt_field',''))
     if sculpt:verts=[(x,y,z+road_heightfield.sample(sculpt,x,y)) for x,y,z in verts]
+    if source_positions:
+        source_junctions={p:co for co,p in source_positions.items()}
+        for corner in report['radius_limits']:
+            current=key(corner.get('junction',(0,0,0)))
+            if current in source_junctions:corner['geometry_junction']=corner['junction'];corner['junction']=list(source_junctions[current])
+    report['lane_pockets']=len(pockets)
     report['sculpt_samples']=len(sculpt);report['lifted_corners']=sum(bool(v) for values in lifts.values() for v in values.values())
     mesh=bpy.data.meshes.new('RoadLab Core Mesh');mesh.from_pydata(verts,[],faces);mesh.update()
     for polygon in mesh.polygons:polygon.use_smooth=True

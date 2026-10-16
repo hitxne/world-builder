@@ -1,4 +1,4 @@
-bl_info={'name':'RoadLab','author':'World Builder','version':(0,18,14),'blender':(5,1,0),'location':'View3D > Sidebar > RoadLab','category':'Object'}
+bl_info={'name':'RoadLab','author':'World Builder','version':(0,18,15),'blender':(5,1,0),'location':'View3D > Sidebar > RoadLab','category':'Object'}
 import bpy,json,math
 from pathlib import Path
 from bpy.props import StringProperty,FloatProperty,BoolProperty,EnumProperty,FloatVectorProperty,CollectionProperty,PointerProperty
@@ -390,6 +390,8 @@ def register():
  road_core.register()
  from . import lane_editor
  lane_editor.register()
+ from . import lane_add
+ lane_add.register()
  from . import marking_stamp
  marking_stamp.register()
  from . import road_connections
@@ -408,6 +410,8 @@ def unregister():
  from . import marking_stamp
  marking_stamp.unregister()
  from . import lane_editor
+ from . import lane_add
+ lane_add.unregister()
  lane_editor.unregister()
  from . import road_core
  road_core.unregister()
