@@ -1,6 +1,6 @@
 # RoadLab Blender extension and update repository
 
-The full RoadLab 0.18.21 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
+The full RoadLab 0.18.22 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
 
 ## Install once
 
@@ -320,3 +320,7 @@ Actual Blender renders with polygon edges shown:
 ![Folded sidewalk corner before the correction](docs/sidewalk-corner-before.png)
 
 ![Ordered slab boundaries after the correction](docs/sidewalk-corner-after.png)
+
+## Saved sidewalk corner repair (0.18.22)
+
+Opening a scene now replaces the older sidewalk offset node graph with the corrected corner frames. The previous version accepted schema 18 as current, so existing .blend files could keep folded black corner fans despite updating the add-on. Layer settings and modifier socket identifiers are preserved. Update, restart Blender, and reopen the scene; no layer recreation is required.

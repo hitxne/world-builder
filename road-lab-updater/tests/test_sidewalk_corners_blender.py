@@ -71,4 +71,14 @@ for angle,spacing,width in [(45,1,3.2),(90,1,3.2),(135,1,3.2),(90,.5,3.2),(90,2,
         for name in ('RoadLab Planar Slabs','RoadLab Surface Finish'):sidewalk.modifiers[name].show_viewport=stage=='full'
         bpy.context.view_layer.update();check(sidewalk)
     print('SIDEWALK_CORNER_CASE_PASS',angle,spacing,width,flush=True)
+# The four-way example has separate splines, crosswalk ramps and dense profiles.
+# Exercise all cleanup paths; manifold edges alone do not detect folded tops.
+bpy.ops.roadlab.load_example()
+road=bpy.context.scene.wb_native.road
+sidewalk=next(l.object for l in native_layers.model_for(road).wb_layers if l.kind=='sidewalk')
+for stage in ('raw','fast','precise'):
+    for name in ('RoadLab Planar Slabs','RoadLab Surface Finish'):sidewalk.modifiers[name].show_viewport=stage!='raw'
+    set_input(sidewalk.modifiers[0],'Precise viewport cleanup',stage=='precise')
+    bpy.context.view_layer.update();check(sidewalk)
+    print('SIDEWALK_JUNCTION_CASE_PASS',stage,flush=True)
 print('SIDEWALK_CORNERS_PASS',flush=True)

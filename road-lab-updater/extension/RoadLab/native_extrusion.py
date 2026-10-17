@@ -7,7 +7,9 @@ from .native_extension import socket,set_input,road_modifier
 
 def extrusion_group():
     name='WB_EXTENSION_BORDER_EXTRUSION';g=bpy.data.node_groups.get(name)
-    if g and g.get('wb_schema',0)>=18 and any(s.name=='Layer prefix' for s in g.interface.items_tree):return g
+    # Saved .blend files retain their node graphs independently of addon updates.
+    # Schema 18 still contains the folding dense-point offset frames.
+    if g and g.get('wb_schema',0)>=19 and any(s.name=='Layer prefix' for s in g.interface.items_tree):return g
     if g and g.library:g=g.copy();g.name=name+'_v08'
     if g:g.nodes.clear()
     else:g=bpy.data.node_groups.new(name,'GeometryNodeTree')
