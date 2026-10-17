@@ -1,0 +1,50 @@
+"""Stroke-local road height, perimeter and paint updates without compilation."""
+import bpy
+from mathutils import Vector
+from mathutils.kdtree import KDTree
+from . import road_heightfield as field
+from .sculpt_preview import HeightPreview
+from .road_grade_preview import RoadGradePreview
+
+class RoadStrokePreview:
+    def __init__(self,scene,road):
+        self.road=road;self.values=field.decode(road.get('roadlab_sculpt_field',''));self.base_cache={}
+        from .road_sculpt import base_tree
+        self.tree=base_tree(road)
+        self.grade=RoadGradePreview(scene,road)
+        self.surface=HeightPreview(road,road['roadlab_core_mesh'],self.values)
+        outline=road['roadlab_core_outline'];self.outline=outline;self.original_outline=outline.data
+        outline.data=outline.data.copy();self.points=[];self.rest=[]
+        for spline in outline.data.splines:
+            for p in spline.points:
+                self.points.append(p);self.rest.append(p.co.z-field.sample(self.values,p.co.x,p.co.y))
+        self.index=KDTree(len(self.points))
+        for i,p in enumerate(self.points):self.index.insert(Vector((p.co.x,p.co.y,0)),i)
+        self.index.balance()
+        self.paint=[]
+        for key in ('roadlab_marking_object','roadlab_manual_marking_object'):
+            target=road.get(key)
+            if target is not None and target.type=='MESH' and target.data.polygons and target.matrix_world==road.matrix_world:
+                self.paint.append(HeightPreview(road,target,self.values))
+    def base_height(self,x,y):
+        key=(x,y)
+        if key not in self.base_cache:
+            p=self.tree.ray_cast(Vector((x,y,100000)),Vector((0,0,-1)))[0]
+            self.base_cache[key]=p.z if p is not None else None
+        return self.base_cache[key]
+    def stamp(self,center,mode,radius,strength,dt,target=None):
+        patch=field.stamp_patch(self.values,center,radius,strength,dt,mode,self.base_height,target)
+        if not patch:return False
+        self.values.update(patch);self.update(center,radius);return True
+    def update(self,center,radius):
+        self.surface.update(center,radius)
+        for paint in self.paint:paint.update(center,radius)
+        for _,i,_ in self.index.find_range(Vector((center[0],center[1],0)),radius+1.5):
+            p=self.points[i];p.co.z=self.rest[i]+field.sample(self.values,p.co.x,p.co.y)
+        self.outline.data.update_tag();self.grade.update(center,radius)
+    def close(self,commit=False):
+        if commit:self.road['roadlab_sculpt_field']=field.encode(self.values)
+        self.grade.close();self.surface.close()
+        for paint in self.paint:paint.close()
+        temporary=self.outline.data;self.outline.data=self.original_outline
+        if temporary.users==0:bpy.data.curves.remove(temporary)

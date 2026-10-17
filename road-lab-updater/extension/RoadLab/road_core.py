@@ -131,6 +131,8 @@ def _rebuild(road,force=False):
     for helper in (output,outline):
         if helper.matrix_world!=road.matrix_world:helper.matrix_world=road.matrix_world.copy()
     if not force and road.get('roadlab_core_signature')==signature:
+        from . import road_draw_preview
+        road_draw_preview.remember(road,settings['road width'])
         if road.get('roadlab_core_error'):road['roadlab_core_error']=''
         refresh_markings(road)
         return
@@ -185,6 +187,8 @@ def _rebuild(road,force=False):
         spline=outline.data.splines.new('POLY');spline.points.add(len(loop)-1);spline.use_cyclic_u=True
         spline.points.foreach_set('co',[c for index in loop for c in (*verts[index],1)])
     outline.data.update_tag();road['roadlab_core_signature']=signature;road['roadlab_core_report']=json.dumps(report);road['roadlab_core_error']='';road.update_tag()
+    from . import road_draw_preview
+    road_draw_preview.remember(road,settings['road width'])
     refresh_markings(road)
 
 
@@ -276,8 +280,8 @@ def is_pending(scene):return scene.as_pointer() in _pending
 
 def flush_pending(force=False,live=False):
     global _busy,_defer_markings
-    from . import terrain_sculpt
-    if terrain_sculpt.is_active():return False
+    from . import terrain_sculpt,road_sculpt
+    if terrain_sculpt.is_active() or road_sculpt.is_painting():return False
     if _busy or (not force and not live and interaction_active()):return False
     items=list(_pending.values());_pending.clear();_busy=True;_defer_markings=True
     try:
@@ -344,6 +348,9 @@ def synchronize(scene,depsgraph):
     # Batch scripts have no interactive transform. Keep deterministic evaluation
     # there; actual modal transforms always defer, including in scheduler tests.
     active=interaction_active()
+    if active:
+        from . import road_draw_preview
+        road_draw_preview.queue(scene,roads)
     if bpy.app.background and not active:flush_pending();return
     from . import road_sculpt
     live=active and not road_sculpt.is_painting() and live_allowed(scene,roads)
@@ -393,6 +400,8 @@ def register():
     selected_points.register()
     from . import road_sculpt
     road_sculpt.register()
+    from . import road_draw_preview
+    road_draw_preview.register()
     if synchronize not in bpy.app.handlers.depsgraph_update_post:bpy.app.handlers.depsgraph_update_post.append(synchronize)
     if initialize_loaded_scene not in bpy.app.handlers.load_post:bpy.app.handlers.load_post.append(initialize_loaded_scene)
     for handlers in (bpy.app.handlers.save_pre,bpy.app.handlers.render_pre):
@@ -402,6 +411,8 @@ def unregister():
     if bpy.app.timers.is_registered(finish_edits):bpy.app.timers.unregister(finish_edits)
     from . import selected_points
     from . import road_sculpt
+    from . import road_draw_preview
+    road_draw_preview.unregister()
     road_sculpt.unregister()
     selected_points.unregister()
     from .core_terrain import unregister_properties

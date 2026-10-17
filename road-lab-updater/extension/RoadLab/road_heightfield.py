@@ -12,7 +12,8 @@ def encode(field):
     return json.dumps({'version':1,'cell':1.,'heights':[[*key,round(value,7)] for key,value in sorted(field.items()) if abs(value)>1e-7]},separators=(',',':'))
 def sample(field,x,y):
     a,b=math.floor(x),math.floor(y);u,v=x-a,y-b
-    return sum(field.get((a+i,b+j),0.)*(u if i else 1-u)*(v if j else 1-v) for i in (0,1) for j in (0,1))
+    return ((field.get((a,b),0.)*(1-u)+field.get((a+1,b),0.)*u)*(1-v)+
+            (field.get((a,b+1),0.)*(1-u)+field.get((a+1,b+1),0.)*u)*v)
 def stamp_patch(field,center,radius,strength,dt,mode,base_height,target=None):
     """Compute only changed samples, reading the unchanged field throughout smoothing."""
     if mode not in MODES or radius<=0 or strength<0 or dt<0:raise ValueError('Invalid road brush settings')

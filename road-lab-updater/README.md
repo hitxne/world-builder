@@ -1,6 +1,6 @@
 # RoadLab Blender extension and update repository
 
-The full RoadLab 0.18.19 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
+The full RoadLab 0.18.20 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
 
 ## Install once
 
@@ -259,3 +259,36 @@ Layer staging, profile editing and original terrain adapters use the same access
 helpers. Integer Compare nodes resolve typed operands instead of relying on
 indices that changed in 5.2. The release workflow tests both Blender versions
 before publishing the update feed.
+
+
+### 0.18.20 — road sculpt grading and bounded terrain falloff
+
+Road elevation brushes now update a temporary terrain surface during the stroke.
+Ground-contact edges drive the existing blend-distance falloff; bridge cuts stay
+excluded. Cached edge bindings update heights without running the terrain topology
+compiler per stamp. Finishing commits the graded quad terrain; cancel restores the
+previous terrain and road. Widening still uses a topology rebuild because its footprint
+changes. Terrain brushes continue to leave roads fixed.
+
+Terrain grading blends the road-edge and original ground heights directly with a
+smooth quintic falloff. It no longer extrapolates a steep edge slope into a hole or
+ridge outside the road. The terrain source plane and its sculpt field are preserved.
+Blender 5.1 and 5.2 remain supported.
+
+Brush hover feedback now uses Blender's native tool cursor callback instead of
+gizmo hit testing. Selecting a road or terrain sculpt tool shows its footprint on
+hover before the first click, including when viewport gizmos are hidden.
+
+Road raise/lower/flatten/smooth and bank sessions now keep sparse brush values in
+memory, update only nearby pavement/perimeter/paint samples, and grade nearby terrain
+through cached edge bindings. Road compilation, paint regeneration and field JSON
+serialization are deferred until the stroke finishes. The width brush batches point
+metadata synchronization across splines. Brush calculations run on timer events,
+coalescing mouse moves to the most recent cursor position. Width still recompiles
+its changing footprint; no whole-map viewport FPS guarantee is implied.
+
+Edit-mode road extension/movement queues a lightweight translucent blue ribbon for
+changed segments only. It is a provisional straight-segment footprint; final rounded
+junctions, terrain and markings still come from the normal compiler after placement.
+Mouse changes coalesce before ribbon generation, GPU batches are reused between
+changes, and committed edits replace the overlay with completed geometry.

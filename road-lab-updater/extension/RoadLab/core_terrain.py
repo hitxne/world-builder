@@ -16,7 +16,7 @@ def source_boundary(mesh):
     return verts,perimeter(verts,faces)
 
 def surface(terrain,roads,blend,spacing,state=None):
-    from . import terrain_quads as quad,road_heightfield,adaptive_terrain,terrain_sculpt
+    from . import terrain_quads as quad,road_heightfield,adaptive_terrain,terrain_sculpt,terrain_grading
     raw=terrain.data;raw.calc_loop_triangles();base=[tuple(v.co) for v in raw.vertices]
     source_tree=BVHTree.FromPolygons(base,[tuple(t.vertices) for t in raw.loop_triangles],all_triangles=True)
     base_verts,outer=source_boundary(raw)
@@ -71,7 +71,7 @@ def surface(terrain,roads,blend,spacing,state=None):
         z=(hit[0].z if hit[0] is not None else 0.)+road_heightfield.sample(sculpt,x,y)
         dist,road_z,index,t,q=nearest(Vector((x,y)))
         if dist<blend:
-            t=max(0.,min(1.,dist/max(blend,.1)));smooth=t*t*t*(t*(t*6-15)+10);z=road_z+(z-road_z)*smooth
+            z=terrain_grading.height(z,q.z,dist,blend)
         height_cache[key]=z;return z
     xmin=min(p[0] for p in base);xmax=max(p[0] for p in base);ymin=min(p[1] for p in base);ymax=max(p[1] for p in base)
     bounds=(xmin,ymin,xmax,ymax)
@@ -79,7 +79,7 @@ def surface(terrain,roads,blend,spacing,state=None):
     if not planar:
         for tri in raw.loop_triangles:
             ps=[base[i] for i in tri.vertices];features.append((min(p[0] for p in ps),min(p[1] for p in ps),max(p[0] for p in ps),max(p[1] for p in ps)))
-    topology_key=hashlib.sha256(json.dumps([7,[tuple(p) for p in points],polygons,signs,spacing,blend,terrain.roadlab_core_terrain_tolerance],sort_keys=True).encode()).hexdigest()
+    topology_key=hashlib.sha256(json.dumps([8,[tuple(p) for p in points],polygons,signs,spacing,blend,terrain.roadlab_core_terrain_tolerance],sort_keys=True).encode()).hexdigest()
     reused=bool(state and state['topology_key']==topology_key);dirty=terrain_sculpt.pending(terrain)
     refine=not reused or bool(dirty and dirty['refine']);local=False;retained=0
     if refine:
@@ -171,7 +171,7 @@ def rebuild(scene,force=False):
     others=[m for m in terrain.modifiers if not (m.type=='NODES' and m.node_group and m.node_group.name.startswith('ROADLAB_TERRAIN_CONTACT'))]
     if others:raise ValueError('New-core contact needs an unmodified heightfield plane; original terrain modifiers remain intact')
     from . import terrain_quads
-    signature=hashlib.sha256(json.dumps([7,terrain.get('roadlab_terrain_field',''),terrain.roadlab_core_terrain_tolerance,[(tuple(v.co)) for v in terrain.data.vertices],[list(p.vertices) for p in terrain.data.polygons],[list(row) for row in terrain.matrix_world],[(o.name,o.get('roadlab_core_signature'),terrain_quads.base_mesh(o['roadlab_core_mesh']).as_pointer(),[list(row) for row in o.matrix_world]) for o in roads],terrain.roadlab_core_blend,terrain.roadlab_core_terrain_spacing],sort_keys=True).encode()).hexdigest()
+    signature=hashlib.sha256(json.dumps([8,terrain.get('roadlab_terrain_field',''),terrain.roadlab_core_terrain_tolerance,[(tuple(v.co)) for v in terrain.data.vertices],[list(p.vertices) for p in terrain.data.polygons],[list(row) for row in terrain.matrix_world],[(o.name,o.get('roadlab_core_signature'),terrain_quads.base_mesh(o['roadlab_core_mesh']).as_pointer(),[list(row) for row in o.matrix_world]) for o in roads],terrain.roadlab_core_blend,terrain.roadlab_core_terrain_spacing],sort_keys=True).encode()).hexdigest()
     if not force and signature==terrain.get('roadlab_core_terrain_signature') and helper:
         terrain['roadlab_core_terrain_error']='';return
     verts,faces,report,state=surface(terrain,roads,terrain.roadlab_core_blend,terrain.roadlab_core_terrain_spacing,_STATE.get(terrain.as_pointer()))

@@ -19,7 +19,7 @@ def base_tree(road):
     if item['tree'] is None:item['tree']=BVHTree.FromPolygons(item['verts'],item['faces'])
     return item['tree']
 
-def apply_stamp(context,road,center,mode,radius,strength,dt,target=None,preview=False):
+def apply_stamp(context,road,center,mode,radius,strength,dt,target=None,preview=False,grade_preview=None):
     tree=base_tree(road)
     def base(x,y):
         hit=tree.ray_cast(Vector((x,y,100000)),Vector((0,0,-1)))
@@ -32,7 +32,9 @@ def apply_stamp(context,road,center,mode,radius,strength,dt,target=None,preview=
     if preview:
         from . import road_core
         previous=road_core._busy;road_core._busy=True
-        try:road_core.rebuild(road)
+        try:
+            road_core.rebuild(road)
+            if grade_preview is not None:grade_preview.update(center,radius)
         finally:road_core._busy=previous
     else:
         from .selected_points import notify
@@ -59,12 +61,13 @@ class ROADLAB_OT_sculpt(bpy.types.Operator):
         if self.region is None:return {'CANCELLED'}
         self.space=context.space_data;self.area=context.area;self.settings=context.scene.roadlab_road_brush
         if self.tool_mode!='CURRENT':self.settings.mode=self.tool_mode
+        self.grade_preview=None;self.stroke_preview=None
         self.mode=self.settings.mode;self.bank_snapshot=None;self.bank_anchor=None;self.bank_start=event.mouse_x
         xy=(event.mouse_x-self.region.x,event.mouse_y-self.region.y)
         self.one_stroke=self.tool_mode!='CURRENT'
         self.paint=event.type=='LEFTMOUSE' and event.value=='PRESS' and 0<=xy[0]<self.region.width and 0<=xy[1]<self.region.height
         from . import road_core
-        road_core.rebuild(self.road,True)
+        if self.road.as_pointer() not in _BASE or not self.road.get('roadlab_core_signature'):road_core.rebuild(self.road,True)
         _PAINTING=self.paint
         self.timer=context.window_manager.event_timer_add(.05,window=context.window)
         self.draw_handle=bpy.types.SpaceView3D.draw_handler_add(self.draw_brush,(), 'WINDOW','POST_VIEW')
@@ -76,6 +79,8 @@ class ROADLAB_OT_sculpt(bpy.types.Operator):
         if not (0<=xy[0]<self.region.width and 0<=xy[1]<self.region.height):return None
         rv=self.space.region_3d;origin=view3d_utils.region_2d_to_origin_3d(self.region,rv,xy);direction=view3d_utils.region_2d_to_vector_3d(self.region,rv,xy)
         inverse=self.road.matrix_world.inverted();local=inverse@origin;ray=(inverse.to_3x3()@direction).normalized()
+        if getattr(self,'stroke_preview',None) is not None:
+            return self.stroke_preview.surface.ray_cast(local,ray)
         helper=self.road['roadlab_core_mesh']
         key=(helper.data.as_pointer(),self.road.get('roadlab_core_signature'))
         if getattr(self,'_hit_key',None)!=key:
@@ -85,16 +90,21 @@ class ROADLAB_OT_sculpt(bpy.types.Operator):
         return found[0]
     def draw_brush(self):
         if self.center is None:return
-        import gpu
-        from gpu_extras.batch import batch_for_shader
-        p=self.center;r=self.settings.radius;matrix=self.road.matrix_world
-        points=[matrix@Vector((p.x+r*math.cos(i*2*math.pi/64),p.y+r*math.sin(i*2*math.pi/64),p.z+.06)) for i in range(65)]
-        shader=gpu.shader.from_builtin('UNIFORM_COLOR');batch=batch_for_shader(shader,'LINE_STRIP',{'pos':points})
-        gpu.state.blend_set('ALPHA');shader.bind();shader.uniform_float('color',(1.,.45,.08,.95));batch.draw(shader);gpu.state.blend_set('NONE')
+        from .brush_cursor import draw_rings
+        if self.stroke_preview is not None:height=self.stroke_preview.surface.height
+        else:
+            def height(x,y):
+                tree=getattr(self,'_hit_tree',None)
+                if tree is None:return None
+                p=tree.ray_cast(Vector((x,y,100000)),Vector((0,0,-1)))[0]
+                return p.z if p is not None else None
+        draw_rings(self.road,self.center,self.settings.radius,height,(1.,.45,.08,1))
     def finish(self,context,cancel=False):
         global _PAINTING
         _PAINTING=False
         context.window_manager.event_timer_remove(self.timer);bpy.types.SpaceView3D.draw_handler_remove(self.draw_handle,'WINDOW');self.area.header_text_set(None)
+        if self.stroke_preview is not None:self.stroke_preview.close(not cancel);self.stroke_preview=None
+        if self.grade_preview is not None:self.grade_preview.close();self.grade_preview=None
         if cancel:
             old=self.road.data;self.road.data=self.original_curve
             if old.users==0:bpy.data.curves.remove(old)
@@ -120,34 +130,35 @@ class ROADLAB_OT_sculpt(bpy.types.Operator):
             if self.paint:self.bank_snapshot=None;self.bank_anchor=None;self.bank_start=event.mouse_x
             if not self.paint:
                 if self.one_stroke:return self.finish(context)
+                if self.stroke_preview is not None:self.stroke_preview.close(True);self.stroke_preview=None
+                if self.grade_preview is not None:self.grade_preview.close();self.grade_preview=None
                 from . import road_core,core_terrain
                 core_terrain.rebuild(context.scene);road_core.flush_pending(force=True)
         if event.type in ('MOUSEMOVE','TIMER','LEFTMOUSE'):
             self.center=self.hit(context);now=time.monotonic()
-            if self.paint and self.center is not None and now-self.last>=.04:
+            if event.type=='TIMER' and self.paint and self.center is not None and now-self.last>=.04:
                 if self.target is None:self.target=self.center.z
                 try:
+                    if self.stroke_preview is None and self.mode!='WIDEN':
+                        from .road_stroke_preview import RoadStrokePreview
+                        self.stroke_preview=RoadStrokePreview(context.scene,self.road)
                     if self.mode=='WIDEN':
                         from . import road_authoring,road_core
                         previous=road_core._busy;road_core._busy=True
                         try:
                             road_authoring.widen(self.road,self.center.xy,self.settings.radius,self.settings.strength,now-self.last);road_core.rebuild(self.road)
+                            from . import core_terrain
+                            core_terrain.rebuild(context.scene)
                         finally:road_core._busy=previous
                     elif self.mode=='BANK':
                         from . import road_authoring,road_paths,road_core
                         if self.bank_snapshot is None:
-                            self.bank_snapshot=field.decode(self.road.get('roadlab_sculpt_field',''));self.bank_anchor=road_paths.closest(road_authoring.paths(self.road),self.center)
-                        tree=base_tree(self.road)
-                        def base(x,y):
-                            hit=tree.ray_cast(Vector((x,y,100000)),Vector((0,0,-1)))
-                            return hit[0].z if hit[0] is not None else None
+                            self.bank_snapshot=dict(self.stroke_preview.values);self.bank_anchor=road_paths.closest(road_authoring.paths(self.road),self.center)
                         angle=(self.mouse[0]-self.bank_start)*.003*self.settings.strength
-                        altered=field.bank(self.bank_snapshot,self.bank_anchor['point'],self.bank_anchor['tangent'],self.settings.radius,angle,base)
-                        self.road['roadlab_sculpt_field']=field.encode(altered)
-                        previous=road_core._busy;road_core._busy=True
-                        try:road_core.rebuild(self.road)
-                        finally:road_core._busy=previous
-                    else:apply_stamp(context,self.road,self.center.xy,self.mode,self.settings.radius,self.settings.strength,now-self.last,self.target,preview=True)
+                        altered=field.bank(self.bank_snapshot,self.bank_anchor['point'],self.bank_anchor['tangent'],self.settings.radius,angle,self.stroke_preview.base_height)
+                        self.stroke_preview.values.clear();self.stroke_preview.values.update(altered)
+                        self.stroke_preview.update(self.bank_anchor['point'],self.settings.radius)
+                    else:self.stroke_preview.stamp(self.center.xy,self.mode,self.settings.radius,self.settings.strength,now-self.last,self.target)
                 except (ValueError,RuntimeError) as exc:self.report({'ERROR'},str(exc));return self.finish(context,True)
                 self.last=now
             self.area.header_text_set(f'Road sculpt: {self.mode.title()} | Radius {self.settings.radius:.1f} m | LMB paint | Wheel size | Enter finish | Esc cancel')

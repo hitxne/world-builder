@@ -32,6 +32,10 @@ jobs:
           for test in road-lab-updater/tests/*_blender.py; do
             /tmp/roadlab-blender52/blender -b --factory-startup -t 4 --python-exit-code 1 --python "$test"
           done
+      - name: Test width brushes and road extension preview
+        run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_sculpt_tools_blender.py
+      - name: Test live road grading and edge-brush terrain clearance
+        run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_road_grade_preview_blender.py
       - name: Test modifier input compatibility on Blender 5.1
         run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_modifier_inputs_blender.py
       - name: Test marking approach logic

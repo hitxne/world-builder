@@ -12,7 +12,8 @@ def paths(road):
 
 def widen(road,center,radius,strength,dt):
     from .road_core import values
-    default=values(road)['road width'];data.sync(road);all_points=data.points(road);old_widths=data.widths(road,range(len(all_points)),default);offset=0
+    default=values(road)['road width'];items=data.sync(road);all_points=data.points(road)
+    old_widths=[item.get('width',default*p.radius) for item,p in zip(items,all_points)];offset=0;new_offset=0;inserted=[];topology_changed=False
     for spline in road.data.splines:
         if spline.type!='POLY':continue
         original=[(tuple(p.co),p.radius,p.select,old_widths[offset+i]) for i,p in enumerate(spline.points)];offset+=len(original)
@@ -37,11 +38,13 @@ def widen(road,center,radius,strength,dt):
             spline.points.add(len(expanded)-len(original))
             for p,entry in zip(spline.points,expanded):p.co=entry[0];p.radius=entry[1];p.select=entry[2]
             original_coords={tuple(round(v,6) for v in entry[0][:3]) for entry in original}
-            items=data.sync(road);start=sum(len(s.points) for s in road.data.splines[:list(road.data.splines).index(spline)])
+            topology_changed=True
             for i,entry in enumerate(expanded):
-                if tuple(items[start+i]['co']) not in original_coords:items[start+i]['width']=entry[3]
-            data.save(road,items)
-    items=data.sync(road);points=data.points(road);changed=0
+                if tuple(round(v,6) for v in entry[0][:3]) not in original_coords:inserted.append((new_offset+i,entry[3]))
+        new_offset+=len(spline.points)
+    if topology_changed:items=data.sync(road)
+    for i,width in inserted:items[i]['width']=width
+    points=data.points(road);changed=0
     for i,p in enumerate(points):
         t=math.hypot(p.co.x-center[0],p.co.y-center[1])/radius
         if t>=1:continue
