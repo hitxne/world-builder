@@ -13,10 +13,11 @@ def encode(field):
 def sample(field,x,y):
     a,b=math.floor(x),math.floor(y);u,v=x-a,y-b
     return sum(field.get((a+i,b+j),0.)*(u if i else 1-u)*(v if j else 1-v) for i in (0,1) for j in (0,1))
-def stamp(field,center,radius,strength,dt,mode,base_height,target=None):
+def stamp_patch(field,center,radius,strength,dt,mode,base_height,target=None):
+    """Compute only changed samples, reading the unchanged field throughout smoothing."""
     if mode not in MODES or radius<=0 or strength<0 or dt<0:raise ValueError('Invalid road brush settings')
     if mode=='FLATTEN' and target is None:raise ValueError('Flatten needs a target height')
-    before=dict(field);result=dict(before);cache={}
+    before=field;result={};cache={}
     def base(key):
         if key not in cache:cache[key]=base_height(*key)
         return cache[key]
@@ -38,7 +39,12 @@ def stamp(field,center,radius,strength,dt,mode,base_height,target=None):
                 else:desired=target
                 value=current+(desired-z-current)*(1-math.exp(-amount))
             if abs(value-current)>1e-8:result[key]=value
-    if len(result)>150000:raise ValueError('Road sculpt field exceeds 150,000 samples')
+    if len(field)+sum(key not in field for key in result)>150000:raise ValueError('Road sculpt field exceeds 150,000 samples')
+    return result
+
+def stamp(field,center,radius,strength,dt,mode,base_height,target=None):
+    result=dict(field)
+    result.update(stamp_patch(field,center,radius,strength,dt,mode,base_height,target))
     return result
 
 def corner_displacement(x,y,limits,lifts):

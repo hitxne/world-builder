@@ -276,6 +276,8 @@ def is_pending(scene):return scene.as_pointer() in _pending
 
 def flush_pending(force=False,live=False):
     global _busy,_defer_markings
+    from . import terrain_sculpt
+    if terrain_sculpt.is_active():return False
     if _busy or (not force and not live and interaction_active()):return False
     items=list(_pending.values());_pending.clear();_busy=True;_defer_markings=True
     try:
@@ -334,7 +336,7 @@ def synchronize(scene,depsgraph):
            (road in changed or road.data in changed or (modifier(road) and modifier(road).node_group in changed) or not road.get('roadlab_core_signature'))}
     terrain=scene.wb_native.terrain
     from . import terrain_sculpt
-    if terrain_sculpt.is_active() and not roads:return
+    if terrain_sculpt.is_active():return
     if not roads and not (terrain and (terrain in changed or terrain.data in changed)):return
     previous=_pending.get(scene.as_pointer())
     if previous:roads.update(previous[1])

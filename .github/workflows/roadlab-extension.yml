@@ -26,6 +26,8 @@ jobs:
           tar -xf /tmp/blender.tar.xz --strip-components=1 -C /tmp/roadlab-blender
       - name: Test marking approach logic
         run: python road-lab-updater/tests/test_marking_approaches.py
+      - name: Test local sculpt preview, seam preservation and commit
+        run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_sculpt_preview_blender.py
       - name: Test lane window selection and guidance
         run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_lane_window_blender.py
       - name: Test live marking preview and street connections

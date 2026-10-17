@@ -76,8 +76,12 @@ class ROADLAB_OT_sculpt(bpy.types.Operator):
         if not (0<=xy[0]<self.region.width and 0<=xy[1]<self.region.height):return None
         rv=self.space.region_3d;origin=view3d_utils.region_2d_to_origin_3d(self.region,rv,xy);direction=view3d_utils.region_2d_to_vector_3d(self.region,rv,xy)
         inverse=self.road.matrix_world.inverted();local=inverse@origin;ray=(inverse.to_3x3()@direction).normalized()
-        helper=self.road['roadlab_core_mesh'];tree=BVHTree.FromPolygons([v.co for v in helper.data.vertices],[list(f.vertices) for f in helper.data.polygons])
-        found=tree.ray_cast(local,ray)
+        helper=self.road['roadlab_core_mesh']
+        key=(helper.data.as_pointer(),self.road.get('roadlab_core_signature'))
+        if getattr(self,'_hit_key',None)!=key:
+            self._hit_tree=BVHTree.FromPolygons([v.co for v in helper.data.vertices],[list(f.vertices) for f in helper.data.polygons])
+            self._hit_key=key
+        found=self._hit_tree.ray_cast(local,ray)
         return found[0]
     def draw_brush(self):
         if self.center is None:return

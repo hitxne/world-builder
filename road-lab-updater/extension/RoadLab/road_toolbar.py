@@ -44,12 +44,16 @@ for mode in ('RAISE','LOWER','FLATTEN','SMOOTH'):
     tools.append(type('ROADLAB_WST_TERRAIN_'+mode,(bpy.types.WorkSpaceTool,),attributes))
 
 def register():
+    from . import brush_cursor
+    brush_cursor.register()
     previous=None
     for tool in tools:
         bpy.utils.register_tool(tool,after=None,separator=previous is None or tool.bl_idname=='roadlab.terrain_raise')
         previous=tool.bl_idname
 
 def unregister():
+    from . import brush_cursor
+    brush_cursor.unregister()
     for tool in reversed(tools):bpy.utils.unregister_tool(tool)
     for value in _icon_values.values():bpy.app.icons.release(value)
     _icon_values.clear()

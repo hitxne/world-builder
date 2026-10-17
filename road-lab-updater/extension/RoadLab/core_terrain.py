@@ -101,9 +101,9 @@ def surface(terrain,roads,blend,spacing,state=None):
     else:
         boxes=state['cells'];flat=[tuple(p) for p in state['flat']];faces=[list(f) for f in state['faces']];origins=[list(x) for x in state['origins']]
     previous={tuple(round(x,7) for x in p[:2]):p for p in state['vertices']} if reused else {}
-    vertices=[];pins={helper:{} for helper in helpers};seam=changed=resampled=0;seam_points=[];seam_pins={};candidate_used={i for f in faces for i in f}
+    vertices=[];sculpt_weights=[];pins={helper:{} for helper in helpers};seam=changed=resampled=0;seam_points=[];seam_pins={};candidate_used={i for f in faces for i in f}
     for i,xy in enumerate(flat):
-        if i not in candidate_used:vertices.append((*xy,0.));continue
+        if i not in candidate_used:vertices.append((*xy,0.));sculpt_weights.append(0.);continue
         p=Vector(xy);dist,road_z,index,t,q=nearest(p);authored=[road_by_original[j] for j in origins[i] if j in road_by_original]
         if authored and max(v[2] for v in authored)-min(v[2] for v in authored)>1e-4:raise ValueError('Ground-contact roads overlap at different heights')
         old=previous.get(tuple(round(x,7) for x in xy))
@@ -113,6 +113,8 @@ def surface(terrain,roads,blend,spacing,state=None):
         elif authored:z=sum(v[2] for v in authored)/len(authored);seam+=1
         elif old and dirty and not (dirty['box'][0]<=xy[0]<=dirty['box'][2] and dirty['box'][1]<=xy[1]<=dirty['box'][3]):z=old[2]
         else:z=height_at(*xy);resampled+=1
+        t=max(0.,min(1.,dist/max(blend,.1)))
+        sculpt_weights.append(0. if authored or dist<1e-5 else t*t*t*(t*(t*6-15)+10))
         vertices.append((*xy,z))
         if old is None or abs(z-old[2])>1e-7:changed+=1
     # Discard only numerically collapsed pieces. All surviving terrain faces are quads.
@@ -138,7 +140,7 @@ def surface(terrain,roads,blend,spacing,state=None):
         seam_tree.balance();seam_error=max(seam_error,max(seam_tree.find(p)[2] for p in locations))
     report=dict(vertices=len(meshverts),faces=len(meshfaces),quads=len(meshfaces),triangles=0,ngons=0,seam_vertices=seam,maximum_seam_error=seam_error,topology_reused=reused and not refine,height_samples_changed=changed,height_samples_resampled=resampled,blend_distance=blend,spacing=spacing,adaptive=True,flat_polygons=0,local_remesh=local,faces_retriangulated=0,faces_retained=retained,quad_cells=len(boxes),shared_road_vertices_added=splits,uniform_grid_estimate=round((xmax-xmin)*(ymax-ymin)/spacing**2))
     terrain_sculpt.clear_pending(terrain)
-    return meshverts,meshfaces,report,dict(topology_key=topology_key,flat=[v[:2] for v in meshverts],faces=meshfaces,origins=meshorigins,vertices=meshverts,cells=boxes)
+    return meshverts,meshfaces,report,dict(topology_key=topology_key,flat=[v[:2] for v in meshverts],faces=meshfaces,origins=meshorigins,vertices=meshverts,cells=boxes,sculpt_weights=[sculpt_weights[i] for i in used])
 
 def attach(terrain):
     group=bpy.data.node_groups.new('ROADLAB_TERRAIN_CONTACT','GeometryNodeTree');group.interface.new_socket(name='Geometry',in_out='INPUT',socket_type='NodeSocketGeometry');group.interface.new_socket(name='Geometry',in_out='OUTPUT',socket_type='NodeSocketGeometry')
