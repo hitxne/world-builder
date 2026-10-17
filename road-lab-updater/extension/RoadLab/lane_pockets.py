@@ -88,7 +88,7 @@ def expand(paths,ids_by_path,pockets,default,tilts=None,junctions=(),corner_radi
         specs=[v for p in pockets if (v:=locate(coords,ids,p,max(radii)*default,corner_radius)) is not None]
         if not specs:
             deformed=[(p[0]+shared.get(point_key(p),(0,0))[0],p[1]+shared.get(point_key(p),(0,0))[1],p[2]) for p in coords]
-            result.append((deformed,radii));angles.append(tilts[path_index] if tilts else [0.]*len(coords));details.append(dict(specs=[],source_positions=dict(zip(coords,deformed))));continue
+            result.append((deformed,radii));angles.append(tilts[path_index] if tilts else [0.]*len(coords));details.append(dict(specs=[],source_positions=dict(zip(coords,deformed)),frames=[(point_key(a),point_key(b),((q[0]-p[0])/math.dist(p[:2],q[:2]),(q[1]-p[1])/math.dist(p[:2],q[:2]))) for a,b,p,q in zip(deformed,deformed[1:],coords,coords[1:]) if math.dist(p[:2],q[:2])>1e-8]));continue
         cuts=set(ss)
         for spec in specs:
             for shift in (-spec['total'],0.,spec['total']) if spec['cyclic'] else (0.,):
@@ -126,7 +126,7 @@ def expand(paths,ids_by_path,pockets,default,tilts=None,junctions=(),corner_radi
             delta=shared.get(point_key(p),(-u[1]*shift,u[0]*shift))
             vs.append((p[0]+delta[0],p[1]+delta[1],p[2]));rs.append((radii[i]*(1-t)+radii[i+1]*t)+(left+right)/default)
             source_tilts=tilts[path_index] if tilts else [0.]*len(coords);ts.append(source_tilts[i]*(1-t)+source_tilts[i+1]*t)
-        result.append((vs,rs));angles.append(ts);details.append(dict(specs=specs,source_positions={tuple(p):vs[retained.index(s)] for p,s in zip(coords,ss)}))
+        result.append((vs,rs));angles.append(ts);details.append(dict(specs=specs,source_positions={tuple(p):vs[retained.index(s)] for p,s in zip(coords,ss)},frames=[(point_key(a),point_key(b),sample(coords,ss,(s+t)/2)[1]) for a,b,s,t in zip(vs,vs[1:],cuts,cuts[1:])]))
     return result,angles,details
 
 

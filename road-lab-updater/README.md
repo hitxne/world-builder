@@ -1,6 +1,6 @@
 # RoadLab Blender extension and update repository
 
-The full RoadLab 0.18.24 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
+The full RoadLab 0.18.25 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
 
 ## Install once
 
@@ -342,3 +342,11 @@ To deliberately shift a junction arm: select its junction point in curve Edit Mo
 The lane window also previews changed cross-section alignment in blue, with paint on the proposed pavement; applying saves it. Draft helpers are removed on cancellation and before saving.
 
 Actual Blender comparison: [previous direction pairing](docs/lane-alignment-before.png) and [corrected pairing](docs/lane-alignment-after.png).
+
+## Per-point lane width and edge lines (0.18.25)
+
+Select any connected road point in Edit Mode and open the Lane tool. An endpoint opens its street; an interior point exposes both adjoining sections; a junction exposes its real arms. Under **Road size → Width and median**, **Total width**, **Left white line gap** and **Right white line gap** affect only the selected authoring points. Left/right follow the source spline direction, independently of map traffic side. Gaps interpolate to the neighboring point values; the default is 0.5 m from the white line center to the pavement edge. Existing shoulder allowances migrate to this consistent default. A width edit previews the actual road and attached layers in blue; Apply saves, and Cancel restores the original scene. Lane profiles remain assigned to the chosen street sections.
+
+White edge lines now intersect the finished pavement at each station rather than retaining lane-width-based shoulder space. Lane pocket cross-sections keep their original source directions and use the same interpolation for lateral center shift and widening. Adding a turn lane therefore leaves the opposite curb and white line straight instead of introducing small waves. Yellow median lines remain attached to their logical alignment. New street extensions inherit the endpoint’s saved left/right gaps.
+
+Regression coverage includes endpoint/interior selection, isolated width previews, independent gaps, cancellation, save/reopen, one-sided tapers, curved pockets and the existing junction/terrain/sidewalk suites on Blender 5.1 and 5.2. `tools/render_point_lanes.py` generates the actual Cycles demonstration in `docs/point-lane-edges.png`.

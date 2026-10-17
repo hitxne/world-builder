@@ -62,6 +62,10 @@ def split_lane_assignments(obj,configs,new_ids,records):
         for index,ident in enumerate(path[1:-1],1):
             distance+=lengths[index-1]
             if 'width' not in records[lookup[ident]]:records[lookup[ident]]['width']=wa+(wb-wa)*distance/max(total,1e-9)
+            for field in ('edge_left','edge_right'):
+                if field not in records[lookup[ident]]:
+                    va=records[lookup[a]].get(field,.5);vb=records[lookup[b]].get(field,.5)
+                    records[lookup[ident]][field]=va+(vb-va)*distance/max(total,1e-9)
         for index,(x,y) in enumerate(zip(path,path[1:])):
             child=json.loads(json.dumps(config));child['endpoints']=[x,y]
             if index>0:child['control_outgoing']='NONE';child['crosswalk_outgoing']=False
@@ -116,6 +120,8 @@ def inherit_extensions(obj):
                 copy['endpoints']=[shared,other] if position(parent['endpoints'][1])==p else [other,shared]
                 copy['control_incoming']=copy['control_outgoing']='NONE';copy['crosswalk_incoming']=copy['crosswalk_outgoing']=False;configs.append(copy)
                 if 'width' not in records[lookup[other]] and 'width' in records[lookup[shared]]:records[lookup[other]]['width']=records[lookup[shared]]['width']
+                for field in ('edge_left','edge_right'):
+                    if field not in records[lookup[other]] and field in records[lookup[shared]]:records[lookup[other]][field]=records[lookup[shared]][field]
                 assigned.add(frozenset((a,b)));changed=True;break
     obj['roadlab_lanes']=json.dumps(configs);point_settings.save(obj,records)
 
@@ -141,6 +147,9 @@ class ROADLAB_Lane(bpy.types.PropertyGroup):
 class ROADLAB_LaneDraft(bpy.types.PropertyGroup):
     segment_key:StringProperty(default='',options={'HIDDEN'})
     targets_json:StringProperty(default='[]',options={'HIDDEN'})
+    point_ids_json:StringProperty(default='[]',options={'HIDDEN'})
+    edge_left:FloatProperty(name='Left white line gap (m)',min=.1,max=5.,default=.5)
+    edge_right:FloatProperty(name='Right white line gap (m)',min=.1,max=5.,default=.5)
     road_width:FloatProperty(name='Road width (m)',min=.25,default=8.)
     show_size:BoolProperty(default=False)
     show_incoming:BoolProperty(default=False)
@@ -216,7 +225,7 @@ def _rebuild(obj,scene,force=False):
     configs=state(obj);output=obj.get('roadlab_core_mesh')
     if output is None:return
     side=scene.roadlab_map_settings.traffic_side
-    signature=hashlib.sha256(json.dumps(['editable-crossings-v5',getattr(scene.wb_native.terrain,'get',lambda *args:None)('roadlab_core_terrain_signature'),[(row.get('co'),row.get('connection_mode')) for row in point_settings.records(obj) if row.get('connection_mode')],obj.get('roadlab_hidden_lane_markings','[]'),configs,obj.get('roadlab_core_signature'),output.data.as_pointer(),side],sort_keys=True).encode()).hexdigest()
+    signature=hashlib.sha256(json.dumps(['point-edge-lines-v6',[(r['id'],r.get('edge_left',.5),r.get('edge_right',.5)) for r in point_settings.records(obj)],getattr(scene.wb_native.terrain,'get',lambda *args:None)('roadlab_core_terrain_signature'),[(row.get('co'),row.get('connection_mode')) for row in point_settings.records(obj) if row.get('connection_mode')],obj.get('roadlab_hidden_lane_markings','[]'),configs,obj.get('roadlab_core_signature'),output.data.as_pointer(),side],sort_keys=True).encode()).hexdigest()
     existing=obj.get('roadlab_marking_object')
     owned=existing is not None and (existing.get('roadlab_markings_owner_object')==obj or existing.get('roadlab_markings_owner')==obj.name)
     if not force and owned and obj.get('roadlab_marking_signature')==signature:
@@ -280,6 +289,8 @@ def _rebuild(obj,scene,force=False):
                 segment_plans=lane_pocket_markings.adapt(obj,config,segment_plans,side)
                 from . import approach_alignment
                 segment_plans=approach_alignment.warp(obj,config,segment_plans,side)
+                from . import road_edges
+                segment_plans=road_edges.fit(obj,config,segment_plans)
                 for co,other in ((start,finish),(finish,start)):
                     if key(co) not in bends or key(co) in stop_nodes:continue
                     neighbor=max(nodes[key(co)],key=lambda n:(Vector(n)-Vector(co)).normalized().dot((Vector(other)-Vector(co)).normalized()))
@@ -290,7 +301,7 @@ def _rebuild(obj,scene,force=False):
                         semantic=tuple(role[:3] if family=='divider' else role[:2])
                         if semantic in seen:continue
                         seen.add(semantic);seams=bends[key(co)][2][neighbor];gate_center=(Vector(seams[0])+Vector(seams[-1]))*.5;lateral=(Vector(mark['center'])-gate_center).dot(normal)
-                        arm.append(dict(family=family,flow=1 if Vector((*mark['forward'],0)).dot(u)>0 else -1,asset=mark['asset'],fraction=.5+lateral/(Vector(bends[key(co)][2][neighbor][-1])-Vector(bends[key(co)][2][neighbor][0])).length,width=mark['size'][0],edge_inset=max(.05,(width-sum(r['width'] for field in ('incoming','outgoing') for r in config[field])-config['median'])/2)))
+                        arm.append(dict(family=family,flow=1 if Vector((*mark['forward'],0)).dot(u)>0 else -1,asset=mark['asset'],fraction=.5+lateral/(Vector(bends[key(co)][2][neighbor][-1])-Vector(bends[key(co)][2][neighbor][0])).length,width=mark['size'][0],edge_inset=mark.get('edge_inset',.5)))
                     bend_arms[(key(co),neighbor)]=arm
                 for mark in segment_plans:
                     if mark['role'][0]=='crosswalk':
@@ -367,8 +378,8 @@ def selection_targets(context):
         for x,y,a,b in segs:
             if x in sel:choices.append([b,a])
             elif y in sel:choices.append([a,b])
-        if len(choices)<2:raise ValueError('Select a connection point, or two adjacent points for a street section')
-        return obj,choices,True
+        if not choices:raise ValueError('Connect this point to another road point first')
+        return obj,choices,len(choices)>1
     targets=[(a,b,position(x),position(y)) for x,y,a,b in segs if x in sel and y in sel]
     if not targets:raise ValueError('Select two adjacent road points for a street section')
     connected={targets[0][2]}
@@ -389,10 +400,16 @@ def selection_targets(context):
 
 def set_draft(context,obj,targets,normalize=False):
     d=context.scene.roadlab_lane_draft;d.segment_key=obj.name;d.targets_json=json.dumps(targets);d.reverse=False
+    selected=point_settings.selected(context,obj)
+    items=point_settings.records(obj);target_ids={v for t in targets for v in t}
+    ids=[items[i]['id'] for i in selected if items[i]['id'] in target_ids]
+    d.point_ids_json=json.dumps(ids)
+    first=next((row for row in items if row['id'] in ids),{})
+    d.edge_left=first.get('edge_left',.5);d.edge_right=first.get('edge_right',.5)
     d.incoming.clear();d.outgoing.clear();d.incoming_index=d.outgoing_index=0
     from .road_core import values
     lookup={x['id']:i for i,x in enumerate(point_settings.records(obj))}
-    d.road_width=min(point_settings.width(obj,lookup[v],values(obj)['road width']) for t in targets for v in t)
+    d.road_width=min(point_settings.width(obj,lookup[v],values(obj)['road width']) for v in (ids or target_ids))
     config=next((c for c in state(obj) if frozenset(c['endpoints'])==frozenset(targets[0])),None)
     if config:d.reverse=config['endpoints'][0]!=targets[0][0];d.median=config['median'];d.spacing=config['spacing']
     else:d.median=0.;d.spacing=18.
@@ -457,7 +474,7 @@ def validate_approach(obj,endpoints,incoming,outgoing):
     if errors:raise ValueError('; '.join(errors))
 
 
-DRAFT_FIELDS=('segment_key','targets_json','reverse','road_width','median','spacing','crosswalk_incoming','crosswalk_outgoing','crosswalk_depth','crosswalk_gap','crosswalk_ramp','crosswalk_a','crosswalk_b','crosswalk_tactile','arrow_approach','solid_approach','lane_transition','transition_length','stop_setback','control_incoming','control_outgoing')
+DRAFT_FIELDS=('point_ids_json','edge_left','edge_right','segment_key','targets_json','reverse','road_width','median','spacing','crosswalk_incoming','crosswalk_outgoing','crosswalk_depth','crosswalk_gap','crosswalk_ramp','crosswalk_a','crosswalk_b','crosswalk_tactile','arrow_approach','solid_approach','lane_transition','transition_length','stop_setback','control_incoming','control_outgoing')
 
 def draft_snapshot(d):
     return dict({k:getattr(d,k) for k in DRAFT_FIELDS},incoming=rows(d.incoming),outgoing=rows(d.outgoing))
@@ -482,8 +499,20 @@ def checked_drafts(context,drafts):
         if not isfinite(data['road_width']):raise ValueError('Road width must be finite')
         for row in data['incoming']+data['outgoing']:lane_markings.arrow_id(row['movement'].split('_'))
         for t in targets:validate_approach(obj,t[::-1] if data['reverse'] else t,entries(data['incoming'],'i'),entries(data['outgoing'],'o'))
-        result.append((data,targets,sorted({lookup[v] for t in targets for v in t}),needed))
+        ids=json.loads(data.get('point_ids_json','[]'))
+        if any(v not in lookup for v in ids):raise ValueError('Selected road points changed; reopen the lane editor')
+        for field in ('edge_left','edge_right'):
+            if not isfinite(data.get(field,.5)) or not .1<=data.get(field,.5)<=5:raise ValueError('White line gap must be between 0.1 and 5 m')
+        result.append((data,targets,sorted({lookup[v] for v in ids} if ids else {lookup[v] for t in targets for v in t}),needed))
     return obj,result
+
+def available_width(obj,data,targets,indices):
+    # Point edits can taper into an unselected, narrower endpoint. Ask before
+    # expanding that endpoint to carry an additional full section lane.
+    from .road_core import values
+    lookup={r['id']:i for i,r in enumerate(point_settings.records(obj))}
+    untouched={lookup[v] for t in targets for v in t}-set(indices)
+    return min([data['road_width']]+[point_settings.width(obj,i,values(obj)['road width']) for i in untouched])
 
 class ROADLAB_OT_lane_apply(bpy.types.Operator):
     bl_idname='roadlab.lane_apply';bl_label='Apply lanes and markings';bl_options={'REGISTER','UNDO'}
@@ -497,25 +526,35 @@ class ROADLAB_OT_lane_apply(bpy.types.Operator):
         self.expand=False
         try:
             obj,checked=checked_drafts(context,self.drafts(context))
-            if any(needed>data['road_width']+1e-6 for data,_,_,needed in checked):
+            if any(needed>available_width(obj,data,targets,indices)+1e-6 for data,targets,indices,needed in checked):
                 self.expand=True
                 return context.window_manager.invoke_props_dialog(self,width=390,confirm_text='Expand roads & apply')
         except ValueError as e:self.report({'ERROR'},str(e));return {'CANCELLED'}
         return self.execute(context)
     def draw(self,context):
         self.layout.label(text='More space is needed for these lanes',icon='INFO')
-        for data,_,_,needed in checked_drafts(context,self.drafts(context))[1]:
-            if needed>data['road_width']+1e-6:self.layout.label(text=f"{data.get('label','Selected road')}: {data['road_width']:.1f} m → {needed:.1f} m")
+        obj,checked=checked_drafts(context,self.drafts(context))
+        for data,targets,indices,needed in checked:
+            current=available_width(obj,data,targets,indices)
+            if needed>current+1e-6:self.layout.label(text=f"{data.get('label','Selected road')}: {current:.1f} m → {needed:.1f} m minimum")
         self.layout.label(text='Cancel keeps the roads unchanged.')
     def execute(self,context):
         try:
             obj,checked=checked_drafts(context,self.drafts(context))
-            if any(needed>data['road_width']+1e-6 for data,_,_,needed in checked) and not self.expand:raise ValueError('Road too narrow. Enable expansion to apply these lanes.')
+            if any(needed>available_width(obj,data,targets,indices)+1e-6 for data,targets,indices,needed in checked) and not self.expand:raise ValueError('Road too narrow. Enable expansion to apply these lanes.')
             # Validate every edited arm before changing any road data.
+            from .road_core import values
             items=point_settings.sync(obj);configs=state(obj);widths={}
             for data,targets,indices,needed in checked:
                 desired=max(data['road_width'],needed) if self.expand else data['road_width']
-                for i in indices:widths[i]=max(widths.get(i,0),desired)
+                for i in indices:
+                    widths[i]=max(widths.get(i,0),desired)
+                    for field in ('edge_left','edge_right'):items[i][field]=data.get(field,.5)
+                if self.expand:
+                    lookup={row['id']:i for i,row in enumerate(items)}
+                    for t in targets:
+                        for v in t:
+                            i=lookup[v];widths[i]=max(widths.get(i,point_settings.width(obj,i,values(obj)['road width'])),needed)
                 configs=[c for c in configs if all(frozenset(c['endpoints'])!=frozenset(t) for t in targets)]
                 for t in targets:
                     configs.append(dict(endpoints=t[::-1] if data['reverse'] else t,incoming=data['incoming'],outgoing=data['outgoing'],**{k:data[k] for k in ('median','spacing','crosswalk_incoming','crosswalk_outgoing','crosswalk_depth','crosswalk_gap','crosswalk_ramp','crosswalk_a','crosswalk_b','crosswalk_tactile','arrow_approach','solid_approach','lane_transition','transition_length','stop_setback','control_incoming','control_outgoing')}))
@@ -614,7 +653,9 @@ def draw_lanes(l,context,junction=False,connection_mode=None):
         if box:
             box.prop(d,'road_width',text='Total width (m)');box.prop(d,'median',text='Median width (m)')
             box.label(text=f'Lanes need {required:.1f} m including shoulders.')
-            box.label(text='Extra width becomes shoulder space.')
+            box.label(text='Width and white-line gaps affect selected points only.')
+            box.prop(d,'edge_left');box.prop(d,'edge_right')
+            box.label(text='Left / right follow the source curve direction.')
             if not junction:box.prop(d,'reverse',text='Swap travel directions')
         box=section(l,d,'show_saved','Saved setup')
         if box:box.operator('roadlab.lane_remove',text='Clear saved lane setup',icon='TRASH')
@@ -786,7 +827,7 @@ def tick_lane_preview():
         _,checked=checked_drafts(context,batch)
         from .road_core import values
         default=values(obj)['road width']
-        if any(needed>min(point_settings.width(obj,i,default) for i in indices)+1e-6 for data,targets,indices,needed in checked):
+        if any(needed>available_width(obj,data,targets,indices)+1e-6 for data,targets,indices,needed in checked):
             operator.preview_status='Preview needs a wider road. Apply to review expansion.';return .12
         configs=state(obj)
         for data,targets,indices,needed in checked:
@@ -801,6 +842,10 @@ def tick_lane_preview():
             proxy['roadlab_new_core']=False
         proxy['roadlab_lanes']=json.dumps(configs)
         preview_records=point_settings.records(obj)
+        for data,targets,indices,needed in checked:
+            for i in indices:
+                preview_records[i]['width']=data['road_width']
+                for field in ('edge_left','edge_right'):preview_records[i][field]=data.get(field,.5)
         for data in batch:
             if data.get('_connection_node') is not None:
                 for row in preview_records:
@@ -808,7 +853,7 @@ def tick_lane_preview():
         proxy['roadlab_point_settings']=json.dumps(preview_records)
         from . import approach_alignment
         geometry=session.get('geometry_draft')
-        if approach_alignment.signature(proxy)!=approach_alignment.signature(obj):
+        if approach_alignment.signature(proxy)!=approach_alignment.signature(obj) or any(abs(data['road_width']-point_settings.width(obj,i,default))>1e-6 for data,_,indices,_ in checked for i in indices):
             if geometry is None:geometry=approach_alignment.GeometryDraft(obj,proxy,scene);session['geometry_draft']=geometry
             geometry.update(configs)
         else:
@@ -847,7 +892,7 @@ def preview_after_save(*args):
     global _lane_preview,_preview_resume
     if _preview_resume is not None:
         session=_preview_resume;_preview_resume=None
-        session.update(signature=None,proxy=None,hidden=[]);_lane_preview=session
+        session.update(signature=None,proxy=None,hidden=[],geometry_draft=None);_lane_preview=session
         bpy.app.timers.register(tick_lane_preview,first_interval=.1)
 
 @bpy.app.handlers.persistent
@@ -860,10 +905,10 @@ def apply_window_edits(self,context,expand=False):
         drafts=save_active_approach(self,context) if self.is_junction else {}
         batch=preview_batch(self,context.scene)
         obj,checked=checked_drafts(context,batch)
-        needs=[(data,needed) for data,_,_,needed in checked if needed>data['road_width']+1e-6]
+        needs=[(data,needed,available_width(obj,data,targets,indices)) for data,targets,indices,needed in checked if needed>available_width(obj,data,targets,indices)+1e-6]
         if expand and json.dumps(batch)!=self.expansion_batch:expand=False
         if needs and not expand:
-            self.expansion_text=json.dumps([(data.get('label','Selected road'),data['road_width'],needed) for data,needed in needs])
+            self.expansion_text=json.dumps([(data.get('label','Selected road'),current,needed) for data,needed,current in needs])
             self.expansion_batch=json.dumps(batch);self.apply_status='Review road expansion below.';return
         result=bpy.ops.roadlab.lane_apply('EXEC_DEFAULT',batch_json=json.dumps(batch),expand=expand)
         if result!={'FINISHED'}:self.apply_status='Changes were not applied. Review the lane setup.';return
@@ -939,7 +984,7 @@ class ROADLAB_OT_lane_window(bpy.types.Operator):
             l.label(text=self.selection_hint)
             box=l.box();box.label(text='1. Select a RoadLab road and enter Edit Mode (Tab).')
             box.label(text='2. Connection or junction: select its shared point.')
-            box.label(text='   Street: select two or more adjacent curve points.')
+            box.label(text='   Street: select any point, or adjacent curve points.')
             box.label(text='3. Open the lane window to edit the selection.')
             l.label(text='Shift-click adds points. Existing selections are kept.')
             return

@@ -6,7 +6,7 @@ import bpy
 from mathutils import Vector
 from .native_extension import socket,set_input
 EPS=1e-6
-SCHEMA=9
+SCHEMA=10
 _busy=False
 _defer_markings=False
 _deferred_markings=set()
@@ -149,7 +149,14 @@ def _rebuild(road,force=False):
         paths,tilts,pocket_details=lane_pockets.expand(paths,ids_by_path,pockets,settings['road width'],tilts,[p for p,n in nodes.items() if len(n)>=3],max(settings['corner '+k] for k in ('NW','NE','SW','SE')))
         source_positions={key(co):key(p) for detail in pocket_details for co,p in detail['source_positions'].items()}
         derived_overrides={source_positions.get(co,co):v for co,v in point_settings.junction_overrides(road).items()}
-    ports=(lambda nodes,edges:approach_alignment.ports(road,nodes,source_positions,edges)) if any(alignment_signature) else None
+    def ports(nodes,edges):
+        result=approach_alignment.ports(road,nodes,source_positions,edges)
+        frames={}
+        for detail in pocket_details if pockets else []:
+            for a,b,u in detail['frames']:
+                frames[(a,b)]=u;frames[(b,a)]=(-u[0],-u[1])
+        result.directions=frames
+        return result
     verts,faces,regions,loops,report=build(paths,settings['road width'],settings['resolution'],{k:settings['corner '+k] for k in ('NW','NE','SW','SE')},derived_overrides,port_offsets=ports,protected_nodes=approach_alignment.protected(road,source_positions))
     from . import road_heightfield,road_sculpt
     from . import curve_bank

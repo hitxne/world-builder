@@ -1,6 +1,6 @@
 schema_version = "1.0.0"
 id = "road_lab"
-version = "0.18.24"
+version = "0.18.25"
 name = "RoadLab"
 tagline = "Tools for procedural road and lane editing"
 maintainer = "Road Lab Team"

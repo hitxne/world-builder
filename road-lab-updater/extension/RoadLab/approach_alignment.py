@@ -247,9 +247,9 @@ class GeometryDraft:
         self.drawing={'meshes':[],'batches':None};self.handler=bpy.types.SpaceView3D.draw_handler_add(draw_session,(self.drawing,),'WINDOW','POST_VIEW')
     def update(self,configs):
         from .lane_add import preview_meshes
-        key=json.dumps([configs,self.source.get('roadlab_core_signature')],sort_keys=True)
+        key=json.dumps([configs,self.proxy.get('roadlab_point_settings'),self.source.get('roadlab_core_signature')],sort_keys=True)
         if key==self.signature:return
-        metadata={};meshes=preview_meshes(self.source,json.loads(self.source.get('roadlab_lane_pockets','[]')),{'roadlab_lanes':json.dumps(configs)},metadata)
+        metadata={};meshes=preview_meshes(self.source,json.loads(self.source.get('roadlab_lane_pockets','[]')),{'roadlab_lanes':json.dumps(configs),'roadlab_point_settings':self.proxy.get('roadlab_point_settings',self.source.get('roadlab_point_settings','[]'))},metadata)
         inv=self.source.matrix_world.inverted();vertices,faces=meshes[0]
         mesh=bpy.data.meshes.new('RoadLab Alignment Draft');mesh.from_pydata([inv@Vector(v) for v in vertices],[],faces);mesh.update()
         old=self.helper.data;self.helper.data=mesh;self.helper.matrix_world=self.source.matrix_world.copy()

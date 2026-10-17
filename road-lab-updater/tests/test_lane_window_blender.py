@@ -26,7 +26,7 @@ select({1});op=window();assert op.has_selection and op.is_junction and len(json.
 select({1,3,5,7});op=window();assert op.has_selection and op.is_junction
 select({0,1});op=window();assert op.has_selection and not op.is_junction
 select(set());op=window();assert not op.has_selection and checks[-1][1]=='Close'
-select({0});op=window();assert not op.has_selection
+select({0});op=window();assert op.has_selection and not op.is_junction
 select({0,2,4});op=window();assert not op.has_selection
 # A selected junction survives toolbar opening: no viewport selection is invoked.
 select({1});before=ps.selected(bpy.context,road)
@@ -66,7 +66,7 @@ op.approach='0';e.approach_changed(op,bpy.context)
 assert len(d.incoming)==2 and d.incoming[0].movement=='LEFT' and d.road_width==11.5
 assert not e.state(road)
 batch=list(e.save_active_approach(op,bpy.context).values())
-assert bpy.ops.roadlab.lane_apply(batch_json=json.dumps(batch))=={'FINISHED'}
+assert bpy.ops.roadlab.lane_apply(batch_json=json.dumps(batch),expand=True)=={'FINISHED'}
 assert len(e.state(road))==2
 assert {c['spacing'] for c in e.state(road)}=={18,23}
 # Invalid edits in a later arm must not partly overwrite earlier valid arms.

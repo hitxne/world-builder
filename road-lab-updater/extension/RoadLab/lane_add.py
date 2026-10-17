@@ -128,7 +128,7 @@ def preview_meshes(obj,pockets,overrides=None,metadata=None):
         collection=bpy.data.collections.new('RoadLab Pending Evaluation');collections.append(collection);bpy.context.scene.collection.children.link(collection)
         for o in created:collection.objects.link(o);o.hide_set(True)
         # Rebuild crosswalk guides against the proposed pavement, in isolation.
-        proxy['roadlab_lanes']=obj.get('roadlab_lanes','[]')
+        proxy['roadlab_lanes']=(overrides or {}).get('roadlab_lanes',obj.get('roadlab_lanes','[]'))
         before=set(bpy.data.objects)
         for pocket in pockets:ensure_baseline(proxy,pocket,bpy.context.scene.roadlab_map_settings.traffic_side)
         from . import lane_editor

@@ -58,11 +58,11 @@ def edge_width(edges,a,b):
     return value[0 if a==edge[0] else 1] if isinstance(value,tuple) else value
 
 
-def junction(center,neighbors,edges,spacing,radii,budgets,offsets=None,minimum_gate=0.):
+def junction(center,neighbors,edges,spacing,radii,budgets,offsets=None,minimum_gate=0.,directions=None):
     c=Vector(center[:2]);g=gradient(center,neighbors)
     arms=[]
     for p in sorted(neighbors,key=lambda p:math.atan2(p[1]-center[1],p[0]-center[0])):
-        delta=Vector((p[0]-center[0],p[1]-center[1]));u=delta.normalized();n=Vector((-u.y,u.x))
+        delta=Vector((p[0]-center[0],p[1]-center[1]));u=Vector((directions or {}).get((center,p),delta.normalized()));n=Vector((-u.y,u.x))
         arms.append(dict(p=p,u=u,n=n,shift=(offsets or {}).get(p,0.),w=edge_width(edges,center,p),cols=max(2,math.ceil(max(edge_width(edges,center,p),edge_width(edges,p,center))/spacing)),budget=delta.length*budgets[p],gate=0.))
     corners=[];limits=[]
     for i,a in enumerate(arms):
@@ -94,7 +94,8 @@ def junction(center,neighbors,edges,spacing,radii,budgets,offsets=None,minimum_g
         a['gate']=max(a['gate'],pa.dot(u)+spacing*.2);b['gate']=max(b['gate'],pb.dot(v)+spacing*.2)
         limits.append(dict(corner=label,kind='exterior' if exterior else 'interior',angle_degrees=math.degrees(theta),requested=requested,applied=applied,minimum=.02,maximum=maximum,arc_center=[cc.x+c.x,cc.y+c.y],height_anchor=[curve[len(curve)//2].x+c.x,curve[len(curve)//2].y+c.y],height_falloff=max(a['w'],b['w'],applied)*1.5))
         corners.append(curve)
-    for a in arms:a['gate']=max(a['gate'],min(max(spacing,minimum_gate),a['budget']*(.8 if minimum_gate else .5)))
+    straight_frame=len(arms)==2 and directions and all((center,a['p']) in directions for a in arms) and arms[0]['u'].dot(arms[1]['u'])<-.99999
+    for a in arms:a['gate']=max(a['gate'],min(.005 if straight_frame else max(spacing,minimum_gate),a['budget']*(.8 if minimum_gate else .5)))
     boundary=[];gates={}
     def line(a,b,count=None):
         count=count or max(1,math.ceil((b-a).length/spacing))
@@ -122,9 +123,9 @@ def junction(center,neighbors,edges,spacing,radii,budgets,offsets=None,minimum_g
     seams={p:[verts[original[j]] for j in ids] for p,ids in gates.items()}
     return verts,faces,seams,g,limits,abs(expected-actual)
 
-def ribbon(a,b,w,spacing,start,end,g0,g1,offset_a=0.,offset_b=0.):
+def ribbon(a,b,w,spacing,start,end,g0,g1,offset_a=0.,offset_b=0.,direction=None):
     wa,wb=w if isinstance(w,tuple) else (w,w)
-    d=Vector((b[0]-a[0],b[1]-a[1]));length=d.length;u=d.normalized();n=Vector((-u.y,u.x));cols=max(2,math.ceil(max(wa,wb)/spacing))
+    d=Vector((b[0]-a[0],b[1]-a[1]));length=d.length;u=Vector(direction) if direction else d.normalized();n=Vector((-u.y,u.x));cols=max(2,math.ceil(max(wa,wb)/spacing))
     if start is None:start=[(a[0]+n.x*(offset_a-wa/2+wa*j/cols),a[1]+n.y*(offset_a-wa/2+wa*j/cols),a[2]) for j in range(cols+1)]
     if end is None:end=[(b[0]+n.x*(-offset_b-wb/2+wb*j/cols),b[1]+n.y*(-offset_b-wb/2+wb*j/cols),b[2]) for j in range(cols+1)]
     start=sorted(start,key=lambda p:Vector(p[:2]).dot(n));end=sorted(end,key=lambda p:Vector(p[:2]).dot(n))
@@ -134,12 +135,13 @@ def ribbon(a,b,w,spacing,start,end,g0,g1,offset_a=0.,offset_b=0.):
     c0=tuple((start[0][k]+start[-1][k])*.5 for k in range(2));c1=tuple((end[0][k]+end[-1][k])*.5 for k in range(2))
     for i in range(rows+1):
         t=i/rows;h00=2*t**3-3*t*t+1;h10=t**3-2*t*t+t;h01=-2*t**3+3*t*t;h11=t**3-t*t
+        blend=t if direction else h01
         for p,q in zip(start,end):
             z=h00*p[2]+h10*length*g0.dot(u)+h01*q[2]+h11*length*g1.dot(u)
             if i==0:xy=p[:2]
             elif i==rows:xy=q[:2]
             elif abs(wa-wb)<1e-9:xy=tuple(p[k]+(q[k]-p[k])*t for k in range(2))
-            else:xy=tuple(c0[k]+(c1[k]-c0[k])*t+(p[k]-c0[k])*(1-h01)+(q[k]-c1[k])*h01 for k in range(2))
+            else:xy=tuple(c0[k]+(c1[k]-c0[k])*t+n[k]*((c1[0]-c0[0])*n.x+(c1[1]-c0[1])*n.y)*(blend-t)+(p[k]-c0[k])*(1-blend)+(q[k]-c1[k])*blend for k in range(2))
             verts.append((*xy,z))
     for i in range(rows):
         for j in range(cols):
@@ -194,7 +196,7 @@ def build_network(paths,width,spacing,radii,graph,junction_radii=None,port_offse
     from .footprint_merge import merge_overlaps,merged_junction
     def make_junction(p,neighbors,budgets,local_radii):
         offsets=(port_offsets or {}).get(p,{})
-        try:return junction(p,neighbors,edges,spacing,local_radii,budgets,offsets,getattr(port_offsets,'gates',{}).get(p,0.))
+        try:return junction(p,neighbors,edges,spacing,local_radii,budgets,offsets,getattr(port_offsets,'gates',{}).get(p,0.),getattr(port_offsets,'directions',{}))
         except NeedsFootprintMerge:
             if any(abs(v)>1e-6 for v in offsets.values()):raise ValueError('This approach offset cannot fit; reduce it or extend the adjoining roads')
             return merged_junction(p,neighbors,edges,spacing,local_radii)
@@ -209,6 +211,7 @@ def build_network(paths,width,spacing,radii,graph,junction_radii=None,port_offse
         key=('junction',p,tuple(sorted((q,edges[tuple(sorted((p,q)))],budgets[q]) for q in neighbors)),spacing,tuple(sorted(local_radii.items())))
         if (port_offsets or {}).get(p):key+=('ports',tuple(sorted(port_offsets[p].items())))
         if getattr(port_offsets,'gates',{}).get(p):key+=('gate',port_offsets.gates[p])
+        key+=('frames',tuple((q,getattr(port_offsets,'directions',{}).get((p,q))) for q in sorted(neighbors)))
         patches[p]=cached(key,lambda p=p,neighbors=neighbors:make_junction(p,neighbors,budgets,local_radii),stats)
         limits.extend(dict(item,junction=list(p)) for item in patches[p][4]);error=max(error,patches[p][5])
     verts=[];faces=[];regions=[];lookup={}
@@ -231,7 +234,8 @@ def build_network(paths,width,spacing,radii,graph,junction_radii=None,port_offse
         g0=patches[a][3] if a in patches else gradient(a,[b]);g1=patches[b][3] if b in patches else gradient(b,[a])
         oa=(port_offsets or {}).get(a,{}).get(b,0.);ob=(port_offsets or {}).get(b,{}).get(a,0.)
         key=('ribbon',a,b,w,spacing,tuple(start or []),tuple(end or []),tuple(g0),tuple(g1),oa,ob)
-        vs,fs=cached(key,lambda a=a,b=b,w=w,start=start,end=end,g0=g0,g1=g1:ribbon(a,b,w,spacing,start,end,g0,g1,oa,ob),stats);pieces.append((vs,fs,region))
+        direction=getattr(port_offsets,'directions',{}).get((a,b));key+=('frame',direction)
+        vs,fs=cached(key,lambda a=a,b=b,w=w,start=start,end=end,g0=g0,g1=g1:ribbon(a,b,w,spacing,start,end,g0,g1,oa,ob,direction),stats);pieces.append((vs,fs,region))
     pieces,merge_report=merge_overlaps(pieces,spacing,stats)
     for vs,fs,region in pieces:add(vs,fs,region)
     loops=perimeter(verts,faces)
