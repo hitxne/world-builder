@@ -1,7 +1,9 @@
 """Adapter into the user's original upstream terrain node groups."""
+from .modifier_inputs import integer_operand
 import bpy,math,json,os
 from mathutils import Vector
 from . import network
+from .modifier_inputs import set_value
 
 def load_groups(path):
     path=bpy.path.abspath(path)
@@ -20,7 +22,7 @@ def border_wrapper():
     name='WB_TT_BORDER_ADAPTER';group=bpy.data.node_groups.get(name)
     if group:return group
     group=bpy.data.node_groups.new(name,'GeometryNodeTree');group.interface.new_socket(name='Geometry',in_out='INPUT',socket_type='NodeSocketGeometry');group.interface.new_socket(name='Geometry',in_out='OUTPUT',socket_type='NodeSocketGeometry')
-    nodes=group.nodes;links=group.links;input=nodes.new('NodeGroupInput');output=nodes.new('NodeGroupOutput');neighbors=nodes.new('GeometryNodeInputMeshEdgeNeighbors');compare=nodes.new('FunctionNodeCompare');compare.data_type='INT';compare.operation='EQUAL';links.new(neighbors.outputs['Face Count'],compare.inputs[2]);compare.inputs[3].default_value=1
+    nodes=group.nodes;links=group.links;input=nodes.new('NodeGroupInput');output=nodes.new('NodeGroupOutput');neighbors=nodes.new('GeometryNodeInputMeshEdgeNeighbors');compare=nodes.new('FunctionNodeCompare');compare.data_type='INT';compare.operation='EQUAL';links.new(neighbors.outputs['Face Count'],integer_operand(compare,'A'));integer_operand(compare,'B').default_value=1
     curve=nodes.new('GeometryNodeMeshToCurve');links.new(input.outputs['Geometry'],curve.inputs['Mesh']);links.new(compare.outputs['Result'],curve.inputs['Selection'])
     parts=nodes.new('GeometryNodeStoreNamedAttribute');parts.data_type='INT';parts.domain='POINT';parts.inputs['Name'].default_value='parts';parts.inputs['Value'].default_value=7;links.new(curve.outputs['Curve'],parts.inputs['Geometry'])
     ids=nodes.new('GeometryNodeStoreNamedAttribute');ids.data_type='INT';ids.domain='POINT';ids.inputs['Name'].default_value='edgeID';ids.inputs['Value'].default_value=0;links.new(parts.outputs['Geometry'],ids.inputs['Geometry'])
@@ -30,7 +32,7 @@ def border_wrapper():
 def set_input(mod,name,value):
     socket=next((s for s in mod.node_group.interface.items_tree if getattr(s,'in_out',None)=='INPUT' and s.name==name),None)
     if not socket:raise ValueError('RoadLab interface does not expose '+name)
-    mod[socket.identifier]=value
+    set_value(mod,socket.identifier,value)
 
 def native_stack(obj,target_collection,groups,config):
     geometry=obj.modifiers.new('TT adaptive terrain geometry','NODES');geometry.node_group=groups['TERRAIN_GEOMETRY']

@@ -1,5 +1,7 @@
 """Optional profile-curve extrusions on the original upstream border curves."""
+from .modifier_inputs import integer_operand
 import bpy
+from .modifier_inputs import get_value, set_value
 from .native_extension import socket,set_input,road_modifier
 
 
@@ -22,7 +24,7 @@ def extrusion_group():
     N=g.nodes;L=g.links;inp=N.new('NodeGroupInput');out=N.new('NodeGroupOutput')
     road=N.new('GeometryNodeObjectInfo');road.transform_space='RELATIVE';L.new(inp.outputs['Road'],road.inputs['Object'])
     attr=N.new('GeometryNodeInputNamedAttribute');attr.data_type='INT';attr.inputs['Name'].default_value='parts'
-    test=N.new('FunctionNodeCompare');test.data_type='INT';test.operation='EQUAL';test.inputs[3].default_value=7;L.new(attr.outputs['Attribute'],test.inputs[2])
+    test=N.new('FunctionNodeCompare');test.data_type='INT';test.operation='EQUAL';integer_operand(test,'B').default_value=7;L.new(attr.outputs['Attribute'],integer_operand(test,'A'))
     border=N.new('GeometryNodeSeparateGeometry');border.domain='POINT';L.new(road.outputs['Geometry'],border.inputs['Geometry']);L.new(test.outputs['Result'],border.inputs['Selection'])
     path=N.new('GeometryNodeObjectInfo');path.transform_space='RELATIVE';L.new(inp.outputs['Path curve'],path.inputs['Object'])
     choose_path=N.new('GeometryNodeSwitch');choose_path.input_type='GEOMETRY';L.new(inp.outputs['Use custom path'],choose_path.inputs['Switch']);L.new(border.outputs['Selection'],choose_path.inputs['False']);L.new(path.outputs['Geometry'],choose_path.inputs['True'])
@@ -195,7 +197,7 @@ def extrusion_group():
     curb_choice=N.new('GeometryNodeSwitch');curb_choice.input_type='FLOAT';L.new(inp.outputs['Flatten curb at crossing'],curb_choice.inputs['Switch']);L.new(multiply.outputs[0],curb_choice.inputs['False']);L.new(curb_drop.outputs[0],curb_choice.inputs['True'])
     offset=N.new('ShaderNodeCombineXYZ');L.new(curb_choice.outputs['Output'],offset.inputs['Z'])
     deform=N.new('GeometryNodeSetPosition');L.new(vertex_shape.outputs['Geometry'],deform.inputs['Geometry']);L.new(offset.outputs['Vector'],deform.inputs['Offset'])
-    finishing=N.new('FunctionNodeCompare');finishing.data_type='INT';finishing.operation='EQUAL';L.new(inp.outputs['Evaluation stage'],finishing.inputs[2]);finishing.inputs[3].default_value=2
+    finishing=N.new('FunctionNodeCompare');finishing.data_type='INT';finishing.operation='EQUAL';L.new(inp.outputs['Evaluation stage'],integer_operand(finishing,'A'));integer_operand(finishing,'B').default_value=2
     staged=N.new('GeometryNodeSwitch');staged.input_type='GEOMETRY';L.new(finishing.outputs['Result'],staged.inputs['Switch']);L.new(deform.outputs['Geometry'],staged.inputs['False']);L.new(inp.outputs['Geometry'],staged.inputs['True'])
     # Resolve concave offset folds as one solid; never apply a modifier to a native road.
     union=N.new('GeometryNodeMeshBoolean');union.operation='UNION';union.solver='EXACT';union.inputs['Self Intersection'].default_value=True;L.new(staged.outputs['Output'],union.inputs['Mesh 2'])
@@ -203,7 +205,7 @@ def extrusion_group():
     realized=N.new('GeometryNodeRealizeInstances');L.new(network.outputs['Instances'],realized.inputs['Geometry'])
     network_size=N.new('GeometryNodeAttributeDomainSize');network_size.component='MESH';L.new(realized.outputs['Geometry'],network_size.inputs['Geometry']);network_exists=N.new('ShaderNodeMath');network_exists.operation='GREATER_THAN';L.new(network_size.outputs['Face Count'],network_exists.inputs[0])
     mesh_join=N.new('GeometryNodeSwitch');mesh_join.input_type='GEOMETRY';L.new(network_exists.outputs[0],mesh_join.inputs['Switch']);L.new(road.outputs['Geometry'],mesh_join.inputs['False']);L.new(realized.outputs['Geometry'],mesh_join.inputs['True'])
-    road_part=N.new('FunctionNodeCompare');road_part.data_type='INT';road_part.operation='EQUAL';road_part.inputs[3].default_value=1;L.new(attr.outputs['Attribute'],road_part.inputs[2])
+    road_part=N.new('FunctionNodeCompare');road_part.data_type='INT';road_part.operation='EQUAL';integer_operand(road_part,'B').default_value=1;L.new(attr.outputs['Attribute'],integer_operand(road_part,'A'))
     paved=N.new('GeometryNodeSeparateGeometry');paved.domain='POINT';L.new(mesh_join.outputs['Output'],paved.inputs['Geometry']);L.new(road_part.outputs['Result'],paved.inputs['Selection'])
     normal=N.new('GeometryNodeInputNormal');normal_z=N.new('ShaderNodeSeparateXYZ');L.new(normal.outputs['Normal'],normal_z.inputs['Vector'])
     up=N.new('ShaderNodeMath');up.operation='GREATER_THAN';up.inputs[1].default_value=.1;L.new(normal_z.outputs['Z'],up.inputs[0])
@@ -219,7 +221,7 @@ def extrusion_group():
     fast_union=N.new('GeometryNodeMeshBoolean');fast_union.operation='UNION';fast_union.solver='MANIFOLD';L.new(staged.outputs['Output'],fast_union.inputs['Mesh 2'])
     fast_clip=N.new('GeometryNodeMeshBoolean');fast_clip.operation='DIFFERENCE';fast_clip.solver='MANIFOLD';L.new(fast_union.outputs['Mesh'],fast_clip.inputs['Mesh 1']);L.new(weld_cutter.outputs['Geometry'],fast_clip.inputs['Mesh 2'])
     # Manifold cleanup is valid only for closed input topology.
-    input_neighbors=N.new('GeometryNodeInputMeshEdgeNeighbors');invalid_edge=N.new('FunctionNodeCompare');invalid_edge.data_type='INT';invalid_edge.operation='NOT_EQUAL';invalid_edge.inputs[3].default_value=2;L.new(input_neighbors.outputs['Face Count'],invalid_edge.inputs[2])
+    input_neighbors=N.new('GeometryNodeInputMeshEdgeNeighbors');invalid_edge=N.new('FunctionNodeCompare');invalid_edge.data_type='INT';invalid_edge.operation='NOT_EQUAL';integer_operand(invalid_edge,'B').default_value=2;L.new(input_neighbors.outputs['Face Count'],integer_operand(invalid_edge,'A'))
     bad_counts=[]
     for mesh_source in (staged.outputs['Output'],weld_cutter.outputs['Geometry']):
         stats=N.new('GeometryNodeAttributeStatistic');stats.data_type='FLOAT';stats.domain='EDGE';L.new(mesh_source,stats.inputs['Geometry']);L.new(invalid_edge.outputs['Result'],stats.inputs['Attribute']);bad_counts.append(stats.outputs['Sum'])
@@ -251,12 +253,12 @@ def extrusion_group():
     face_normal=N.new('GeometryNodeInputNormal');face_z=N.new('ShaderNodeSeparateXYZ');L.new(face_normal.outputs['Normal'],face_z.inputs['Vector'])
     face_up=N.new('ShaderNodeMath');face_up.operation='GREATER_THAN';face_up.inputs[1].default_value=.1;L.new(face_z.outputs['Z'],face_up.inputs[0])
     tops=N.new('GeometryNodeSeparateGeometry');tops.domain='FACE';L.new(surfaces.outputs['Geometry'],tops.inputs['Geometry']);L.new(face_up.outputs[0],tops.inputs['Selection'])
-    neighbors=N.new('GeometryNodeInputMeshEdgeNeighbors');boundary=N.new('FunctionNodeCompare');boundary.data_type='INT';boundary.operation='EQUAL';boundary.inputs[3].default_value=1;L.new(neighbors.outputs['Face Count'],boundary.inputs[2])
+    neighbors=N.new('GeometryNodeInputMeshEdgeNeighbors');boundary=N.new('FunctionNodeCompare');boundary.data_type='INT';boundary.operation='EQUAL';integer_operand(boundary,'B').default_value=1;L.new(neighbors.outputs['Face Count'],integer_operand(boundary,'A'))
     rim=N.new('GeometryNodeMeshToCurve');L.new(tops.outputs['Selection'],rim.inputs['Mesh']);L.new(boundary.outputs['Result'],rim.inputs['Selection'])
     tagged_rim=N.new('GeometryNodeStoreNamedAttribute');tagged_rim.data_type='INT';tagged_rim.domain='POINT';tagged_rim.inputs['Name'].default_value='parts';tagged_rim.inputs['Value'].default_value=7;L.new(rim.outputs['Curve'],tagged_rim.inputs['Geometry'])
     rim_id=N.new('GeometryNodeStoreNamedAttribute');rim_id.data_type='INT';rim_id.domain='POINT';rim_id.inputs['Name'].default_value='edgeID';rim_id.inputs['Value'].default_value=0;L.new(tagged_rim.outputs['Geometry'],rim_id.inputs['Geometry'])
     final=N.new('GeometryNodeJoinGeometry');L.new(surfaces.outputs['Geometry'],final.inputs['Geometry']);L.new(rim_id.outputs['Geometry'],final.inputs['Geometry'])
-    enabled_geometry=N.new('GeometryNodeSwitch');enabled_geometry.input_type='GEOMETRY';source_size=N.new('GeometryNodeAttributeDomainSize');source_size.component='MESH';L.new(staged.outputs['Output'],source_size.inputs['Geometry']);has_faces=N.new('ShaderNodeMath');has_faces.operation='GREATER_THAN';L.new(source_size.outputs['Face Count'],has_faces.inputs[0]);live=N.new('FunctionNodeBooleanMath');live.operation='AND';L.new(inp.outputs['Enabled'],live.inputs[0]);L.new(has_faces.outputs[0],live.inputs[1]);L.new(live.outputs['Boolean'],enabled_geometry.inputs['Switch']);L.new(final.outputs['Geometry'],enabled_geometry.inputs['True']);raw_only=N.new('FunctionNodeCompare');raw_only.data_type='INT';raw_only.operation='EQUAL';L.new(inp.outputs['Evaluation stage'],raw_only.inputs[2]);raw_only.inputs[3].default_value=1
+    enabled_geometry=N.new('GeometryNodeSwitch');enabled_geometry.input_type='GEOMETRY';source_size=N.new('GeometryNodeAttributeDomainSize');source_size.component='MESH';L.new(staged.outputs['Output'],source_size.inputs['Geometry']);has_faces=N.new('ShaderNodeMath');has_faces.operation='GREATER_THAN';L.new(source_size.outputs['Face Count'],has_faces.inputs[0]);live=N.new('FunctionNodeBooleanMath');live.operation='AND';L.new(inp.outputs['Enabled'],live.inputs[0]);L.new(has_faces.outputs[0],live.inputs[1]);L.new(live.outputs['Boolean'],enabled_geometry.inputs['Switch']);L.new(final.outputs['Geometry'],enabled_geometry.inputs['True']);raw_only=N.new('FunctionNodeCompare');raw_only.data_type='INT';raw_only.operation='EQUAL';L.new(inp.outputs['Evaluation stage'],integer_operand(raw_only,'A'));integer_operand(raw_only,'B').default_value=1
     raw_enabled=N.new('GeometryNodeSwitch');raw_enabled.input_type='GEOMETRY';L.new(inp.outputs['Enabled'],raw_enabled.inputs['Switch']);L.new(deform.outputs['Geometry'],raw_enabled.inputs['True'])
     result_stage=N.new('GeometryNodeSwitch');result_stage.input_type='GEOMETRY';L.new(raw_only.outputs['Result'],result_stage.inputs['Switch']);L.new(enabled_geometry.outputs['Output'],result_stage.inputs['False']);L.new(raw_enabled.outputs['Output'],result_stage.inputs['True']);L.new(result_stage.outputs['Output'],out.inputs['Geometry'])
     layout=[(inp,(0,400)),(road,(280,400)),(attr,(280,0)),(test,(520,0)),(border,(760,400)),(path,(760,800)),(choose_path,(1000,400)),(edge_store,(1480,400)),(edge_position,(1000,0)),(edge_z,(1240,0)),(profile,(760,-500)),(negate,(760,-900)),(scale,(1000,-700)),(height_offset,(760,-1200)),(shift,(1000,-1100)),(orient,(1240,-500)),(sweep,(1720,400)),(profile_position,(1000,-1450)),(max_profile,(1240,-1450)),(heights,(1480,-800)),(top_height,(1720,-800)),(top_offset,(1960,-800)),(edge_attr,(1960,-1150)),(top_reference,(2200,-800)),(cross,(1960,1000)),(position,(1720,1450)),(split,(1960,1450)),(proximity,(2200,1000)),(closest,(2440,1000)),(ramp,(2440,600)),(origin,(1960,1800)),(ray,(2200,1800)),(hit_z,(2440,1800)),(target,(2680,1300)),(weight,(2680,600)),(enabled,(2920,600)),(difference,(2920,1300)),(lower,(3160,1300)),(multiply,(3400,1000)),(offset,(3640,1000)),(deform,(3880,400)),(mat,(4120,400)),(enabled_geometry,(4360,400)),(out,(4600,400))]
@@ -305,7 +307,7 @@ def simplify_sidewalk(obj):
     if finish is None:
         finish=obj.modifiers.new('RoadLab Surface Finish','NODES');finish.node_group=sweep.node_group
         for item in sweep.node_group.interface.items_tree:
-            if getattr(item,'in_out',None)=='INPUT' and item.identifier in sweep:finish[item.identifier]=sweep[item.identifier]
+            if getattr(item,'in_out',None)=='INPUT' and hasattr(item,'default_value'):set_value(finish,item.identifier,get_value(sweep,item.identifier,item.default_value))
     obj['roadlab_staged_surface']=True
     set_input(sweep,'Evaluation stage',1);set_input(finish,'Evaluation stage',2)
     for target,index in ((sweep,0),(modifier,1),(finish,2)):

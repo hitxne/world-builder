@@ -1,4 +1,4 @@
-bl_info={'name':'RoadLab','author':'World Builder','version':(0,18,18),'blender':(5,1,0),'location':'View3D > Sidebar > RoadLab','category':'Object'}
+bl_info={'name':'RoadLab','author':'World Builder','version':(0,18,19),'blender':(5,1,0),'location':'View3D > Sidebar > RoadLab','category':'Object'}
 import bpy,json,math
 from pathlib import Path
 from bpy.props import StringProperty,FloatProperty,BoolProperty,EnumProperty,FloatVectorProperty,CollectionProperty,PointerProperty
@@ -232,13 +232,14 @@ class WB_OT_curve_profile(bpy.types.Operator):
   source=context.active_object
   if not source or source.type!='CURVE':self.report({'ERROR'},'Select an editable curve first');return {'CANCELLED'}
   from . import nodes
+  from .modifier_inputs import set_value
   import uuid
   groups=nodes.create_groups();obj=source.copy();obj.data=source.data.copy();obj.modifiers.clear();obj.name='WB_Profile_'+source.name;context.scene.collection.objects.link(obj);obj['wb_id']='road-'+uuid.uuid4().hex;obj['wb_source_object']=source.name
   modifier=obj.modifiers.new('WB independent width profile','NODES');modifier.node_group=groups[0]
   for socket in groups[0].interface.items_tree:
    if socket.item_type=='SOCKET' and socket.in_out=='INPUT':
-    if socket.name in ('Left width','Right width'):modifier[socket.identifier]=3.
-    elif socket.name=='Material':modifier[socket.identifier]=material('asphalt')
+    if socket.name in ('Left width','Right width'):set_value(modifier,socket.identifier,3.)
+    elif socket.name=='Material':set_value(modifier,socket.identifier,material('asphalt'))
   source.select_set(False);obj.select_set(True);context.view_layer.objects.active=obj
   self.report({'INFO'},'Copied alignment; edit left/right widths in its modifier. Terrain integration is separate.');return {'FINISHED'}
 class WB_OT_capture_parking(bpy.types.Operator):

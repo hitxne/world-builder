@@ -1,4 +1,5 @@
 """Editable mesh outlines drive terrain-aware pads, islands, medians and lots."""
+from .modifier_inputs import integer_operand
 import uuid
 import bpy
 from bpy.props import EnumProperty,FloatProperty,BoolProperty,PointerProperty,IntProperty
@@ -21,7 +22,7 @@ def group():
     inp=node('NodeGroupInput','Editable boundary plane');out=node('NodeGroupOutput','Generated surface')
     position=node('GeometryNodeInputPosition','Surface position')
     neighbors=node('GeometryNodeInputMeshEdgeNeighbors','Only outer and hole boundaries')
-    boundary=node('FunctionNodeCompare','Boundary edges');boundary.data_type='INT';boundary.operation='EQUAL';boundary.inputs[3].default_value=1;L.new(neighbors.outputs['Face Count'],boundary.inputs[2])
+    boundary=node('FunctionNodeCompare','Boundary edges');boundary.data_type='INT';boundary.operation='EQUAL';integer_operand(boundary,'B').default_value=1;L.new(neighbors.outputs['Face Count'],integer_operand(boundary,'A'))
     outline=node('GeometryNodeMeshToCurve','Editable mesh perimeter');L.new(inp.outputs['Geometry'],outline.inputs['Mesh']);L.new(boundary.outputs['Result'],outline.inputs['Selection'])
     rounder=node('GeometryNodeFilletCurve','Rounded corners');rounder.inputs['Mode'].default_value='Poly';rounder.inputs['Count'].default_value=6;rounder.inputs['Limit Radius'].default_value=True;L.new(outline.outputs['Curve'],rounder.inputs['Curve']);L.new(inp.outputs['Corner radius'],rounder.inputs['Radius'])
     fill=node('GeometryNodeFillCurve','Fill concave bounds and holes');fill.inputs['Mode'].default_value='N-gons';L.new(rounder.outputs['Curve'],fill.inputs['Curve'])

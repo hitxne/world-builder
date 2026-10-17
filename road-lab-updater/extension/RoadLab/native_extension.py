@@ -1,5 +1,6 @@
 """Additive RoadLab integration. Native objects and node groups remain untouched."""
 import bpy
+from .modifier_inputs import get_value, set_value, draw_value
 from bpy.props import PointerProperty, StringProperty
 
 
@@ -33,9 +34,11 @@ def set_input(mod,name,value):
     targets=[mod]
     if name!='Evaluation stage' and mod.id_data.get('roadlab_staged_surface'):
         targets=[m for m in mod.id_data.modifiers if m.type=='NODES' and m.node_group==mod.node_group]
+    missing=object()
     for target in targets:
-        if item.identifier in target and target[item.identifier]==value and not (isinstance(value,bool) and not isinstance(target[item.identifier],bool)):continue
-        target[item.identifier]=value;target.id_data.update_tag()
+        current=get_value(target,item.identifier,missing)
+        if current==value and not (isinstance(value,bool) and not isinstance(current,bool)):continue
+        set_value(target,item.identifier,value);target.id_data.update_tag()
 
 
 def cleanup_quality(self,context):
@@ -88,7 +91,7 @@ class WB_OT_link_node_library(bpy.types.Operator):
                     if modifier.type!='NODES' or not modifier.node_group or modifier.node_group.library not in libraries:continue
                     for item in modifier.node_group.interface.items_tree:
                         if getattr(item,'in_out',None)=='INPUT' and getattr(item,'socket_type',None)=='NodeSocketBool':
-                            set_input(modifier,item.name,bool(modifier.get(item.identifier,item.default_value)))
+                            set_input(modifier,item.name,bool(get_value(modifier,item.identifier,item.default_value)))
             bpy.ops.wb.bind_roadlab()
             context.view_layer.update()
         except Exception as exc:self.report({'ERROR'},str(exc));return {'CANCELLED'}
@@ -189,7 +192,7 @@ class WB_OT_edit_native_profile(bpy.types.Operator):
     def execute(self,context):
         mod=active_layer_modifier(context)
         if not mod:return {'CANCELLED'}
-        item=next(s for s in mod.node_group.interface.items_tree if s.name=='Profile curve' and getattr(s,'in_out',None)=='INPUT');profile=mod.get(item.identifier)
+        item=next(s for s in mod.node_group.interface.items_tree if s.name=='Profile curve' and getattr(s,'in_out',None)=='INPUT');profile=get_value(mod,item.identifier)
         if not profile or profile.type!='CURVE':self.report({'ERROR'},'Choose a curve profile first');return {'CANCELLED'}
         if context.mode!='OBJECT':bpy.ops.object.mode_set(mode='OBJECT')
         for selected in context.selected_objects:selected.select_set(False)
@@ -206,7 +209,7 @@ def draw_input(layout,modifier,name,label):
         modifier=modifier.id_data.modifiers.get('RoadLab Surface Finish') or modifier
     item=next((p for p in modifier.node_group.interface.items_tree if p.name==name and getattr(p,'in_out',None)=='INPUT'),None)
     layout.use_property_split=True;layout.use_property_decorate=False
-    if item:layout.prop(modifier,'["'+item.identifier+'"]',text=label)
+    if item:draw_value(layout,modifier,item.identifier,label)
 
 
 def active_layer_modifier(context):

@@ -1,11 +1,12 @@
 """Collection wiring for native terrain and WB expansions; no native group edits."""
 import bpy
+from .modifier_inputs import get_value
 from .native_extension import native_roads,native_terrain,set_input
 
 
 def input_value(mod,name):
     s=next((s for s in mod.node_group.interface.items_tree if s.name==name and getattr(s,'in_out',None)=='INPUT'),None)
-    return mod.get(s.identifier,s.default_value if hasattr(s,'default_value') else None) if s else None
+    return get_value(mod,s.identifier,getattr(s,'default_value',None)) if s else None
 
 
 def collection(scene,name):

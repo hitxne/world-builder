@@ -1,6 +1,6 @@
 # RoadLab Blender extension and update repository
 
-The full RoadLab 0.18.17 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
+The full RoadLab 0.18.19 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
 
 ## Install once
 
@@ -249,3 +249,13 @@ Before recomputing border normals (the end-cap pinch is visible):
 After the contour correction, with panel edges shown for inspection:
 
 ![Straight road-end contour after correction](docs/road-end-panels-fixed.png)
+
+
+### 0.18.19 — Blender 5.1 and 5.2 input compatibility
+
+Geometry Nodes input reads, writes and sidebar controls now use Blender 5.2's
+RNA inputs when available, retaining Blender 5.1's modifier property access.
+Layer staging, profile editing and original terrain adapters use the same access
+helpers. Integer Compare nodes resolve typed operands instead of relying on
+indices that changed in 5.2. The release workflow tests both Blender versions
+before publishing the update feed.

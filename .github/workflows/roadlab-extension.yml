@@ -24,6 +24,16 @@ jobs:
           curl --fail --location https://download.blender.org/release/Blender5.1/blender-5.1.0-linux-x64.tar.xz --output /tmp/blender.tar.xz
           mkdir /tmp/roadlab-blender
           tar -xf /tmp/blender.tar.xz --strip-components=1 -C /tmp/roadlab-blender
+      - name: Test Blender 5.2 compatibility
+        run: |
+          curl --fail --location https://download.blender.org/release/Blender5.2/blender-5.2.0-linux-x64.tar.xz --output /tmp/blender52.tar.xz
+          mkdir /tmp/roadlab-blender52
+          tar -xf /tmp/blender52.tar.xz --strip-components=1 -C /tmp/roadlab-blender52
+          for test in road-lab-updater/tests/*_blender.py; do
+            /tmp/roadlab-blender52/blender -b --factory-startup -t 4 --python-exit-code 1 --python "$test"
+          done
+      - name: Test modifier input compatibility on Blender 5.1
+        run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_modifier_inputs_blender.py
       - name: Test marking approach logic
         run: python road-lab-updater/tests/test_marking_approaches.py
       - name: Test local sculpt preview, seam preservation and commit
