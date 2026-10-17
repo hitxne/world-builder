@@ -11,7 +11,7 @@ def extrusion_group():
     if g and g.library:g=g.copy();g.name=name+'_v08'
     if g:g.nodes.clear()
     else:g=bpy.data.node_groups.new(name,'GeometryNodeTree')
-    g['wb_schema']=18
+    g['wb_schema']=19
     socket(g,'Geometry','INPUT','NodeSocketGeometry')
     stage_socket=socket(g,'Evaluation stage','INPUT','NodeSocketInt',0)
     if hasattr(stage_socket,'hide_in_modifier'):stage_socket.hide_in_modifier=True
@@ -28,21 +28,45 @@ def extrusion_group():
     border=N.new('GeometryNodeSeparateGeometry');border.domain='POINT';L.new(road.outputs['Geometry'],border.inputs['Geometry']);L.new(test.outputs['Result'],border.inputs['Selection'])
     path=N.new('GeometryNodeObjectInfo');path.transform_space='RELATIVE';L.new(inp.outputs['Path curve'],path.inputs['Object'])
     choose_path=N.new('GeometryNodeSwitch');choose_path.input_type='GEOMETRY';L.new(inp.outputs['Use custom path'],choose_path.inputs['Switch']);L.new(border.outputs['Selection'],choose_path.inputs['False']);L.new(path.outputs['Geometry'],choose_path.inputs['True'])
+    # Remove redundant straight-line knots before offsetting. A tiny connector
+    # immediately before a fillet can otherwise be shorter than its miter trim,
+    # reversing even the original (not just subdivided) offset vertices.
+    clean_position=N.new('GeometryNodeInputPosition');clean_index=N.new('GeometryNodeInputIndex');clean_directions=[]
+    for step in (-1,1):
+        neighbor=N.new('GeometryNodeOffsetPointInCurve');neighbor.inputs['Offset'].default_value=step;L.new(clean_index.outputs['Index'],neighbor.inputs['Point Index'])
+        sample=N.new('GeometryNodeSampleIndex');sample.data_type='FLOAT_VECTOR';sample.domain='POINT';L.new(choose_path.outputs['Output'],sample.inputs['Geometry']);L.new(clean_position.outputs['Position'],sample.inputs['Value']);L.new(neighbor.outputs['Point Index'],sample.inputs['Index'])
+        delta=N.new('ShaderNodeVectorMath');delta.operation='SUBTRACT';L.new(clean_position.outputs['Position'] if step<0 else sample.outputs['Value'],delta.inputs[0]);L.new(sample.outputs['Value'] if step<0 else clean_position.outputs['Position'],delta.inputs[1])
+        unit=N.new('ShaderNodeVectorMath');unit.operation='NORMALIZE';L.new(delta.outputs['Vector'],unit.inputs[0]);clean_directions.append(unit.outputs['Vector'])
+    straight_dot=N.new('ShaderNodeVectorMath');straight_dot.operation='DOT_PRODUCT';L.new(clean_directions[0],straight_dot.inputs[0]);L.new(clean_directions[1],straight_dot.inputs[1])
+    collinear=N.new('ShaderNodeMath');collinear.operation='GREATER_THAN';collinear.inputs[1].default_value=.9999999;L.new(straight_dot.outputs['Value'],collinear.inputs[0])
+    clean_path=N.new('GeometryNodeDeleteGeometry');clean_path.domain='POINT';clean_path.label='Remove collinear border knots before offsetting';L.new(choose_path.outputs['Output'],clean_path.inputs['Geometry']);L.new(collinear.outputs[0],clean_path.inputs['Selection'])
+    # Keep stable straight-section frames as well as true corner knots. Their
+    # spacing is at least the layer's offset reach, so a corner miter cannot
+    # overtake the next frame; its skew also stays local to the corner.
+    frame_index=N.new('GeometryNodeInputIndex');frame_next=N.new('GeometryNodeOffsetPointInCurve');frame_next.inputs['Offset'].default_value=1;L.new(frame_index.outputs['Index'],frame_next.inputs['Point Index'])
+    frame_position=N.new('GeometryNodeInputPosition');frame_sample=N.new('GeometryNodeSampleIndex');frame_sample.data_type='FLOAT_VECTOR';frame_sample.domain='POINT';L.new(clean_path.outputs['Geometry'],frame_sample.inputs['Geometry']);L.new(frame_position.outputs['Position'],frame_sample.inputs['Value']);L.new(frame_next.outputs['Point Index'],frame_sample.inputs['Index'])
+    frame_length=N.new('ShaderNodeVectorMath');frame_length.operation='DISTANCE';L.new(frame_position.outputs['Position'],frame_length.inputs[0]);L.new(frame_sample.outputs['Value'],frame_length.inputs[1])
+    frame_spacing=N.new('ShaderNodeMath');frame_spacing.operation='MAXIMUM';frame_spacing.inputs[0].default_value=4;frame_spacing.inputs[1].default_value=.25
+    frame_ratio=N.new('ShaderNodeMath');frame_ratio.operation='DIVIDE';L.new(frame_length.outputs['Value'],frame_ratio.inputs[0]);L.new(frame_spacing.outputs[0],frame_ratio.inputs[1])
+    frame_pieces=N.new('ShaderNodeMath');frame_pieces.operation='FLOOR';L.new(frame_ratio.outputs[0],frame_pieces.inputs[0])
+    frame_cuts=N.new('ShaderNodeMath');frame_cuts.operation='SUBTRACT';frame_cuts.use_clamp=False;frame_cuts.inputs[1].default_value=1;L.new(frame_pieces.outputs[0],frame_cuts.inputs[0])
+    positive_cuts=N.new('ShaderNodeMath');positive_cuts.operation='MAXIMUM';L.new(frame_cuts.outputs[0],positive_cuts.inputs[0]);positive_cuts.inputs[1].default_value=0
+    frame_path=N.new('GeometryNodeSubdivideCurve');L.new(clean_path.outputs['Geometry'],frame_path.inputs['Curve']);L.new(positive_cuts.outputs[0],frame_path.inputs['Cuts'])
     # Keep pavement polygon corners when spacing the sweep. Uniform resampling
     # cuts across them and produces alternating inward offsets on tight arcs.
     path_position=N.new('GeometryNodeInputPosition');path_index=N.new('GeometryNodeInputIndex')
     next_index=N.new('GeometryNodeOffsetPointInCurve');next_index.inputs['Offset'].default_value=1;L.new(path_index.outputs['Index'],next_index.inputs['Point Index'])
-    path_next=N.new('GeometryNodeSampleIndex');path_next.data_type='FLOAT_VECTOR';path_next.domain='POINT';L.new(choose_path.outputs['Output'],path_next.inputs['Geometry']);L.new(path_position.outputs['Position'],path_next.inputs['Value']);L.new(next_index.outputs['Point Index'],path_next.inputs['Index'])
+    path_next=N.new('GeometryNodeSampleIndex');path_next.data_type='FLOAT_VECTOR';path_next.domain='POINT';L.new(frame_path.outputs['Curve'],path_next.inputs['Geometry']);L.new(path_position.outputs['Position'],path_next.inputs['Value']);L.new(next_index.outputs['Point Index'],path_next.inputs['Index'])
     path_length=N.new('ShaderNodeVectorMath');path_length.operation='DISTANCE';L.new(path_position.outputs['Position'],path_length.inputs[0]);L.new(path_next.outputs['Value'],path_length.inputs[1])
     path_cuts=N.new('ShaderNodeMath');path_cuts.operation='DIVIDE';path_cuts.inputs[1].default_value=.25;L.new(path_length.outputs['Value'],path_cuts.inputs[0])
     cut_count=N.new('ShaderNodeMath');cut_count.operation='FLOOR';L.new(path_cuts.outputs[0],cut_count.inputs[0])
-    subdivided=N.new('GeometryNodeSubdivideCurve');L.new(choose_path.outputs['Output'],subdivided.inputs['Curve']);L.new(cut_count.outputs[0],subdivided.inputs['Cuts'])
+    subdivided=N.new('GeometryNodeSubdivideCurve');L.new(frame_path.outputs['Curve'],subdivided.inputs['Curve']);L.new(cut_count.outputs[0],subdivided.inputs['Cuts'])
     # A polyline offset uses the angle bisector and its miter length. A unit
     # normal alone pulls every original arc knot inward by a different amount.
     directions=[]
     for step in (-1,1):
         neighbor=N.new('GeometryNodeOffsetPointInCurve');neighbor.inputs['Offset'].default_value=step;L.new(path_index.outputs['Index'],neighbor.inputs['Point Index'])
-        sample=N.new('GeometryNodeSampleIndex');sample.data_type='FLOAT_VECTOR';sample.domain='POINT';L.new(subdivided.outputs['Curve'],sample.inputs['Geometry']);L.new(path_position.outputs['Position'],sample.inputs['Value']);L.new(neighbor.outputs['Point Index'],sample.inputs['Index'])
+        sample=N.new('GeometryNodeSampleIndex');sample.data_type='FLOAT_VECTOR';sample.domain='POINT';L.new(frame_path.outputs['Curve'],sample.inputs['Geometry']);L.new(path_position.outputs['Position'],sample.inputs['Value']);L.new(neighbor.outputs['Point Index'],sample.inputs['Index'])
         delta=N.new('ShaderNodeVectorMath');delta.operation='SUBTRACT';L.new(path_position.outputs['Position'] if step<0 else sample.outputs['Value'],delta.inputs[0]);L.new(sample.outputs['Value'] if step<0 else path_position.outputs['Position'],delta.inputs[1])
         flat=N.new('ShaderNodeVectorMath');flat.operation='MULTIPLY';flat.inputs[1].default_value=(1,1,0);L.new(delta.outputs['Vector'],flat.inputs[0])
         unit=N.new('ShaderNodeVectorMath');unit.operation='NORMALIZE';L.new(flat.outputs['Vector'],unit.inputs[0]);directions.append(unit.outputs['Vector'])
@@ -51,17 +75,21 @@ def extrusion_group():
     safe_cos=N.new('ShaderNodeMath');safe_cos.operation='MAXIMUM';safe_cos.inputs[1].default_value=.04;L.new(half.outputs[0],safe_cos.inputs[0])
     cosine=N.new('ShaderNodeMath');cosine.operation='SQRT';L.new(safe_cos.outputs[0],cosine.inputs[0])
     reciprocal=N.new('ShaderNodeMath');reciprocal.operation='DIVIDE';reciprocal.inputs[0].default_value=1;L.new(cosine.outputs[0],reciprocal.inputs[1])
-    miter_store=N.new('GeometryNodeStoreNamedAttribute');miter_store.data_type='FLOAT';miter_store.domain='POINT';miter_store.inputs['Name'].default_value='roadlab_offset_miter';L.new(subdivided.outputs['Curve'],miter_store.inputs['Geometry']);L.new(reciprocal.outputs[0],miter_store.inputs['Value'])
+    miter_store=N.new('GeometryNodeStoreNamedAttribute');miter_store.data_type='FLOAT';miter_store.domain='POINT';miter_store.inputs['Name'].default_value='roadlab_offset_miter';L.new(frame_path.outputs['Curve'],miter_store.inputs['Geometry']);L.new(reciprocal.outputs[0],miter_store.inputs['Value'])
     edge_position=N.new('GeometryNodeInputPosition');edge_z=N.new('ShaderNodeSeparateXYZ');L.new(edge_position.outputs['Position'],edge_z.inputs['Vector'])
     edge_store=N.new('GeometryNodeStoreNamedAttribute');edge_store.data_type='FLOAT';edge_store.domain='POINT';edge_store.inputs['Name'].default_value='wb_edge_elevation';L.new(edge_z.outputs['Z'],edge_store.inputs['Value']);L.new(miter_store.outputs['Geometry'],edge_store.inputs['Geometry'])
-    # Subdivision interpolates a Free normal across sharp polygon corners.
-    # Recompute the frame from actual neighboring edge directions instead.
+    # Compute true offset vectors at the original polygon knots, then interpolate
+    # the vector as a whole. Independent dense-point miters reverse edge order
+    # when an inward offset consumes the neighboring sample intervals.
     tangent_sum=N.new('ShaderNodeVectorMath');tangent_sum.operation='ADD';L.new(directions[0],tangent_sum.inputs[0]);L.new(directions[1],tangent_sum.inputs[1])
     unit_tangent=N.new('ShaderNodeVectorMath');unit_tangent.operation='NORMALIZE';L.new(tangent_sum.outputs['Vector'],unit_tangent.inputs[0])
     source_normal=N.new('ShaderNodeVectorMath');source_normal.operation='CROSS_PRODUCT';source_normal.inputs[1].default_value=(0,0,1);L.new(unit_tangent.outputs['Vector'],source_normal.inputs[0])
     normal_store=N.new('GeometryNodeStoreNamedAttribute');normal_store.data_type='FLOAT_VECTOR';normal_store.domain='POINT';normal_store.inputs['Name'].default_value='wb_edge_normal';L.new(edge_store.outputs['Geometry'],normal_store.inputs['Geometry']);L.new(source_normal.outputs['Vector'],normal_store.inputs['Value'])
-    position_store=N.new('GeometryNodeStoreNamedAttribute');position_store.data_type='FLOAT_VECTOR';position_store.domain='POINT';position_store.inputs['Name'].default_value='wb_edge_position';L.new(normal_store.outputs['Geometry'],position_store.inputs['Geometry']);L.new(edge_position.outputs['Position'],position_store.inputs['Value'])
+    offset_vector=N.new('ShaderNodeVectorMath');offset_vector.operation='SCALE';L.new(source_normal.outputs['Vector'],offset_vector.inputs[0]);L.new(reciprocal.outputs[0],offset_vector.inputs['Scale'])
+    offset_store=N.new('GeometryNodeStoreNamedAttribute');offset_store.data_type='FLOAT_VECTOR';offset_store.domain='POINT';offset_store.inputs['Name'].default_value='wb_edge_offset';L.new(normal_store.outputs['Geometry'],offset_store.inputs['Geometry']);L.new(offset_vector.outputs['Vector'],offset_store.inputs['Value'])
+    position_store=N.new('GeometryNodeStoreNamedAttribute');position_store.data_type='FLOAT_VECTOR';position_store.domain='POINT';position_store.inputs['Name'].default_value='wb_edge_position';L.new(offset_store.outputs['Geometry'],position_store.inputs['Geometry']);L.new(edge_position.outputs['Position'],position_store.inputs['Value'])
     source_tangent=N.new('GeometryNodeInputTangent');tangent_store=N.new('GeometryNodeStoreNamedAttribute');tangent_store.data_type='FLOAT_VECTOR';tangent_store.domain='POINT';tangent_store.inputs['Name'].default_value='wb_edge_tangent';L.new(position_store.outputs['Geometry'],tangent_store.inputs['Geometry']);L.new(source_tangent.outputs['Tangent'],tangent_store.inputs['Value'])
+    L.new(tangent_store.outputs['Geometry'],subdivided.inputs['Curve'])
     profile=N.new('GeometryNodeObjectInfo');profile.transform_space='ORIGINAL';L.new(inp.outputs['Profile curve'],profile.inputs['Object'])
     negate=N.new('ShaderNodeMath');negate.operation='MULTIPLY';negate.inputs[1].default_value=-1;L.new(inp.outputs['Profile height scale'],negate.inputs[0])
     scale=N.new('ShaderNodeCombineXYZ');scale.inputs['Z'].default_value=1;L.new(inp.outputs['Profile width scale'],scale.inputs['X']);L.new(negate.outputs[0],scale.inputs['Y'])
@@ -85,7 +113,7 @@ def extrusion_group():
     rounded_cuts=N.new('ShaderNodeMath');rounded_cuts.operation='FLOOR';L.new(profile_cuts.outputs[0],rounded_cuts.inputs[0])
     divided_profile=N.new('GeometryNodeSubdivideCurve');L.new(orient.outputs['Geometry'],divided_profile.inputs['Curve']);L.new(rounded_cuts.outputs[0],divided_profile.inputs['Cuts'])
     use_divided_profile=N.new('GeometryNodeSwitch');use_divided_profile.input_type='GEOMETRY';L.new(orient.outputs['Geometry'],use_divided_profile.inputs['False']);L.new(divided_profile.outputs['Curve'],use_divided_profile.inputs['True'])
-    sweep=N.new('GeometryNodeCurveToMesh');sweep.inputs['Fill Caps'].default_value=True;L.new(position_store.outputs['Geometry'],sweep.inputs['Curve']);L.new(use_divided_profile.outputs['Output'],sweep.inputs['Profile Curve'])
+    sweep=N.new('GeometryNodeCurveToMesh');sweep.inputs['Fill Caps'].default_value=True;L.new(subdivided.outputs['Curve'],sweep.inputs['Curve']);L.new(use_divided_profile.outputs['Output'],sweep.inputs['Profile Curve'])
     # Read per-control-point data from the shared raw curve, never from radius/tilt.
     controls=N.new('GeometryNodeObjectInfo');controls.transform_space='RELATIVE';L.new(inp.outputs['Vertex controls'],controls.inputs['Object'])
     edge_pos_attr=N.new('GeometryNodeInputNamedAttribute');edge_pos_attr.data_type='FLOAT_VECTOR';edge_pos_attr.inputs['Name'].default_value='wb_edge_position'
@@ -96,12 +124,20 @@ def extrusion_group():
         attr_field=N.new('GeometryNodeInputNamedAttribute');attr_field.data_type='FLOAT';L.new(text.outputs['String'],attr_field.inputs['Name'])
         control_fields[key]=attr_field.outputs['Attribute']
         value=N.new('GeometryNodeSampleIndex');value.data_type='FLOAT';value.domain='POINT';L.new(controls.outputs['Geometry'],value.inputs['Geometry']);L.new(attr_field.outputs['Attribute'],value.inputs['Value']);L.new(nearest.outputs['Index'],value.inputs['Index']);fields[key]=value.outputs['Value']
+    frame_offset_abs=N.new('ShaderNodeMath');frame_offset_abs.operation='ABSOLUTE';L.new(control_fields['offset'],frame_offset_abs.inputs[0])
+    frame_stack_abs=N.new('ShaderNodeMath');frame_stack_abs.operation='ABSOLUTE';L.new(control_fields['stack'],frame_stack_abs.inputs[0])
+    frame_offsets=N.new('ShaderNodeMath');frame_offsets.operation='ADD';L.new(frame_offset_abs.outputs[0],frame_offsets.inputs[0]);L.new(frame_stack_abs.outputs[0],frame_offsets.inputs[1])
+    frame_extent=N.new('ShaderNodeMath');frame_extent.operation='ADD';L.new(frame_offsets.outputs[0],frame_extent.inputs[0]);L.new(control_fields['width'],frame_extent.inputs[1])
+    frame_stats=N.new('GeometryNodeAttributeStatistic');frame_stats.data_type='FLOAT';frame_stats.domain='POINT';L.new(controls.outputs['Geometry'],frame_stats.inputs['Geometry']);L.new(frame_extent.outputs[0],frame_stats.inputs['Attribute'])
+    frame_fallback=N.new('ShaderNodeMath');frame_fallback.operation='MULTIPLY';L.new(profile_max,frame_fallback.inputs[0]);L.new(inp.outputs['Profile width scale'],frame_fallback.inputs[1])
+    frame_width=N.new('GeometryNodeSwitch');frame_width.input_type='FLOAT';L.new(inp.outputs['Use vertex controls'],frame_width.inputs['Switch']);L.new(frame_stats.outputs['Max'],frame_width.inputs['True']);L.new(frame_fallback.outputs[0],frame_width.inputs['False'])
+    frame_margin=N.new('ShaderNodeMath');frame_margin.operation='MULTIPLY';frame_margin.inputs[1].default_value=1.05;L.new(frame_width.outputs['Output'],frame_margin.inputs[0]);L.new(frame_margin.outputs[0],frame_spacing.inputs[0])
     # Delete mesh edges to create connected enabled runs, capped only at real gaps.
     from . import sidewalk_panels
     columns_enabled=N.new('FunctionNodeBooleanMath');columns_enabled.operation='AND';L.new(inp.outputs['Sidewalk panels'],columns_enabled.inputs[0]);L.new(inp.outputs['Use vertex controls'],columns_enabled.inputs[1])
     column_profile=sidewalk_panels.columns(g,profile_us.outputs['Geometry'],controls.outputs['Geometry'],control_fields['width'],columns_enabled.outputs[0],inp.outputs['Slab width'],inp.outputs['Joint gap'])
     L.new(column_profile,orient.inputs['Geometry'])
-    panel_path=sidewalk_panels.prepare(g,tangent_store.outputs['Geometry'])
+    panel_path=sidewalk_panels.prepare(g,subdivided.outputs['Curve'])
     wire=N.new('GeometryNodeCurveToMesh');L.new(panel_path,wire.inputs['Curve'])
     disabled=N.new('ShaderNodeMath');disabled.operation='LESS_THAN';disabled.inputs[1].default_value=.5;L.new(fields['enabled'],disabled.inputs[0])
     delete_edges=N.new('GeometryNodeDeleteGeometry');delete_edges.domain='EDGE';L.new(wire.outputs['Mesh'],delete_edges.inputs['Geometry']);active_disabled=N.new('FunctionNodeBooleanMath');active_disabled.operation='AND';L.new(disabled.outputs[0],active_disabled.inputs[0]);L.new(inp.outputs['Use vertex controls'],active_disabled.inputs[1]);L.new(active_disabled.outputs[0],delete_edges.inputs['Selection'])
@@ -127,7 +163,8 @@ def extrusion_group():
     x_delta=N.new('ShaderNodeMath');x_delta.operation='SUBTRACT';L.new(miter_x.outputs[0],x_delta.inputs[0]);L.new(old_x.outputs[0],x_delta.inputs[1])
     # Construct from the original border frame, not the frame of a split panel.
     # MeshToCurve can reverse a run, and its endpoint tangent can change a miter.
-    x_vector=N.new('ShaderNodeVectorMath');x_vector.operation='SCALE';L.new(normal_attr.outputs['Attribute'],x_vector.inputs[0]);L.new(miter_x.outputs[0],x_vector.inputs['Scale'])
+    offset_attr=N.new('GeometryNodeInputNamedAttribute');offset_attr.data_type='FLOAT_VECTOR';offset_attr.inputs['Name'].default_value='wb_edge_offset'
+    x_vector=N.new('ShaderNodeVectorMath');x_vector.operation='SCALE';L.new(offset_attr.outputs['Attribute'],x_vector.inputs[0]);L.new(safe_x.outputs[0],x_vector.inputs['Scale'])
     y_attr=N.new('GeometryNodeInputNamedAttribute');y_attr.data_type='FLOAT';y_attr.inputs['Name'].default_value='wb_profile_y'
     profile_height=N.new('ShaderNodeMath');profile_height.operation='MULTIPLY_ADD';L.new(y_attr.outputs['Attribute'],profile_height.inputs[0]);L.new(inp.outputs['Profile height scale'],profile_height.inputs[1]);L.new(inp.outputs['Height offset'],profile_height.inputs[2])
     final_height=N.new('ShaderNodeMath');final_height.operation='ADD';L.new(profile_height.outputs[0],final_height.inputs[0]);L.new(fields['zpos'],final_height.inputs[1])

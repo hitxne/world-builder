@@ -284,7 +284,11 @@ class WB_PT_layer_controls(bpy.types.Panel):
                     if mod.type=='NODES' and mod.node_group and mod.node_group.name.startswith('WB_EXTENSION_BORDER_EXTRUSION'):
                         for name in ('Sidewalk panels','Slab length','Slab width','Joint gap'):draw_input(box,mod,name,name if name=='Sidewalk panels' else name+' (m)')
                         break
-            col.prop(layer,'vertex_enabled');col.prop(layer,'width');col.prop(layer,'offset');col.prop(layer,'zpos',text='Inner height offset (m)' if layer.kind=='grass' else 'Height offset (m)')
+            col.prop(layer,'vertex_enabled')
+            if layer.kind=='sidewalk':
+                row=col.row(align=True);row.label(text=f'Width: {layer.width:.2f} m');row.operator('roadlab.sidewalk_width',text='Adjust…').uid=layer.uid
+            else:col.prop(layer,'width')
+            col.prop(layer,'offset');col.prop(layer,'zpos',text='Inner height offset (m)' if layer.kind=='grass' else 'Height offset (m)')
 
 class WB_PT_curbs(WB_PT_layer_controls):bl_idname='WB_PT_curbs';bl_label='Curbs';bl_order=0;kind='curb'
 class WB_PT_grass(WB_PT_layer_controls):bl_idname='WB_PT_grass';bl_label='Grass strips';bl_order=1;kind='grass'
@@ -348,6 +352,8 @@ def update_edit_preview():
     return .1
 
 def register_panels():
+    from . import sidewalk_width
+    sidewalk_width.register()
     for cls in (WB_PT_curbs,WB_PT_grass,WB_PT_sidewalks):bpy.utils.register_class(cls)
     if sync_controls not in bpy.app.handlers.depsgraph_update_post:bpy.app.handlers.depsgraph_update_post.append(sync_controls)
     if upgrade_layers not in bpy.app.handlers.load_post:bpy.app.handlers.load_post.append(upgrade_layers)
@@ -356,6 +362,8 @@ def register_panels():
     if not bpy.app.timers.is_registered(update_edit_preview):
         bpy.app.timers.register(update_edit_preview,first_interval=.1,persistent=True)
 def unregister_panels():
+    from . import sidewalk_width
+    sidewalk_width.unregister()
     if bpy.app.timers.is_registered(update_edit_preview):bpy.app.timers.unregister(update_edit_preview)
     if bpy.app.timers.is_registered(deferred_upgrade):bpy.app.timers.unregister(deferred_upgrade)
     if upgrade_layers in bpy.app.handlers.load_post:bpy.app.handlers.load_post.remove(upgrade_layers)

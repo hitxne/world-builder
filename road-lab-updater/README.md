@@ -1,6 +1,6 @@
 # RoadLab Blender extension and update repository
 
-The full RoadLab 0.18.20 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
+The full RoadLab 0.18.21 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
 
 ## Install once
 
@@ -292,3 +292,31 @@ changed segments only. It is a provisional straight-segment footprint; final rou
 junctions, terrain and markings still come from the normal compiler after placement.
 Mouse changes coalesce before ribbon generation, GPU batches are reused between
 changes, and committed edits replace the overlay with completed geometry.
+
+
+### 0.18.21 — ordered sidewalk offsets and width drafts
+
+Tight inside corners previously reversed dense border samples as the sidewalk
+offset consumed their intervals. Computing miters at those inserted samples also
+folded slab top faces. The node group now removes redundant collinear knots, builds
+true offset vectors at the original polygon corners, and interpolates those vectors
+as a whole before splitting panels. A 3.2 m sidewalk at a 4 m corner radius reproduced
+approximately 3.17 square meters of overlapping top surface before the correction;
+the corrected fixture has no measurable top-surface overlap or self-crossing faces.
+Corner tests cover 45/90/135 degree turns, multiple resolutions and widths through
+10 m, checking the raw sweep and final surface. Tight inside corners taper where
+the available space cannot contain the full width; straight sections retain it.
+
+In RoadLab > Edge layers > Sidewalks, expand a layer and choose **Adjust…**
+beside Width. The popup displays an isolated blue width draft and moves following
+layers outward. In Edit Mode it targets selected road points; in Object Mode it
+targets the whole road. **Accept width** commits the settings and evaluates the
+concrete panels. Cancel restores visibility and removes all draft helpers without
+changing the source width. The draft uses a continuous band for responsiveness;
+final slab divisions and cleanup remain in the existing node stack.
+
+Actual Blender renders with polygon edges shown:
+
+![Folded sidewalk corner before the correction](docs/sidewalk-corner-before.png)
+
+![Ordered slab boundaries after the correction](docs/sidewalk-corner-after.png)
