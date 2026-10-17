@@ -1,6 +1,6 @@
 # RoadLab Blender extension and update repository
 
-The full RoadLab 0.18.25 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
+The full RoadLab 0.18.26 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
 
 ## Install once
 
@@ -350,3 +350,7 @@ Select any connected road point in Edit Mode and open the Lane tool. An endpoint
 White edge lines now intersect the finished pavement at each station rather than retaining lane-width-based shoulder space. Lane pocket cross-sections keep their original source directions and use the same interpolation for lateral center shift and widening. Adding a turn lane therefore leaves the opposite curb and white line straight instead of introducing small waves. Yellow median lines remain attached to their logical alignment. New street extensions inherit the endpoint’s saved left/right gaps.
 
 Regression coverage includes endpoint/interior selection, isolated width previews, independent gaps, cancellation, save/reopen, one-sided tapers, curved pockets and the existing junction/terrain/sidewalk suites on Blender 5.1 and 5.2. `tools/render_point_lanes.py` generates the actual Cycles demonstration in `docs/point-lane-edges.png`.
+
+## Curved edge-line continuity (0.18.26)
+
+Rounded-corner connectors now use the actual adjoining line endpoints at each pavement gate rather than each street marking’s midpoint. Independent per-point gap changes therefore remain joined through curves. A regression checks both sides of a 90-degree bend with different left/right gaps against the adjoining line endpoints.

@@ -83,4 +83,15 @@ rows=ps.records(road);rows[3]['edge_left']=.85;rows[3]['edge_right']=.35;ps.save
 spline=road.data.splines[0];spline.points.add(1);spline.points[-1].co=(160,0,.02,1)
 road_core.rebuild(road,True);e.rebuild(road,bpy.context.scene,True)
 new=ps.records(road)[4];assert abs(new['edge_left']-.85)<1e-6 and abs(new['edge_right']-.35)<1e-6
+# Changing per-point gaps must not disconnect straight lines from bend arcs.
+scene=bpy.context.scene;cu=bpy.data.curves.new('Gap bend','CURVE');cu.dimensions='3D';s=cu.splines.new('POLY');s.points.add(2)
+for p,co in zip(s.points,[(-60,0,.02),(0,0,.02),(0,60,.02)]):p.co=(*co,1)
+rd=bpy.data.objects.new('Gap bend',cu);scene.collection.objects.link(rd);scene.wb_native.road=rd;road_core.attach(rd);set_input(road_core.modifier(rd),'road width',8);road_core.rebuild(rd,True)
+rr=ps.records(rd);rr[1]['edge_left']=1.25;rr[1]['edge_right']=.2;ps.save(rd,rr)
+lane=[dict(width=3.5,movement='THROUGH',entry='CONTINUOUS')]
+rd['roadlab_lanes']=json.dumps([dict(endpoints=[a,b],incoming=lane,outgoing=lane,median=0,spacing=18) for _,_,a,b in e.segments(rd)]);e.rebuild(rd,scene,True)
+plans=json.loads(rd['roadlab_generated_marking_catalog']);ends=[p for m in plans if m['role'][0]=='outer' for p in (m['path'][0],m['path'][-1])]
+curves=[m for m in plans if m['role'][:2]==['bend','outer']];assert len(curves)==2
+for mark in curves:
+ for p in (mark['path'][0],mark['path'][-1]):assert min(math.dist(p,q) for q in ends)<1e-4,('Disconnected bend edge',p)
 print('POINT_LANE_EDGES_PASS',flush=True)

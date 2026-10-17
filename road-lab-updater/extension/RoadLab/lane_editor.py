@@ -300,7 +300,7 @@ def _rebuild(obj,scene,force=False):
                         if family not in ('outer','center-yellow','median-yellow','center-white','divider'):continue
                         semantic=tuple(role[:3] if family=='divider' else role[:2])
                         if semantic in seen:continue
-                        seen.add(semantic);seams=bends[key(co)][2][neighbor];gate_center=(Vector(seams[0])+Vector(seams[-1]))*.5;lateral=(Vector(mark['center'])-gate_center).dot(normal)
+                        seen.add(semantic);seams=bends[key(co)][2][neighbor];gate_center=(Vector(seams[0])+Vector(seams[-1]))*.5;endpoint=min(mark.get('path',[mark['center']]),key=lambda p:(Vector(p)-gate_center).length_squared);lateral=(Vector(endpoint)-gate_center).dot(normal)
                         arm.append(dict(family=family,flow=1 if Vector((*mark['forward'],0)).dot(u)>0 else -1,asset=mark['asset'],fraction=.5+lateral/(Vector(bends[key(co)][2][neighbor][-1])-Vector(bends[key(co)][2][neighbor][0])).length,width=mark['size'][0],edge_inset=mark.get('edge_inset',.5)))
                     bend_arms[(key(co),neighbor)]=arm
                 for mark in segment_plans:
