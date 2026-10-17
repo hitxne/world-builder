@@ -1,6 +1,6 @@
 # RoadLab Blender extension and update repository
 
-The full RoadLab 0.18.22 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
+The full RoadLab 0.18.23 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
 
 ## Install once
 
@@ -324,3 +324,9 @@ Actual Blender renders with polygon edges shown:
 ## Saved sidewalk corner repair (0.18.22)
 
 Opening a scene now replaces the older sidewalk offset node graph with the corrected corner frames. The previous version accepted schema 18 as current, so existing .blend files could keep folded black corner fans despite updating the add-on. Layer settings and modifier socket identifiers are preserved. Update, restart Blender, and reopen the scene; no layer recreation is required.
+
+## Parking entrances and sculpted sidewalks (0.18.23)
+
+Parking bounds assigned to a road automatically lower overlapping curb and sidewalk layers for driveway access. Both sides along the sidewalk use the same ramp length. Surface Bounds > Parking lot > Driveway crossings enables this by default; Ramp length adjusts both transitions together. Moving/editing the outline updates its footprint; disabling, changing kind, reassigning or deleting the lot restores the former crossing. The untrimmed source outline drives the ramps so trimming the lot against sidewalks cannot form an evaluation cycle. Parking footprints at substantially different elevations do not lower elevated sidewalks.
+
+Sidewalk offset frames now use planar geometry and independently resample the original border elevations. Sculpting a road no longer turns redundant height samples into inward-offset corners, including wide sidewalks at junctions. Saved graphs upgrade in place. Terrain sculpt previews and final terrain share a cached concrete footprint mask: native curbs/sidewalks and assigned sidewalk pads keep their supporting terrain in place, with smooth brush falloff outside. Bridge-cut sidewalk spans are excluded from ground protection.

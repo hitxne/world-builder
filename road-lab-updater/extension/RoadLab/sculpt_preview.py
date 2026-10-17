@@ -15,7 +15,8 @@ from . import road_heightfield as field
 PREVIEW_VERTEX_BUDGET=60000
 
 class HeightPreview:
-    def __init__(self,owner,helper,values,weights=None):
+    def __init__(self,owner,helper,values,weights=None,contact_mask=None):
+        self.contact_mask=contact_mask
         self.owner=owner;self.helper=helper;self.original=helper.data
         self.mesh=self.original.copy();helper.data=self.mesh
         self.values=values;self.initial=dict(values);self.revision=0;self.changed_vertices=0
@@ -34,6 +35,7 @@ class HeightPreview:
         if location is None:return None
         ids=self.triangles[index];a,b,c=[Vector(self.reference[i]) for i in ids]
         weight=barycentric_transform(location,a,b,c,Vector((0,0,self.weights[ids[0]])),Vector((0,0,self.weights[ids[1]])),Vector((0,0,self.weights[ids[2]]))).z
+        if self.contact_mask is not None:weight=min(weight,self.contact_mask.weight(x,y))
         return location.z,max(0.,min(1.,weight))
     def height(self,x,y):
         item=self.reference_at(x,y)

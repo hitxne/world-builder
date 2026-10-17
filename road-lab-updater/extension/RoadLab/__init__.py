@@ -1,4 +1,4 @@
-bl_info={'name':'RoadLab','author':'World Builder','version':(0,18,22),'blender':(5,1,0),'location':'View3D > Sidebar > RoadLab','category':'Object'}
+bl_info={'name':'RoadLab','author':'World Builder','version':(0,18,23),'blender':(5,1,0),'location':'View3D > Sidebar > RoadLab','category':'Object'}
 import bpy,json,math
 from pathlib import Path
 from bpy.props import StringProperty,FloatProperty,BoolProperty,EnumProperty,FloatVectorProperty,CollectionProperty,PointerProperty

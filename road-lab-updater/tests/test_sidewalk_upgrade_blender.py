@@ -19,7 +19,7 @@ with tempfile.TemporaryDirectory() as tmp:
  path=str(Path(tmp)/'saved-sidewalk.blend');bpy.ops.wm.save_as_mainfile(filepath=path)
  bpy.ops.wm.open_mainfile(filepath=path)
  g=bpy.data.node_groups['WB_EXTENSION_BORDER_EXTRUSION']
- assert g.get('wb_schema')==19,'Older graph was incorrectly accepted as current'
+ assert g.get('wb_schema')==20,'Older graph was incorrectly accepted as current'
  assert 'OLD_GRAPH_SENTINEL' not in g.nodes
  assert {s.name:s.identifier for s in g.interface.items_tree if s.item_type=='SOCKET'}==identifiers
  sidewalk=next(l.object for l in native_layers.model_for(bpy.context.scene.wb_native.road).wb_layers if l.kind=='sidewalk')

@@ -10,12 +10,12 @@ PRESETS={'SIDEWALK':(.1524,.2,False,'sidewalk'),'ISLAND':(.02,.08,True,'grass'),
 
 def group():
     name='RoadLab Surface Bounds';g=bpy.data.node_groups.get(name)
-    if g and g.get('roadlab_schema')==1:return g
+    if g and g.get('roadlab_schema')==2:return g
     if g:g.nodes.clear()
     else:g=bpy.data.node_groups.new(name,'GeometryNodeTree')
-    g['roadlab_schema']=1
+    g['roadlab_schema']=2
     socket(g,'Geometry','INPUT','NodeSocketGeometry');socket(g,'Geometry','OUTPUT','NodeSocketGeometry')
-    for name,kind,default in [('Terrain detail','NodeSocketInt',3),('Existing surfaces','NodeSocketCollection',None),('Terrain','NodeSocketObject',None),('Road','NodeSocketObject',None),('Follow terrain','NodeSocketBool',True),('Trim at road','NodeSocketBool',True),('Surface height','NodeSocketFloat',.1524),('Thickness','NodeSocketFloat',.2),('Corner radius','NodeSocketFloat',.5),('Curb','NodeSocketBool',False),('Curb width','NodeSocketFloat',.25),('Curb height','NodeSocketFloat',.1524),('Surface material','NodeSocketMaterial',None),('Curb material','NodeSocketMaterial',None)]:socket(g,name,'INPUT',kind,default)
+    for name,kind,default in [('Entrance guide only','NodeSocketBool',False),('Entrance ramp length','NodeSocketFloat',3.),('Terrain detail','NodeSocketInt',3),('Existing surfaces','NodeSocketCollection',None),('Terrain','NodeSocketObject',None),('Road','NodeSocketObject',None),('Follow terrain','NodeSocketBool',True),('Trim at road','NodeSocketBool',True),('Surface height','NodeSocketFloat',.1524),('Thickness','NodeSocketFloat',.2),('Corner radius','NodeSocketFloat',.5),('Curb','NodeSocketBool',False),('Curb width','NodeSocketFloat',.25),('Curb height','NodeSocketFloat',.1524),('Surface material','NodeSocketMaterial',None),('Curb material','NodeSocketMaterial',None)]:socket(g,name,'INPUT',kind,default)
     N=g.nodes;L=g.links
     def node(kind,label):
         n=N.new(kind);n.label=label;return n
@@ -136,7 +136,13 @@ def group():
     road_exists=node('ShaderNodeMath','Has road faces');road_exists.operation='GREATER_THAN';L.new(road_size.outputs['Face Count'],road_exists.inputs[0])
     trim_enabled=node('FunctionNodeBooleanMath','Trim only with road');trim_enabled.operation='AND';L.new(inp.outputs['Trim at road'],trim_enabled.inputs[0]);L.new(road_exists.outputs[0],trim_enabled.inputs[1])
     trimmed=node('GeometryNodeSwitch','Optional road trim');trimmed.input_type='GEOMETRY';L.new(trim_enabled.outputs['Boolean'],trimmed.inputs['Switch']);L.new(use_union.outputs['Output'],trimmed.inputs['False']);L.new(clip.outputs['Mesh'],trimmed.inputs['True'])
-    flat=node('GeometryNodeSetShadeSmooth','Flat concrete and asphalt');flat.domain='FACE';flat.inputs['Shade Smooth'].default_value=False;L.new(trimmed.outputs['Output'],flat.inputs['Geometry']);L.new(flat.outputs['Geometry'],out.inputs['Geometry'])
+    flat=node('GeometryNodeSetShadeSmooth','Flat concrete and asphalt');flat.domain='FACE';flat.inputs['Shade Smooth'].default_value=False;L.new(trimmed.outputs['Output'],flat.inputs['Geometry'])
+    # A separate object sharing the authored mesh uses only this upstream top.
+    # It never reads the sidewalk being deformed, avoiding a dependency cycle.
+    guide_weight=node('GeometryNodeStoreNamedAttribute','Parking entrance weight');guide_weight.data_type='FLOAT';guide_weight.domain='POINT';guide_weight.inputs['Name'].default_value='roadlab_crossing_weight';guide_weight.inputs['Value'].default_value=1;L.new(top.outputs['Geometry'],guide_weight.inputs['Geometry'])
+    guide_run=node('GeometryNodeStoreNamedAttribute','Equal entrance and exit ramp length');guide_run.data_type='FLOAT';guide_run.domain='POINT';guide_run.inputs['Name'].default_value='roadlab_crossing_run';L.new(inp.outputs['Entrance ramp length'],guide_run.inputs['Value']);L.new(guide_weight.outputs['Geometry'],guide_run.inputs['Geometry'])
+    guide_kind=node('GeometryNodeStoreNamedAttribute','Parking crossing identity');guide_kind.data_type='FLOAT';guide_kind.domain='POINT';guide_kind.inputs['Name'].default_value='roadlab_parking_entrance';guide_kind.inputs['Value'].default_value=1;L.new(guide_run.outputs['Geometry'],guide_kind.inputs['Geometry'])
+    output=node('GeometryNodeSwitch','Surface or independent entrance footprint');output.input_type='GEOMETRY';L.new(inp.outputs['Entrance guide only'],output.inputs['Switch']);L.new(flat.outputs['Geometry'],output.inputs['False']);L.new(guide_kind.outputs['Geometry'],output.inputs['True']);L.new(output.outputs['Output'],out.inputs['Geometry'])
     for i,n in enumerate(N):n.location=((i%8)*240,-(i//8)*240)
     return g
 
@@ -156,7 +162,7 @@ def sync_contacts(road):
 def update(self,context):
     obj=self.id_data
     if not isinstance(obj,bpy.types.Object) or not obj.get('roadlab_surface_bounds'):return
-    mod=next((m for m in obj.modifiers if m.type=='NODES' and m.node_group and m.node_group.get('roadlab_schema')==1 and m.node_group.name.startswith('RoadLab Surface Bounds')),None)
+    mod=next((m for m in obj.modifiers if m.type=='NODES' and m.node_group and m.node_group.get('roadlab_schema')==2 and m.node_group.name.startswith('RoadLab Surface Bounds')),None)
     if mod is None:return
     from . import material
     terrain=self.terrain
@@ -164,6 +170,8 @@ def update(self,context):
     for name,value in [('Terrain detail',self.detail),('Existing surfaces',sync_contacts(self.road) if self.road else None),('Terrain',helper or terrain),('Road',self.road),('Follow terrain',self.follow),('Trim at road',self.trim),('Surface height',self.rise),('Thickness',self.thickness),('Corner radius',self.radius),('Curb',self.curb),('Curb width',self.curb_width),('Curb height',self.curb_height),('Surface material',material(PRESETS[self.kind][3])),('Curb material',material('concrete'))]:set_input(mod,name,value)
     if obj.get('roadlab_surface_kind')!=self.kind:obj['roadlab_surface_kind']=self.kind
     obj.update_tag()
+    from .parking_entrances import sync_scene
+    if context and context.scene:sync_scene(context.scene)
 
 def kind_update(self,context):
     rise,thickness,curb,_=PRESETS[self.kind]
@@ -171,6 +179,8 @@ def kind_update(self,context):
     update(self,context)
 
 class RoadLabSurfaceSettings(bpy.types.PropertyGroup):
+    entrances:BoolProperty(name='Driveway crossings',default=True,description='Lower overlapping road curbs and sidewalks for parking access, with matching ramps on both sides',update=update)
+    entrance_run:FloatProperty(name='Ramp length (m)',default=3.,min=.5,max=12,description='Same transition length on both sides of every driveway crossing',update=update)
     detail:IntProperty(name='Terrain detail',default=3,min=1,max=5,description='Interior subdivision on uneven ground only; higher values cost more geometry',update=update)
     kind:EnumProperty(name='Surface',items=KINDS,default='SIDEWALK',description='Choose a surface preset; resets material, height, thickness and curb defaults',update=kind_update)
     follow:BoolProperty(name='Follow terrain',default=True,description='Fit boundary to assigned terrain and ground-contact road; disable to edit elevations',update=update)
@@ -312,6 +322,9 @@ class ROADLAB_PT_surface_bounds(bpy.types.Panel):
             layout.prop(settings,'thickness');layout.prop(settings,'curb')
             if settings.curb:layout.prop(settings,'curb_width');layout.prop(settings,'curb_height')
             layout.prop(settings,'trim')
+            if settings.kind=='PARKING':
+                layout.prop(settings,'entrances')
+                if settings.entrances:layout.prop(settings,'entrance_run')
             if context.mode=='OBJECT':layout.operator('object.mode_set',text='Edit boundary',icon='EDITMODE_HLT').mode='EDIT'
             else:layout.label(text='Move, extrude, or subdivide boundary vertices.')
         else:
@@ -334,7 +347,11 @@ def register():
     bpy.types.Object.roadlab_surface=PointerProperty(type=RoadLabSurfaceSettings)
     bpy.types.Scene.roadlab_surface_kind=EnumProperty(name='Surface',items=KINDS,default='SIDEWALK')
     bpy.utils.register_tool(ROADLAB_WST_surface_bounds,separator=True)
+    from . import parking_entrances
+    parking_entrances.register()
 def unregister():
+    from . import parking_entrances
+    parking_entrances.unregister()
     bpy.utils.unregister_tool(ROADLAB_WST_surface_bounds)
     del bpy.types.Object.roadlab_surface;del bpy.types.Scene.roadlab_surface_kind
     for cls in reversed(classes):bpy.utils.unregister_class(cls)

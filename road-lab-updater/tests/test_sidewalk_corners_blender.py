@@ -25,33 +25,35 @@ def overlap(a,b):
         if not poly:return 0.
     return area(poly)
 
-def check(obj):
+def check(obj,sculpted=False):
     evaluated=obj.evaluated_get(bpy.context.evaluated_depsgraph_get());mesh=evaluated.to_mesh()
     try:
-        top={f.index for f in mesh.polygons if all(abs(mesh.vertices[i].co.z-.1724)<1e-4 for i in f.vertices)}
+        top={f.index for f in mesh.polygons if abs(f.normal.z)>.05 and all(abs(mesh.attributes['wb_profile_y'].data[i].value-.1524)<1e-4 for i in f.vertices)} if sculpted else {f.index for f in mesh.polygons if all(abs(mesh.vertices[i].co.z-.1724)<1e-4 for i in f.vertices)}
         assert top
         for i in top:
-            f=mesh.polygons[i];assert f.normal.z>.99, ('Inverted concrete top',i,tuple(f.center))
+            f=mesh.polygons[i];assert f.normal.z>(0 if sculpted else .99), ('Inverted concrete top',i,tuple(f.center),tuple(f.normal),[tuple(mesh.vertices[j].co) for j in f.vertices])
             ps=[tuple(mesh.vertices[j].co[:2]) for j in f.vertices]
             for a in range(len(ps)):
                 for b in range(a+2,len(ps)):
                     if a==0 and b==len(ps)-1:continue
                     p,q=ps[a],ps[(a+1)%len(ps)];u,v=ps[b],ps[(b+1)%len(ps)]
                     assert not (cross(p,q,u)*cross(p,q,v)<-1e-12 and cross(u,v,p)*cross(u,v,q)<-1e-12), ('Self-crossing slab',i,ps,p,q,u,v)
-        mesh.calc_loop_triangles();triangles=[];grid={};pairs=set()
+        mesh.calc_loop_triangles();triangles=[];bounds=[];grid={};pairs=set()
         for tri in mesh.loop_triangles:
             if tri.polygon_index not in top:continue
             ps=[tuple(mesh.vertices[i].co[:2]) for i in tri.vertices]
             if area(ps)<1e-9:continue
-            index=len(triangles);triangles.append(ps)
-            lo=[math.floor(min(p[k] for p in ps)/4) for k in (0,1)];hi=[math.floor(max(p[k] for p in ps)/4) for k in (0,1)]
+            index=len(triangles);triangles.append(ps);box=(min(p[0] for p in ps),min(p[1] for p in ps),max(p[0] for p in ps),max(p[1] for p in ps));bounds.append(box)
+            lo=[math.floor(min(p[k] for p in ps)) for k in (0,1)];hi=[math.floor(max(p[k] for p in ps)) for k in (0,1)]
             for x in range(lo[0],hi[0]+1):
                 for y in range(lo[1],hi[1]+1):
                     bucket=grid.setdefault((x,y),[])
                     for other in bucket:
                         key=(other,index)
                         if key in pairs:continue
-                        pairs.add(key);shared=overlap(triangles[other],ps)
+                        pairs.add(key);a=bounds[other]
+                        if a[2]<=box[0]+1e-9 or box[2]<=a[0]+1e-9 or a[3]<=box[1]+1e-9 or box[3]<=a[1]+1e-9:continue
+                        shared=overlap(triangles[other],ps)
                         assert shared<1e-6, ('Overlapping slabs',other,index,shared)
                     bucket.append(index)
     finally:evaluated.to_mesh_clear()
@@ -81,4 +83,14 @@ for stage in ('raw','fast','precise'):
     set_input(sidewalk.modifiers[0],'Precise viewport cleanup',stage=='precise')
     bpy.context.view_layer.update();check(sidewalk)
     print('SIDEWALK_JUNCTION_CASE_PASS',stage,flush=True)
+# Sculpted Z used to retain a tiny XY connector before the fillet, folding
+# wide sidewalks even though the unsculpted corner was clean.
+from RoadLab import road_heightfield
+field={(x,y):4*(1-min(1,math.hypot(x-5,y-7)/4)**2)**2 for x in range(-7,16) for y in range(-6,17)}
+road['roadlab_sculpt_field']=road_heightfield.encode(field);road_core.rebuild(road,True)
+next(l for l in native_layers.model_for(road).wb_layers if l.object==sidewalk).width=5
+for stage in ('raw','precise'):
+    for name in ('RoadLab Planar Slabs','RoadLab Surface Finish'):sidewalk.modifiers[name].show_viewport=stage!='raw'
+    bpy.context.view_layer.update();check(sidewalk,sculpted=True)
+    print('SCULPTED_WIDE_SIDEWALK_PASS',stage,flush=True)
 print('SIDEWALK_CORNERS_PASS',flush=True)

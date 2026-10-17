@@ -15,7 +15,7 @@ def source_boundary(mesh):
     verts=[tuple(v.co) for v in mesh.vertices];faces=[list(p.vertices) for p in mesh.polygons]
     return verts,perimeter(verts,faces)
 
-def surface(terrain,roads,blend,spacing,state=None):
+def surface(terrain,roads,blend,spacing,state=None,scene=None):
     from . import terrain_quads as quad,road_heightfield,adaptive_terrain,terrain_sculpt,terrain_grading
     raw=terrain.data;raw.calc_loop_triangles();base=[tuple(v.co) for v in raw.vertices]
     source_tree=BVHTree.FromPolygons(base,[tuple(t.vertices) for t in raw.loop_triangles],all_triangles=True)
@@ -63,15 +63,20 @@ def surface(terrain,roads,blend,spacing,state=None):
             a,b,g=road_segments[index];d=b.xy-a.xy;t=max(0.,min(1.,(p-a.xy).dot(d)/max(d.length_squared,1e-12)));q=a+(b-a)*t;dist=(p-q.xy).length
             if best is None or dist<best[0]:best=(dist,q.z+g.dot(p-q.xy),index,t,q)
         return best
+    from .terrain_contacts import ContactMask
+    contacts=ContactMask(scene or bpy.context.scene,terrain,blend)
     sculpt=road_heightfield.decode(terrain.get('roadlab_terrain_field',''));height_cache={}
     def height_at(x,y):
         key=(x,y)
         if key in height_cache:return height_cache[key]
         hit=source_tree.ray_cast(Vector((x,y,100000)),Vector((0,0,-1)))
-        z=(hit[0].z if hit[0] is not None else 0.)+road_heightfield.sample(sculpt,x,y)
+        baseline=hit[0].z if hit[0] is not None else 0.
+        z=baseline+road_heightfield.sample(sculpt,x,y)
         dist,road_z,index,t,q=nearest(Vector((x,y)))
         if dist<blend:
             z=terrain_grading.height(z,q.z,dist,blend)
+            baseline=terrain_grading.height(baseline,q.z,dist,blend)
+        z=contacts.grade(x,y,baseline,z)
         height_cache[key]=z;return z
     xmin=min(p[0] for p in base);xmax=max(p[0] for p in base);ymin=min(p[1] for p in base);ymax=max(p[1] for p in base)
     bounds=(xmin,ymin,xmax,ymax)
@@ -79,7 +84,7 @@ def surface(terrain,roads,blend,spacing,state=None):
     if not planar:
         for tri in raw.loop_triangles:
             ps=[base[i] for i in tri.vertices];features.append((min(p[0] for p in ps),min(p[1] for p in ps),max(p[0] for p in ps),max(p[1] for p in ps)))
-    topology_key=hashlib.sha256(json.dumps([8,[tuple(p) for p in points],polygons,signs,spacing,blend,terrain.roadlab_core_terrain_tolerance],sort_keys=True).encode()).hexdigest()
+    topology_key=hashlib.sha256(json.dumps([9,[tuple(p) for p in points],polygons,signs,spacing,blend,terrain.roadlab_core_terrain_tolerance],sort_keys=True).encode()).hexdigest()
     reused=bool(state and state['topology_key']==topology_key);dirty=terrain_sculpt.pending(terrain)
     refine=not reused or bool(dirty and dirty['refine']);local=False;retained=0
     if refine:
@@ -114,7 +119,7 @@ def surface(terrain,roads,blend,spacing,state=None):
         elif old and dirty and not (dirty['box'][0]<=xy[0]<=dirty['box'][2] and dirty['box'][1]<=xy[1]<=dirty['box'][3]):z=old[2]
         else:z=height_at(*xy);resampled+=1
         t=max(0.,min(1.,dist/max(blend,.1)))
-        sculpt_weights.append(0. if authored or dist<1e-5 else t*t*t*(t*(t*6-15)+10))
+        sculpt_weights.append(0. if authored or dist<1e-5 else t*t*t*(t*(t*6-15)+10)*contacts.weight(*xy))
         vertices.append((*xy,z))
         if old is None or abs(z-old[2])>1e-7:changed+=1
     # Discard only numerically collapsed pieces. All surviving terrain faces are quads.
@@ -140,7 +145,7 @@ def surface(terrain,roads,blend,spacing,state=None):
         seam_tree.balance();seam_error=max(seam_error,max(seam_tree.find(p)[2] for p in locations))
     report=dict(vertices=len(meshverts),faces=len(meshfaces),quads=len(meshfaces),triangles=0,ngons=0,seam_vertices=seam,maximum_seam_error=seam_error,topology_reused=reused and not refine,height_samples_changed=changed,height_samples_resampled=resampled,blend_distance=blend,spacing=spacing,adaptive=True,flat_polygons=0,local_remesh=local,faces_retriangulated=0,faces_retained=retained,quad_cells=len(boxes),shared_road_vertices_added=splits,uniform_grid_estimate=round((xmax-xmin)*(ymax-ymin)/spacing**2))
     terrain_sculpt.clear_pending(terrain)
-    return meshverts,meshfaces,report,dict(topology_key=topology_key,flat=[v[:2] for v in meshverts],faces=meshfaces,origins=meshorigins,vertices=meshverts,cells=boxes,sculpt_weights=[sculpt_weights[i] for i in used])
+    return meshverts,meshfaces,report,dict(topology_key=topology_key,flat=[v[:2] for v in meshverts],faces=meshfaces,origins=meshorigins,vertices=meshverts,cells=boxes,sculpt_weights=[sculpt_weights[i] for i in used],contact_mask=contacts)
 
 def attach(terrain):
     group=bpy.data.node_groups.new('ROADLAB_TERRAIN_CONTACT','GeometryNodeTree');group.interface.new_socket(name='Geometry',in_out='INPUT',socket_type='NodeSocketGeometry');group.interface.new_socket(name='Geometry',in_out='OUTPUT',socket_type='NodeSocketGeometry')
@@ -163,7 +168,8 @@ def rebuild(scene,force=False):
     if terrain.mode=='EDIT':terrain.update_from_editmode()
     roads=[o for o in scene.objects if o.type=='CURVE' and o.get('roadlab_new_core') and o.roadlab_core_ground_contact]
     roads=[r for r in roads if r.get('roadlab_core_mesh') and (r['roadlab_core_mesh'].data.attributes.get('roadlab_ground_contact') is None or any(v.value for v in r['roadlab_core_mesh'].data.attributes.get('roadlab_ground_contact').data))]
-    if not roads and not json.loads(terrain.get('roadlab_terrain_field','') or '{}').get('heights') and terrain.data.polygons and all(len(p.vertices)==4 for p in terrain.data.polygons):
+    pads=any(o.get('roadlab_surface_bounds') and o.roadlab_surface.kind=='SIDEWALK' and o.roadlab_surface.terrain==terrain for o in scene.objects) if hasattr(bpy.types.Object,'roadlab_surface') else False
+    if not roads and not pads and not json.loads(terrain.get('roadlab_terrain_field','') or '{}').get('heights') and terrain.data.polygons and all(len(p.vertices)==4 for p in terrain.data.polygons):
         for mod in terrain.modifiers:
             if mod.type=='NODES' and mod.node_group and mod.node_group.name.startswith('ROADLAB_TERRAIN_CONTACT'):mod.show_viewport=False;mod.show_render=False
         terrain['roadlab_core_terrain_signature']='';terrain['roadlab_core_terrain_error']='';return
@@ -171,10 +177,10 @@ def rebuild(scene,force=False):
     others=[m for m in terrain.modifiers if not (m.type=='NODES' and m.node_group and m.node_group.name.startswith('ROADLAB_TERRAIN_CONTACT'))]
     if others:raise ValueError('New-core contact needs an unmodified heightfield plane; original terrain modifiers remain intact')
     from . import terrain_quads
-    signature=hashlib.sha256(json.dumps([8,terrain.get('roadlab_terrain_field',''),terrain.roadlab_core_terrain_tolerance,[(tuple(v.co)) for v in terrain.data.vertices],[list(p.vertices) for p in terrain.data.polygons],[list(row) for row in terrain.matrix_world],[(o.name,o.get('roadlab_core_signature'),terrain_quads.base_mesh(o['roadlab_core_mesh']).as_pointer(),[list(row) for row in o.matrix_world]) for o in roads],terrain.roadlab_core_blend,terrain.roadlab_core_terrain_spacing],sort_keys=True).encode()).hexdigest()
+    signature=hashlib.sha256(json.dumps([9,terrain.get('roadlab_terrain_field',''),terrain.roadlab_core_terrain_tolerance,[(tuple(v.co)) for v in terrain.data.vertices],[list(p.vertices) for p in terrain.data.polygons],[list(row) for row in terrain.matrix_world],[(o.name,o.get('roadlab_core_signature'),terrain_quads.base_mesh(o['roadlab_core_mesh']).as_pointer(),[list(row) for row in o.matrix_world]) for o in roads],terrain.roadlab_core_blend,terrain.roadlab_core_terrain_spacing],sort_keys=True).encode()).hexdigest()
     if not force and signature==terrain.get('roadlab_core_terrain_signature') and helper:
         terrain['roadlab_core_terrain_error']='';return
-    verts,faces,report,state=surface(terrain,roads,terrain.roadlab_core_blend,terrain.roadlab_core_terrain_spacing,_STATE.get(terrain.as_pointer()))
+    verts,faces,report,state=surface(terrain,roads,terrain.roadlab_core_blend,terrain.roadlab_core_terrain_spacing,_STATE.get(terrain.as_pointer()),scene=scene)
     if helper is None:attach(terrain);helper=terrain['roadlab_core_terrain_mesh']
     if report['topology_reused'] and len(helper.data.vertices)==len(verts):
         mesh=helper.data

@@ -75,7 +75,7 @@ class ROADLAB_OT_terrain_sculpt(bpy.types.Operator):
         self.ray_height=max((v.co.z for v in self.obj.data.vertices),default=0.)+1.
         self.preview=None;self.timer=None;self.handle=None;_ACTIVE=True
         try:
-            core_terrain.rebuild(context.scene)
+            core_terrain.rebuild(context.scene,True)
             helper=self.obj.get('roadlab_core_terrain_mesh')
             if helper is None:core_terrain.attach(self.obj);helper=self.obj['roadlab_core_terrain_mesh']
             if not self.obj.get('roadlab_core_terrain_signature'):
@@ -84,7 +84,7 @@ class ROADLAB_OT_terrain_sculpt(bpy.types.Operator):
             for mod in self.obj.modifiers:
                 if mod.type=='NODES' and mod.node_group and mod.node_group.name.startswith('ROADLAB_TERRAIN_CONTACT'):mod.show_viewport=True
             state=core_terrain._STATE.get(self.obj.as_pointer(),{})
-            self.preview=HeightPreview(self.obj,helper,self.values,state.get('sculpt_weights') if self.obj.get('roadlab_core_terrain_signature') else None)
+            self.preview=HeightPreview(self.obj,helper,self.values,state.get('sculpt_weights') if self.obj.get('roadlab_core_terrain_signature') else None,contact_mask=state.get('contact_mask'))
             self.center=self.hit()
             if self.center is not None:
                 self.preview.ensure_detail(self.center.xy,self.settings.radius);self.target=self.center.z;self.stamp(.04)

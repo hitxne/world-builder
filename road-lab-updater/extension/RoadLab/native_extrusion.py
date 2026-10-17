@@ -9,15 +9,15 @@ def extrusion_group():
     name='WB_EXTENSION_BORDER_EXTRUSION';g=bpy.data.node_groups.get(name)
     # Saved .blend files retain their node graphs independently of addon updates.
     # Schema 18 still contains the folding dense-point offset frames.
-    if g and g.get('wb_schema',0)>=19 and any(s.name=='Layer prefix' for s in g.interface.items_tree):return g
+    if g and g.get('wb_schema',0)>=20 and any(s.name=='Layer prefix' for s in g.interface.items_tree):return g
     if g and g.library:g=g.copy();g.name=name+'_v08'
     if g:g.nodes.clear()
     else:g=bpy.data.node_groups.new(name,'GeometryNodeTree')
-    g['wb_schema']=19
+    g['wb_schema']=20
     socket(g,'Geometry','INPUT','NodeSocketGeometry')
     stage_socket=socket(g,'Evaluation stage','INPUT','NodeSocketInt',0)
     if hasattr(stage_socket,'hide_in_modifier'):stage_socket.hide_in_modifier=True
-    for n,k,d in [('Sidewalk panels','NodeSocketBool',False),('Slab length','NodeSocketFloat',1.5),('Slab width','NodeSocketFloat',1.5),('Joint gap','NodeSocketFloat',.003),('Flatten curb at crossing','NodeSocketBool',False),('Safe sidewalk offset','NodeSocketBool',False),('Grass surface','NodeSocketBool',False),('Terrain base','NodeSocketObject',None),('Vertex controls','NodeSocketObject',None),('Layer prefix','NodeSocketString',''),('Use vertex controls','NodeSocketBool',False),('Use layer order','NodeSocketBool',False),('Junction cleanup','NodeSocketBool',True),('Precise viewport cleanup','NodeSocketBool',False),('Editing preview','NodeSocketBool',False),('Road surfaces','NodeSocketCollection',None),('Enabled','NodeSocketBool',True),('Road','NodeSocketObject',None),('Profile curve','NodeSocketObject',None),('Path curve','NodeSocketObject',None),('Use custom path','NodeSocketBool',False),('Profile width scale','NodeSocketFloat',1.),('Profile height scale','NodeSocketFloat',1.),('Setback','NodeSocketFloat',0.),('Height offset','NodeSocketFloat',0.),('Crosswalk areas','NodeSocketObject',None),('Crossing road','NodeSocketObject',None),('Lower at crossing','NodeSocketBool',False),('Transition length','NodeSocketFloat',3.),('Material','NodeSocketMaterial',None)]:
+    for n,k,d in [('Sidewalk panels','NodeSocketBool',False),('Slab length','NodeSocketFloat',1.5),('Slab width','NodeSocketFloat',1.5),('Joint gap','NodeSocketFloat',.003),('Flatten curb at crossing','NodeSocketBool',False),('Safe sidewalk offset','NodeSocketBool',False),('Grass surface','NodeSocketBool',False),('Terrain base','NodeSocketObject',None),('Vertex controls','NodeSocketObject',None),('Layer prefix','NodeSocketString',''),('Use vertex controls','NodeSocketBool',False),('Use layer order','NodeSocketBool',False),('Junction cleanup','NodeSocketBool',True),('Precise viewport cleanup','NodeSocketBool',False),('Editing preview','NodeSocketBool',False),('Road surfaces','NodeSocketCollection',None),('Enabled','NodeSocketBool',True),('Road','NodeSocketObject',None),('Profile curve','NodeSocketObject',None),('Path curve','NodeSocketObject',None),('Use custom path','NodeSocketBool',False),('Profile width scale','NodeSocketFloat',1.),('Profile height scale','NodeSocketFloat',1.),('Setback','NodeSocketFloat',0.),('Height offset','NodeSocketFloat',0.),('Parking entrances','NodeSocketCollection',None),('Crosswalk areas','NodeSocketObject',None),('Crossing road','NodeSocketObject',None),('Lower at crossing','NodeSocketBool',False),('Transition length','NodeSocketFloat',3.),('Material','NodeSocketMaterial',None)]:
         item=socket(g,n,'INPUT',k,d)
         if n in ('Slab length','Slab width'):item.min_value=.5;item.max_value=6
         if n=='Joint gap':item.min_value=.001;item.max_value=.02
@@ -30,18 +30,25 @@ def extrusion_group():
     border=N.new('GeometryNodeSeparateGeometry');border.domain='POINT';L.new(road.outputs['Geometry'],border.inputs['Geometry']);L.new(test.outputs['Result'],border.inputs['Selection'])
     path=N.new('GeometryNodeObjectInfo');path.transform_space='RELATIVE';L.new(inp.outputs['Path curve'],path.inputs['Object'])
     choose_path=N.new('GeometryNodeSwitch');choose_path.input_type='GEOMETRY';L.new(inp.outputs['Use custom path'],choose_path.inputs['Switch']);L.new(border.outputs['Selection'],choose_path.inputs['False']);L.new(path.outputs['Geometry'],choose_path.inputs['True'])
+    # Planar offset frames must not change when a height brush changes Z.
+    # Keep the complete original height field on a flat reference curve, then
+    # sample its heights back onto the dense path after stable XY offsetting.
+    reference_position=N.new('GeometryNodeInputPosition');reference_xyz=N.new('ShaderNodeSeparateXYZ');L.new(reference_position.outputs['Position'],reference_xyz.inputs['Vector'])
+    reference_z=N.new('GeometryNodeStoreNamedAttribute');reference_z.data_type='FLOAT';reference_z.domain='POINT';reference_z.inputs['Name'].default_value='roadlab_source_border_z';L.new(choose_path.outputs['Output'],reference_z.inputs['Geometry']);L.new(reference_xyz.outputs['Z'],reference_z.inputs['Value'])
+    reference_xy=N.new('ShaderNodeVectorMath');reference_xy.operation='MULTIPLY';reference_xy.inputs[1].default_value=(1,1,0);L.new(reference_position.outputs['Position'],reference_xy.inputs[0])
+    planar_reference=N.new('GeometryNodeSetPosition');L.new(reference_z.outputs['Geometry'],planar_reference.inputs['Geometry']);L.new(reference_xy.outputs['Vector'],planar_reference.inputs['Position'])
     # Remove redundant straight-line knots before offsetting. A tiny connector
     # immediately before a fillet can otherwise be shorter than its miter trim,
     # reversing even the original (not just subdivided) offset vertices.
     clean_position=N.new('GeometryNodeInputPosition');clean_index=N.new('GeometryNodeInputIndex');clean_directions=[]
     for step in (-1,1):
         neighbor=N.new('GeometryNodeOffsetPointInCurve');neighbor.inputs['Offset'].default_value=step;L.new(clean_index.outputs['Index'],neighbor.inputs['Point Index'])
-        sample=N.new('GeometryNodeSampleIndex');sample.data_type='FLOAT_VECTOR';sample.domain='POINT';L.new(choose_path.outputs['Output'],sample.inputs['Geometry']);L.new(clean_position.outputs['Position'],sample.inputs['Value']);L.new(neighbor.outputs['Point Index'],sample.inputs['Index'])
+        sample=N.new('GeometryNodeSampleIndex');sample.data_type='FLOAT_VECTOR';sample.domain='POINT';L.new(planar_reference.outputs['Geometry'],sample.inputs['Geometry']);L.new(clean_position.outputs['Position'],sample.inputs['Value']);L.new(neighbor.outputs['Point Index'],sample.inputs['Index'])
         delta=N.new('ShaderNodeVectorMath');delta.operation='SUBTRACT';L.new(clean_position.outputs['Position'] if step<0 else sample.outputs['Value'],delta.inputs[0]);L.new(sample.outputs['Value'] if step<0 else clean_position.outputs['Position'],delta.inputs[1])
         unit=N.new('ShaderNodeVectorMath');unit.operation='NORMALIZE';L.new(delta.outputs['Vector'],unit.inputs[0]);clean_directions.append(unit.outputs['Vector'])
     straight_dot=N.new('ShaderNodeVectorMath');straight_dot.operation='DOT_PRODUCT';L.new(clean_directions[0],straight_dot.inputs[0]);L.new(clean_directions[1],straight_dot.inputs[1])
     collinear=N.new('ShaderNodeMath');collinear.operation='GREATER_THAN';collinear.inputs[1].default_value=.9999999;L.new(straight_dot.outputs['Value'],collinear.inputs[0])
-    clean_path=N.new('GeometryNodeDeleteGeometry');clean_path.domain='POINT';clean_path.label='Remove collinear border knots before offsetting';L.new(choose_path.outputs['Output'],clean_path.inputs['Geometry']);L.new(collinear.outputs[0],clean_path.inputs['Selection'])
+    clean_path=N.new('GeometryNodeDeleteGeometry');clean_path.domain='POINT';clean_path.label='Remove collinear border knots before offsetting';L.new(planar_reference.outputs['Geometry'],clean_path.inputs['Geometry']);L.new(collinear.outputs[0],clean_path.inputs['Selection'])
     # Keep stable straight-section frames as well as true corner knots. Their
     # spacing is at least the layer's offset reach, so a corner miter cannot
     # overtake the next frame; its skew also stays local to the corner.
@@ -92,6 +99,15 @@ def extrusion_group():
     position_store=N.new('GeometryNodeStoreNamedAttribute');position_store.data_type='FLOAT_VECTOR';position_store.domain='POINT';position_store.inputs['Name'].default_value='wb_edge_position';L.new(offset_store.outputs['Geometry'],position_store.inputs['Geometry']);L.new(edge_position.outputs['Position'],position_store.inputs['Value'])
     source_tangent=N.new('GeometryNodeInputTangent');tangent_store=N.new('GeometryNodeStoreNamedAttribute');tangent_store.data_type='FLOAT_VECTOR';tangent_store.domain='POINT';tangent_store.inputs['Name'].default_value='wb_edge_tangent';L.new(position_store.outputs['Geometry'],tangent_store.inputs['Geometry']);L.new(source_tangent.outputs['Tangent'],tangent_store.inputs['Value'])
     L.new(tangent_store.outputs['Geometry'],subdivided.inputs['Curve'])
+    # Both curves have identical planar arc length and spline ordering, even
+    # when the original contains many height samples on a straight section.
+    source_z=N.new('GeometryNodeInputNamedAttribute');source_z.data_type='FLOAT';source_z.inputs['Name'].default_value='roadlab_source_border_z'
+    parameter=N.new('GeometryNodeSplineParameter');curve_index=N.new('GeometryNodeCurveOfPoint');L.new(path_index.outputs['Index'],curve_index.inputs['Point Index'])
+    sampled_z=N.new('GeometryNodeSampleCurve');sampled_z.data_type='FLOAT';sampled_z.mode='LENGTH';sampled_z.use_all_curves=False;L.new(planar_reference.outputs['Geometry'],sampled_z.inputs['Curves']);L.new(source_z.outputs['Attribute'],sampled_z.inputs['Value']);L.new(parameter.outputs['Length'],sampled_z.inputs['Length']);L.new(curve_index.outputs['Curve Index'],sampled_z.inputs['Curve Index'])
+    restored_elevation=N.new('GeometryNodeStoreNamedAttribute');restored_elevation.data_type='FLOAT';restored_elevation.domain='POINT';restored_elevation.inputs['Name'].default_value='wb_edge_elevation';L.new(subdivided.outputs['Curve'],restored_elevation.inputs['Geometry']);L.new(sampled_z.outputs['Value'],restored_elevation.inputs['Value'])
+    restored_height=N.new('ShaderNodeCombineXYZ');restored_attr=N.new('GeometryNodeInputNamedAttribute');restored_attr.data_type='FLOAT';restored_attr.inputs['Name'].default_value='wb_edge_elevation';L.new(restored_attr.outputs['Attribute'],restored_height.inputs['Z'])
+    restored_curve=N.new('GeometryNodeSetPosition');L.new(restored_elevation.outputs['Geometry'],restored_curve.inputs['Geometry']);L.new(restored_height.outputs['Vector'],restored_curve.inputs['Offset'])
+    restored_path=N.new('GeometryNodeStoreNamedAttribute');restored_path.data_type='FLOAT_VECTOR';restored_path.domain='POINT';restored_path.inputs['Name'].default_value='wb_edge_position';L.new(restored_curve.outputs['Geometry'],restored_path.inputs['Geometry']);L.new(reference_position.outputs['Position'],restored_path.inputs['Value'])
     profile=N.new('GeometryNodeObjectInfo');profile.transform_space='ORIGINAL';L.new(inp.outputs['Profile curve'],profile.inputs['Object'])
     negate=N.new('ShaderNodeMath');negate.operation='MULTIPLY';negate.inputs[1].default_value=-1;L.new(inp.outputs['Profile height scale'],negate.inputs[0])
     scale=N.new('ShaderNodeCombineXYZ');scale.inputs['Z'].default_value=1;L.new(inp.outputs['Profile width scale'],scale.inputs['X']);L.new(negate.outputs[0],scale.inputs['Y'])
@@ -115,7 +131,7 @@ def extrusion_group():
     rounded_cuts=N.new('ShaderNodeMath');rounded_cuts.operation='FLOOR';L.new(profile_cuts.outputs[0],rounded_cuts.inputs[0])
     divided_profile=N.new('GeometryNodeSubdivideCurve');L.new(orient.outputs['Geometry'],divided_profile.inputs['Curve']);L.new(rounded_cuts.outputs[0],divided_profile.inputs['Cuts'])
     use_divided_profile=N.new('GeometryNodeSwitch');use_divided_profile.input_type='GEOMETRY';L.new(orient.outputs['Geometry'],use_divided_profile.inputs['False']);L.new(divided_profile.outputs['Curve'],use_divided_profile.inputs['True'])
-    sweep=N.new('GeometryNodeCurveToMesh');sweep.inputs['Fill Caps'].default_value=True;L.new(subdivided.outputs['Curve'],sweep.inputs['Curve']);L.new(use_divided_profile.outputs['Output'],sweep.inputs['Profile Curve'])
+    sweep=N.new('GeometryNodeCurveToMesh');sweep.inputs['Fill Caps'].default_value=True;L.new(restored_path.outputs['Geometry'],sweep.inputs['Curve']);L.new(use_divided_profile.outputs['Output'],sweep.inputs['Profile Curve'])
     # Read per-control-point data from the shared raw curve, never from radius/tilt.
     controls=N.new('GeometryNodeObjectInfo');controls.transform_space='RELATIVE';L.new(inp.outputs['Vertex controls'],controls.inputs['Object'])
     edge_pos_attr=N.new('GeometryNodeInputNamedAttribute');edge_pos_attr.data_type='FLOAT_VECTOR';edge_pos_attr.inputs['Name'].default_value='wb_edge_position'
@@ -139,7 +155,7 @@ def extrusion_group():
     columns_enabled=N.new('FunctionNodeBooleanMath');columns_enabled.operation='AND';L.new(inp.outputs['Sidewalk panels'],columns_enabled.inputs[0]);L.new(inp.outputs['Use vertex controls'],columns_enabled.inputs[1])
     column_profile=sidewalk_panels.columns(g,profile_us.outputs['Geometry'],controls.outputs['Geometry'],control_fields['width'],columns_enabled.outputs[0],inp.outputs['Slab width'],inp.outputs['Joint gap'])
     L.new(column_profile,orient.inputs['Geometry'])
-    panel_path=sidewalk_panels.prepare(g,subdivided.outputs['Curve'])
+    panel_path=sidewalk_panels.prepare(g,restored_path.outputs['Geometry'])
     wire=N.new('GeometryNodeCurveToMesh');L.new(panel_path,wire.inputs['Curve'])
     disabled=N.new('ShaderNodeMath');disabled.operation='LESS_THAN';disabled.inputs[1].default_value=.5;L.new(fields['enabled'],disabled.inputs[0])
     delete_edges=N.new('GeometryNodeDeleteGeometry');delete_edges.domain='EDGE';L.new(wire.outputs['Mesh'],delete_edges.inputs['Geometry']);active_disabled=N.new('FunctionNodeBooleanMath');active_disabled.operation='AND';L.new(disabled.outputs[0],active_disabled.inputs[0]);L.new(inp.outputs['Use vertex controls'],active_disabled.inputs[1]);L.new(active_disabled.outputs[0],delete_edges.inputs['Selection'])
@@ -195,12 +211,16 @@ def extrusion_group():
     cross_weight=N.new('GeometryNodeStoreNamedAttribute');cross_weight.data_type='FLOAT';cross_weight.domain='POINT';cross_weight.inputs['Name'].default_value='roadlab_crossing_weight';cross_weight.inputs['Value'].default_value=1;L.new(cross.outputs['Geometry'],cross_weight.inputs['Geometry'])
     use_cross=N.new('GeometryNodeSwitch');use_cross.input_type='GEOMETRY';L.new(inp.outputs['Lower at crossing'],use_cross.inputs['Switch']);L.new(cross_weight.outputs['Geometry'],use_cross.inputs['True'])
     crosswalk=N.new('GeometryNodeObjectInfo');crosswalk.transform_space='RELATIVE';L.new(inp.outputs['Crosswalk areas'],crosswalk.inputs['Object'])
-    crossing_geometry=N.new('GeometryNodeJoinGeometry');L.new(use_cross.outputs['Output'],crossing_geometry.inputs['Geometry']);L.new(crosswalk.outputs['Geometry'],crossing_geometry.inputs['Geometry'])
-    cross_size=N.new('GeometryNodeAttributeDomainSize');cross_size.component='MESH';L.new(crosswalk.outputs['Geometry'],cross_size.inputs['Geometry'])
+    crossing_geometry=N.new('GeometryNodeJoinGeometry');L.new(use_cross.outputs['Output'],crossing_geometry.inputs['Geometry'])
+    parking=N.new('GeometryNodeCollectionInfo');parking.transform_space='RELATIVE';L.new(inp.outputs['Parking entrances'],parking.inputs['Collection'])
+    parking_mesh=N.new('GeometryNodeRealizeInstances');L.new(parking.outputs['Instances'],parking_mesh.inputs['Geometry'])
+    crossings=N.new('GeometryNodeJoinGeometry');L.new(crosswalk.outputs['Geometry'],crossings.inputs['Geometry']);L.new(parking_mesh.outputs['Geometry'],crossings.inputs['Geometry'])
+    L.new(crossings.outputs['Geometry'],crossing_geometry.inputs['Geometry'])
+    cross_size=N.new('GeometryNodeAttributeDomainSize');cross_size.component='MESH';L.new(crossings.outputs['Geometry'],cross_size.inputs['Geometry'])
     has_crosswalk=N.new('ShaderNodeMath');has_crosswalk.operation='GREATER_THAN';L.new(cross_size.outputs['Face Count'],has_crosswalk.inputs[0]);L.new(has_crosswalk.outputs[0],use_divided_profile.inputs['Switch'])
     # Most concrete blocks do not need width samples for a distant ramp.
     # Retain the dense cross-section only on panels that can reach a crossing.
-    panel_proximity=N.new('GeometryNodeProximity');panel_proximity.target_element='FACES';L.new(crosswalk.outputs['Geometry'],panel_proximity.inputs['Geometry'])
+    panel_proximity=N.new('GeometryNodeProximity');panel_proximity.target_element='FACES';L.new(crossings.outputs['Geometry'],panel_proximity.inputs['Geometry'])
     absolute_offset=N.new('ShaderNodeMath');absolute_offset.operation='ABSOLUTE';L.new(wanted_offset.outputs[0],absolute_offset.inputs[0])
     panel_reach=N.new('ShaderNodeMath');panel_reach.operation='ADD';L.new(width_product.outputs[0],panel_reach.inputs[0]);L.new(absolute_offset.outputs[0],panel_reach.inputs[1])
     panel_buffer=N.new('ShaderNodeMath');panel_buffer.operation='ADD';L.new(panel_reach.outputs[0],panel_buffer.inputs[0]);L.new(inp.outputs['Transition length'],panel_buffer.inputs[1])
@@ -223,10 +243,23 @@ def extrusion_group():
     hit_z=N.new('ShaderNodeSeparateXYZ');L.new(ray.outputs['Hit Position'],hit_z.inputs['Vector'])
     target=N.new('GeometryNodeSwitch');target.input_type='FLOAT';L.new(ray.outputs['Is Hit'],target.inputs['Switch']);L.new(closest.outputs['Z'],target.inputs['False']);L.new(hit_z.outputs['Z'],target.inputs['True'])
     weight=N.new('GeometryNodeSwitch');weight.input_type='FLOAT';weight.inputs['True'].default_value=1;L.new(ray.outputs['Is Hit'],weight.inputs['Switch']);L.new(ramp.outputs['Result'],weight.inputs['False'])
+    crossing_run=N.new('GeometryNodeInputNamedAttribute');crossing_run.data_type='FLOAT';crossing_run.inputs['Name'].default_value='roadlab_crossing_run'
+    nearest_run=N.new('GeometryNodeSampleNearestSurface');nearest_run.data_type='FLOAT';L.new(crossing_geometry.outputs['Geometry'],nearest_run.inputs['Mesh']);L.new(crossing_run.outputs['Attribute'],nearest_run.inputs['Value']);L.new(position.outputs['Position'],nearest_run.inputs['Sample Position'])
+    custom_run=N.new('ShaderNodeMath');custom_run.operation='GREATER_THAN';custom_run.inputs[1].default_value=.01;L.new(nearest_run.outputs['Value'],custom_run.inputs[0])
+    run_choice=N.new('GeometryNodeSwitch');run_choice.input_type='FLOAT';L.new(custom_run.outputs[0],run_choice.inputs['Switch']);L.new(inp.outputs['Transition length'],run_choice.inputs['False']);L.new(nearest_run.outputs['Value'],run_choice.inputs['True']);L.new(run_choice.outputs['Output'],ramp.inputs['From Max'])
+    run_stats=N.new('GeometryNodeAttributeStatistic');run_stats.data_type='FLOAT';run_stats.domain='POINT';L.new(crossings.outputs['Geometry'],run_stats.inputs['Geometry']);L.new(crossing_run.outputs['Attribute'],run_stats.inputs['Attribute'])
+    max_run=N.new('ShaderNodeMath');max_run.operation='MAXIMUM';L.new(run_stats.outputs['Max'],max_run.inputs[0]);L.new(inp.outputs['Transition length'],max_run.inputs[1]);L.new(max_run.outputs[0],panel_buffer.inputs[1])
     nearest_weight=N.new('GeometryNodeSampleNearestSurface');nearest_weight.data_type='FLOAT';L.new(crossing_geometry.outputs['Geometry'],nearest_weight.inputs['Mesh']);L.new(crossing_attribute.outputs['Attribute'],nearest_weight.inputs['Value']);L.new(position.outputs['Position'],nearest_weight.inputs['Sample Position'])
     sampled_weight=N.new('GeometryNodeSwitch');sampled_weight.input_type='FLOAT';L.new(ray.outputs['Is Hit'],sampled_weight.inputs['Switch']);L.new(ray.outputs['Attribute'],sampled_weight.inputs['True']);L.new(nearest_weight.outputs['Value'],sampled_weight.inputs['False'])
     full_weight=N.new('ShaderNodeMath');full_weight.operation='MULTIPLY';L.new(weight.outputs['Output'],full_weight.inputs[0]);L.new(sampled_weight.outputs['Output'],full_weight.inputs[1])
-    enabled=N.new('GeometryNodeSwitch');enabled.input_type='FLOAT';enabled.inputs['False'].default_value=0;L.new(ramp_enabled.outputs['Boolean'],enabled.inputs['Switch']);L.new(full_weight.outputs[0],enabled.inputs['True'])
+    parking_kind=N.new('GeometryNodeInputNamedAttribute');parking_kind.data_type='FLOAT';parking_kind.inputs['Name'].default_value='roadlab_parking_entrance'
+    nearest_kind=N.new('GeometryNodeSampleNearestSurface');nearest_kind.data_type='FLOAT';L.new(crossing_geometry.outputs['Geometry'],nearest_kind.inputs['Mesh']);L.new(parking_kind.outputs['Attribute'],nearest_kind.inputs['Value']);L.new(position.outputs['Position'],nearest_kind.inputs['Sample Position'])
+    grade_delta=N.new('ShaderNodeMath');grade_delta.operation='SUBTRACT';L.new(edge_attr.outputs['Attribute'],grade_delta.inputs[0]);L.new(target.outputs['Output'],grade_delta.inputs[1])
+    grade_abs=N.new('ShaderNodeMath');grade_abs.operation='ABSOLUTE';L.new(grade_delta.outputs[0],grade_abs.inputs[0])
+    remote=N.new('ShaderNodeMath');remote.operation='GREATER_THAN';remote.inputs[1].default_value=1.;L.new(grade_abs.outputs[0],remote.inputs[0])
+    exclude_bridge=N.new('ShaderNodeMath');exclude_bridge.operation='MULTIPLY';L.new(nearest_kind.outputs['Value'],exclude_bridge.inputs[0]);L.new(remote.outputs[0],exclude_bridge.inputs[1])
+    ground_weight=N.new('GeometryNodeSwitch');ground_weight.input_type='FLOAT';L.new(exclude_bridge.outputs[0],ground_weight.inputs['Switch']);L.new(full_weight.outputs[0],ground_weight.inputs['False']);ground_weight.inputs['True'].default_value=0
+    enabled=N.new('GeometryNodeSwitch');enabled.input_type='FLOAT';enabled.inputs['False'].default_value=0;L.new(ramp_enabled.outputs['Boolean'],enabled.inputs['Switch']);L.new(ground_weight.outputs['Output'],enabled.inputs['True'])
     difference=N.new('ShaderNodeMath');difference.operation='SUBTRACT';L.new(target.outputs['Output'],difference.inputs[0]);vertex_top_switch=N.new('GeometryNodeSwitch');vertex_top_switch.input_type='FLOAT';L.new(inp.outputs['Use vertex controls'],vertex_top_switch.inputs['Switch']);L.new(top_reference.outputs[0],vertex_top_switch.inputs['False']);L.new(vertex_top.outputs[0],vertex_top_switch.inputs['True']);L.new(vertex_top_switch.outputs['Output'],difference.inputs[1])
     lower=N.new('ShaderNodeMath');lower.operation='MINIMUM';lower.inputs[1].default_value=0;L.new(difference.outputs[0],lower.inputs[0])
     multiply=N.new('ShaderNodeMath');multiply.operation='MULTIPLY';L.new(lower.outputs[0],multiply.inputs[0]);L.new(enabled.outputs['Output'],multiply.inputs[1])

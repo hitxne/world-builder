@@ -32,6 +32,10 @@ jobs:
           for test in road-lab-updater/tests/*_blender.py; do
             /tmp/roadlab-blender52/blender -b --factory-startup -t 4 --python-exit-code 1 --python "$test"
           done
+      - name: Test parking driveway crossings
+        run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_parking_entrances_blender.py
+      - name: Test terrain protection at sidewalks
+        run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_terrain_sidewalk_mask_blender.py
       - name: Test saved sidewalk graph upgrades
         run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_sidewalk_upgrade_blender.py
       - name: Test sidewalk corner winding and overlap
