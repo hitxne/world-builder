@@ -203,6 +203,9 @@ def paint_material(asset):
 
 
 def rebuild(obj,scene,force=False):
+    from . import road_core,approach_alignment
+    if obj.get('roadlab_new_core') and not road_core._busy and obj.get('roadlab_alignment_signature')!=json.dumps(approach_alignment.signature(obj),sort_keys=True):
+        road_core.rebuild(obj,True);return
     from . import road_core
     previous=road_core._busy;road_core._busy=True
     try:return _rebuild(obj,scene,force)
@@ -227,10 +230,12 @@ def _rebuild(obj,scene,force=False):
         coords=[tuple(p.co[:3]) for p in spl.points];widths=[point_settings.width(obj,offset+i,default)/default for i in range(len(coords))];offset+=len(coords)
         if spl.use_cyclic_u and coords:coords.append(coords[0]);widths.append(widths[0])
         paths.append((coords,widths))
-    nodes,edges,_=graph(paths,default)
+    from . import approach_alignment
+    nodes,edges,_=graph(paths,default,approach_alignment.protected(obj))
+    paint_ports=approach_alignment.ports(obj,nodes,edges=edges)
     from . import lane_bends
-    transitions=lane_bends.profile_transitions(nodes,edges,configs,{ident:key(points[index].co[:3]) for ident,index in lookup.items()},values(obj),{key(row['co']) for row in items if row.get('connection_mode')=='STOP'})
-    bends=lane_bends.patches(nodes,edges,values(obj),point_settings.junction_overrides(obj));bends.update(transitions);bend_arms={}
+    transitions=lane_bends.profile_transitions(nodes,edges,configs,{ident:key(points[index].co[:3]) for ident,index in lookup.items()},values(obj),{key(row['co']) for row in items if row.get('connection_mode')=='STOP'},port_offsets=paint_ports)
+    bends=lane_bends.patches(nodes,edges,values(obj),point_settings.junction_overrides(obj),paint_ports);bends.update(transitions);bend_arms={}
     stop_nodes={key(row['co']) for row in items if row.get('connection_mode')=='STOP'}
     def clearance(co,width,other):
         if key(co) in bends:
@@ -273,6 +278,8 @@ def _rebuild(obj,scene,force=False):
                 segment_plans=lane_markings.plan(start,finish,entries(config['incoming'],'i'),entries(config['outgoing'],'o'),width,side,config['median'],clearance(start,start_width,finish),clearance(finish,end_width,start),config['spacing'],**paint_settings,allowed_incoming=available(start,finish),allowed_outgoing=available(finish,start),junction_start=len(nodes.get(key(start),[]))>=3 or key(start) in stop_nodes,junction_end=len(nodes.get(key(finish),[]))>=3 or key(finish) in stop_nodes,emerging_incoming=[i for i,row in enumerate(config['incoming']) if row.get('entry')=='ADDED'],emerging_outgoing=[i for i,row in enumerate(config['outgoing']) if row.get('entry')=='ADDED'])
                 from . import lane_pocket_markings
                 segment_plans=lane_pocket_markings.adapt(obj,config,segment_plans,side)
+                from . import approach_alignment
+                segment_plans=approach_alignment.warp(obj,config,segment_plans,side)
                 for co,other in ((start,finish),(finish,start)):
                     if key(co) not in bends or key(co) in stop_nodes:continue
                     neighbor=max(nodes[key(co)],key=lambda n:(Vector(n)-Vector(co)).normalized().dot((Vector(other)-Vector(co)).normalized()))
@@ -282,7 +289,7 @@ def _rebuild(obj,scene,force=False):
                         if family not in ('outer','center-yellow','median-yellow','center-white','divider'):continue
                         semantic=tuple(role[:3] if family=='divider' else role[:2])
                         if semantic in seen:continue
-                        seen.add(semantic);lateral=(Vector(mark['center'])-Vector(co)).dot(normal)
+                        seen.add(semantic);seams=bends[key(co)][2][neighbor];gate_center=(Vector(seams[0])+Vector(seams[-1]))*.5;lateral=(Vector(mark['center'])-gate_center).dot(normal)
                         arm.append(dict(family=family,flow=1 if Vector((*mark['forward'],0)).dot(u)>0 else -1,asset=mark['asset'],fraction=.5+lateral/(Vector(bends[key(co)][2][neighbor][-1])-Vector(bends[key(co)][2][neighbor][0])).length,width=mark['size'][0],edge_inset=max(.05,(width-sum(r['width'] for field in ('incoming','outgoing') for r in config[field])-config['median'])/2)))
                     bend_arms[(key(co),neighbor)]=arm
                 for mark in segment_plans:
@@ -717,6 +724,7 @@ def stop_lane_preview():
     session=_lane_preview;_lane_preview=None
     if bpy.app.timers.is_registered(tick_lane_preview):bpy.app.timers.unregister(tick_lane_preview)
     if not session:return
+    if session.get('geometry_draft') is not None:session['geometry_draft'].close()
     for target,hidden in session['hidden']:
         try:target.hide_set(hidden)
         except ReferenceError:pass
@@ -798,7 +806,14 @@ def tick_lane_preview():
                 for row in preview_records:
                     if all(abs(a-b)<1e-5 for a,b in zip(row['co'],data['_connection_node'])):row['connection_mode']=data['_connection_mode']
         proxy['roadlab_point_settings']=json.dumps(preview_records)
-        proxy['roadlab_core_mesh']=obj['roadlab_core_mesh'];proxy['roadlab_core_signature']=obj.get('roadlab_core_signature','')
+        from . import approach_alignment
+        geometry=session.get('geometry_draft')
+        if approach_alignment.signature(proxy)!=approach_alignment.signature(obj):
+            if geometry is None:geometry=approach_alignment.GeometryDraft(obj,proxy,scene);session['geometry_draft']=geometry
+            geometry.update(configs)
+        else:
+            if geometry is not None:geometry.close();session['geometry_draft']=None
+            proxy['roadlab_core_mesh']=obj['roadlab_core_mesh'];proxy['roadlab_core_report']=obj.get('roadlab_core_report','{}');proxy['roadlab_core_signature']=obj.get('roadlab_core_signature','')
         proxy.matrix_world=obj.matrix_world.copy();rebuild(proxy,scene,True)
         target=proxy.get('roadlab_marking_object')
         if target is not None:
@@ -994,8 +1009,9 @@ class ROADLAB_PT_lanes(bpy.types.Panel):
         self.layout.operator('wm.tool_set_by_id',text='Lane toolbar tool').name='roadlab.lanes'
         self.layout.operator('roadlab.add_lane',text='Add lane',icon='ADD')
         self.layout.operator('roadlab.lane_window',text='Lane details')
+        if context.mode=='EDIT_CURVE':self.layout.operator('roadlab.approach_alignment',text='Approach alignment…',icon='ARROW_LEFTRIGHT')
         for index,pocket in enumerate(json.loads(road(context).get('roadlab_lane_pockets','[]'))):
-            if pocket.get('receiving'):continue
+            if pocket.get('paired') or pocket.get('receiving') and not pocket.get('primary'):continue
             label='Through lane + merge' if pocket.get('movement')=='THROUGH' else 'Lane pocket'
             row=self.layout.row(align=True);row.label(text=f'{label} · {pocket["width"]:.1f} m');row.operator('roadlab.remove_lane_pocket',text='',icon='TRASH').pocket_id=pocket['id']
         for warning in json.loads(road(context).get('roadlab_marking_warnings','[]')):self.layout.label(text=warning,icon='ERROR')
@@ -1012,6 +1028,8 @@ def refresh_loaded_markings():
 
 classes=(ROADLAB_Lane,ROADLAB_LaneDraft,ROADLAB_UL_lanes,ROADLAB_OT_lane_edit,ROADLAB_OT_lane_count,ROADLAB_OT_lane_apply,ROADLAB_OT_lane_remove,ROADLAB_OT_lane_window,ROADLAB_OT_lane_pick,ROADLAB_PT_lanes)
 def register():
+    from . import approach_alignment
+    approach_alignment.register()
     for cls in classes:bpy.utils.register_class(cls)
     bpy.types.Scene.roadlab_lane_draft=PointerProperty(type=ROADLAB_LaneDraft)
     bpy.utils.register_tool(ROADLAB_WST_lanes,separator=True)
@@ -1020,6 +1038,8 @@ def register():
     bpy.app.handlers.save_post.append(preview_after_save)
     bpy.app.handlers.load_pre.append(preview_before_load)
 def unregister():
+    from . import approach_alignment
+    approach_alignment.unregister()
     preview_before_load()
     for handlers,callback in ((bpy.app.handlers.save_pre,preview_before_save),(bpy.app.handlers.save_post,preview_after_save),(bpy.app.handlers.load_pre,preview_before_load)):
         if callback in handlers:handlers.remove(callback)

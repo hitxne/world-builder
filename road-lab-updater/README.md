@@ -1,6 +1,6 @@
 # RoadLab Blender extension and update repository
 
-The full RoadLab 0.18.23 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
+The full RoadLab 0.18.24 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
 
 ## Install once
 
@@ -330,3 +330,15 @@ Opening a scene now replaces the older sidewalk offset node graph with the corre
 Parking bounds assigned to a road automatically lower overlapping curb and sidewalk layers for driveway access. Both sides along the sidewalk use the same ramp length. Surface Bounds > Parking lot > Driveway crossings enables this by default; Ramp length adjusts both transitions together. Moving/editing the outline updates its footprint; disabling, changing kind, reassigning or deleting the lot restores the former crossing. The untrimmed source outline drives the ramps so trimming the lot against sidewalks cannot form an evaluation cycle. Parking footprints at substantially different elevations do not lower elevated sidewalks.
 
 Sidewalk offset frames now use planar geometry and independently resample the original border elevations. Sculpting a road no longer turns redundant height samples into inward-offset corners, including wide sidewalks at junctions. Saved graphs upgrade in place. Terrain sculpt previews and final terrain share a cached concrete footprint mask: native curbs/sidewalks and assigned sidewalk pads keep their supporting terrain in place, with smooth brush falloff outside. Bridge-cut sidewalk spans are excluded from ground protection.
+
+## Aligned lanes and junction approaches (0.18.24)
+
+A through lane added at a curb now follows that carriageway's actual travel direction. A selected arm can be arriving or departing. Its paired lane is placed upstream or downstream accordingly, instead of inventing a merge on the opposing carriageway. Saved through pockets use the corrected direction interpretation when regenerated.
+
+Unequal lane counts keep the center divider on the street alignment. The pavement cross-section shifts only as needed to fit the requested lanes and minimum shoulders; wider roads retain their spare shoulder space. Lane-count transitions receive matching pavement and paint corridors. Width expansion still requires the existing confirmation. Global driving-side changes regenerate affected cross-sections and markings together.
+
+To deliberately shift a junction arm: select its junction point in curve Edit Mode, then **RoadLab > Lanes > Approach alignment…**. Choose the actual East/West/North/South (or angled) road, then adjust **Sideways offset**. Positive values move right while facing the junction. Blue geometry is an isolated draft, including edge layers. Apply alignment saves; Cancel discards. Zero restores automatic alignment. The authoring curve stays intact; each arm has an independent geometric port. Unsupported tight offsets are rejected while preserving the saved road.
+
+The lane window also previews changed cross-section alignment in blue, with paint on the proposed pavement; applying saves it. Draft helpers are removed on cancellation and before saving.
+
+Actual Blender comparison: [previous direction pairing](docs/lane-alignment-before.png) and [corrected pairing](docs/lane-alignment-after.png).

@@ -149,3 +149,21 @@ def junction_shifts(paths,ids_by_path,pockets,junctions,default=8.,corner_radius
     for (key,_),delta in contributions.items():
         old=result[key];result[key]=(old[0]+delta[0],old[1]+delta[1])
     return result
+
+
+def travel(spec,traffic_side):
+    """Return physical travel direction and whether widening uses the median.
+
+    A through lane added at a curb belongs to that curb's carriageway. It may
+    be arriving OR departing at the selected arm; the selection does not decide
+    its direction. This also repairs the interpretation of older saved pairs.
+    """
+    sign=1 if traffic_side=='RIGHT' else -1
+    pocket=spec['pocket']
+    if pocket.get('movement')=='THROUGH':return -spec['side']*sign,False
+    flow=spec.get('junction_direction',0)*(1 if pocket.get('receiving') else -1) if pocket.get('junction') else -spec['side']*sign
+    return flow,bool(pocket.get('junction') and spec['side']!=-flow*sign)
+
+def receiving(spec,traffic_side):
+    if spec['pocket'].get('movement')=='THROUGH':return travel(spec,traffic_side)[0]==spec.get('junction_direction',0)
+    return bool(spec['pocket'].get('receiving'))

@@ -8,15 +8,20 @@ def changed(settings, context):
     scene=getattr(context,'scene',None)
     if scene is not None:
         scene['roadlab_traffic_dirty']=True
-        from . import lane_editor
+        from . import lane_editor,road_core,approach_alignment
+        geometry_changed=False
         for obj in list(scene.objects):
             if obj.get('roadlab_new_core') and 'roadlab_lanes' in obj:
-                try:lane_editor.rebuild(obj,scene)
+                try:
+                    if approach_alignment.signature(obj)[0]:road_core.rebuild(obj,True);geometry_changed=True
+                    else:lane_editor.rebuild(obj,scene)
                 except Exception as error:
                     import json
                     obj['roadlab_marking_warnings']=json.dumps([str(error)])
-    # Lane/roundabout systems consume this revision on their next regeneration.
-    # Do not rewrite ordinary road geometry or pretend traffic adapters are live.
+        if geometry_changed:
+            from . import core_terrain
+            core_terrain.rebuild(scene,True)
+    # Traffic adapters consume the same scene-wide revision.
 
 
 class ROADLAB_MapSettings(bpy.types.PropertyGroup):

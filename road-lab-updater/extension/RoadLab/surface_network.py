@@ -58,23 +58,23 @@ def edge_width(edges,a,b):
     return value[0 if a==edge[0] else 1] if isinstance(value,tuple) else value
 
 
-def junction(center,neighbors,edges,spacing,radii,budgets):
+def junction(center,neighbors,edges,spacing,radii,budgets,offsets=None,minimum_gate=0.):
     c=Vector(center[:2]);g=gradient(center,neighbors)
     arms=[]
     for p in sorted(neighbors,key=lambda p:math.atan2(p[1]-center[1],p[0]-center[0])):
         delta=Vector((p[0]-center[0],p[1]-center[1]));u=delta.normalized();n=Vector((-u.y,u.x))
-        arms.append(dict(p=p,u=u,n=n,w=edge_width(edges,center,p),cols=max(2,math.ceil(max(edge_width(edges,center,p),edge_width(edges,p,center))/spacing)),budget=delta.length*budgets[p],gate=0.))
+        arms.append(dict(p=p,u=u,n=n,shift=(offsets or {}).get(p,0.),w=edge_width(edges,center,p),cols=max(2,math.ceil(max(edge_width(edges,center,p),edge_width(edges,p,center))/spacing)),budget=delta.length*budgets[p],gate=0.))
     corners=[];limits=[]
     for i,a in enumerate(arms):
         b=arms[(i+1)%len(arms)];u,v=a['u'],b['u'];theta=math.atan2(cross(u,v),u.dot(v))%(2*math.pi)
         bisector=u+v
         if theta>math.pi:bisector=-bisector
         label=('N' if bisector.y>=0 else 'S')+('E' if bisector.x>=0 else 'W')
-        requested=radii[label];origin=intersection(a['n']*(a['w']/2),u,-b['n']*(b['w']/2),v)
+        requested=radii[label];origin=intersection(a['n']*(a['shift']+a['w']/2),u,b['n']*(b['shift']-b['w']/2),v)
         if origin is None:
             corners.append(None);continue
         direction=1 if theta<math.pi else -1
-        unit_center=intersection(a['n']*(a['w']/2+1),u,-b['n']*(b['w']/2+1),v)
+        unit_center=intersection(a['n']*(a['shift']+a['w']/2+1),u,b['n']*(b['shift']-b['w']/2-1),v)
         da=direction*(unit_center-a['n']-origin).dot(u);db=direction*(unit_center+b['n']-origin).dot(v)
         ta=origin.dot(u);tb=origin.dot(v)
         maximum=min((a['budget']-spacing*.2-ta)/max(da,1e-9),(b['budget']-spacing*.2-tb)/max(db,1e-9))
@@ -94,15 +94,15 @@ def junction(center,neighbors,edges,spacing,radii,budgets):
         a['gate']=max(a['gate'],pa.dot(u)+spacing*.2);b['gate']=max(b['gate'],pb.dot(v)+spacing*.2)
         limits.append(dict(corner=label,kind='exterior' if exterior else 'interior',angle_degrees=math.degrees(theta),requested=requested,applied=applied,minimum=.02,maximum=maximum,arc_center=[cc.x+c.x,cc.y+c.y],height_anchor=[curve[len(curve)//2].x+c.x,curve[len(curve)//2].y+c.y],height_falloff=max(a['w'],b['w'],applied)*1.5))
         corners.append(curve)
-    for a in arms:a['gate']=max(a['gate'],min(spacing,a['budget']*.5))
+    for a in arms:a['gate']=max(a['gate'],min(max(spacing,minimum_gate),a['budget']*(.8 if minimum_gate else .5)))
     boundary=[];gates={}
     def line(a,b,count=None):
         count=count or max(1,math.ceil((b-a).length/spacing))
         for i in range(count):boundary.append(a+(b-a)*(i/count))
     for i,a in enumerate(arms):
-        b=arms[(i+1)%len(arms)];right=a['u']*a['gate']-a['n']*a['w']/2;left=a['u']*a['gate']+a['n']*a['w']/2
+        b=arms[(i+1)%len(arms)];right=a['u']*a['gate']+a['n']*(a['shift']-a['w']/2);left=a['u']*a['gate']+a['n']*(a['shift']+a['w']/2)
         cols=a['cols'];gates[a['p']]=list(range(len(boundary),len(boundary)+cols+1));line(right,left,cols)
-        next_right=b['u']*b['gate']-b['n']*b['w']/2;corner=corners[i]
+        next_right=b['u']*b['gate']+b['n']*(b['shift']-b['w']/2);corner=corners[i]
         if corner:
             line(left,corner[0]);boundary.extend(corner[:-1]);line(corner[-1],next_right)
         else:line(left,next_right)
@@ -122,11 +122,11 @@ def junction(center,neighbors,edges,spacing,radii,budgets):
     seams={p:[verts[original[j]] for j in ids] for p,ids in gates.items()}
     return verts,faces,seams,g,limits,abs(expected-actual)
 
-def ribbon(a,b,w,spacing,start,end,g0,g1):
+def ribbon(a,b,w,spacing,start,end,g0,g1,offset_a=0.,offset_b=0.):
     wa,wb=w if isinstance(w,tuple) else (w,w)
     d=Vector((b[0]-a[0],b[1]-a[1]));length=d.length;u=d.normalized();n=Vector((-u.y,u.x));cols=max(2,math.ceil(max(wa,wb)/spacing))
-    if start is None:start=[(a[0]+n.x*(-wa/2+wa*j/cols),a[1]+n.y*(-wa/2+wa*j/cols),a[2]) for j in range(cols+1)]
-    if end is None:end=[(b[0]+n.x*(-wb/2+wb*j/cols),b[1]+n.y*(-wb/2+wb*j/cols),b[2]) for j in range(cols+1)]
+    if start is None:start=[(a[0]+n.x*(offset_a-wa/2+wa*j/cols),a[1]+n.y*(offset_a-wa/2+wa*j/cols),a[2]) for j in range(cols+1)]
+    if end is None:end=[(b[0]+n.x*(-offset_b-wb/2+wb*j/cols),b[1]+n.y*(-offset_b-wb/2+wb*j/cols),b[2]) for j in range(cols+1)]
     start=sorted(start,key=lambda p:Vector(p[:2]).dot(n));end=sorted(end,key=lambda p:Vector(p[:2]).dot(n))
     length=(Vector(end[cols//2][:2])-Vector(start[cols//2][:2])).length;rows=max(1,math.ceil(length/spacing))
     if rows*cols>150000:raise ValueError('Road sampling budget exceeded')
@@ -187,21 +187,28 @@ def check_exposed_edges(verts,loops,spacing):
             for k in keys:bins.setdefault(k,[]).append(index)
 
 
-def build_network(paths,width,spacing,radii,graph,junction_radii=None):
+def build_network(paths,width,spacing,radii,graph,junction_radii=None,port_offsets=None):
     if width<=0 or spacing<.1:raise ValueError('Width must be positive; spacing must be at least 0.1 m')
     radii=radii or dict.fromkeys(('NW','NE','SW','SE'),4.)
     if any(r<=0 for r in radii.values()):raise ValueError('Corner radii must be positive')
     from .footprint_merge import merge_overlaps,merged_junction
     def make_junction(p,neighbors,budgets,local_radii):
-        try:return junction(p,neighbors,edges,spacing,local_radii,budgets)
-        except NeedsFootprintMerge:return merged_junction(p,neighbors,edges,spacing,local_radii)
-    nodes,edges,duplicates=graph(paths,width);patches={};stats={'patches_reused':0,'patches_rebuilt':0};limits=[];error=0.
+        offsets=(port_offsets or {}).get(p,{})
+        try:return junction(p,neighbors,edges,spacing,local_radii,budgets,offsets,getattr(port_offsets,'gates',{}).get(p,0.))
+        except NeedsFootprintMerge:
+            if any(abs(v)>1e-6 for v in offsets.values()):raise ValueError('This approach offset cannot fit; reduce it or extend the adjoining roads')
+            return merged_junction(p,neighbors,edges,spacing,local_radii)
+    nodes,edges,duplicates=graph(paths,width)
+    if callable(port_offsets):port_offsets=port_offsets(nodes,edges)
+    patches={};stats={'patches_reused':0,'patches_rebuilt':0};limits=[];error=0.
     for p,neighbors in nodes.items():
         if len(neighbors)<2:continue
         if len(neighbors)>6:raise ValueError('More than six streets at one junction are not supported')
         budgets={q:(.44 if len(nodes[q])>1 else .9) for q in neighbors}
         local_radii=dict(radii);local_radii.update((junction_radii or {}).get(p,{}))
         key=('junction',p,tuple(sorted((q,edges[tuple(sorted((p,q)))],budgets[q]) for q in neighbors)),spacing,tuple(sorted(local_radii.items())))
+        if (port_offsets or {}).get(p):key+=('ports',tuple(sorted(port_offsets[p].items())))
+        if getattr(port_offsets,'gates',{}).get(p):key+=('gate',port_offsets.gates[p])
         patches[p]=cached(key,lambda p=p,neighbors=neighbors:make_junction(p,neighbors,budgets,local_radii),stats)
         limits.extend(dict(item,junction=list(p)) for item in patches[p][4]);error=max(error,patches[p][5])
     verts=[];faces=[];regions=[];lookup={}
@@ -222,8 +229,9 @@ def build_network(paths,width,spacing,radii,graph,junction_radii=None):
     for region,((a,b),w) in enumerate(edges.items(),1):
         start=patches[a][2][b] if a in patches else None;end=patches[b][2][a] if b in patches else None
         g0=patches[a][3] if a in patches else gradient(a,[b]);g1=patches[b][3] if b in patches else gradient(b,[a])
-        key=('ribbon',a,b,w,spacing,tuple(start or []),tuple(end or []),tuple(g0),tuple(g1))
-        vs,fs=cached(key,lambda a=a,b=b,w=w,start=start,end=end,g0=g0,g1=g1:ribbon(a,b,w,spacing,start,end,g0,g1),stats);pieces.append((vs,fs,region))
+        oa=(port_offsets or {}).get(a,{}).get(b,0.);ob=(port_offsets or {}).get(b,{}).get(a,0.)
+        key=('ribbon',a,b,w,spacing,tuple(start or []),tuple(end or []),tuple(g0),tuple(g1),oa,ob)
+        vs,fs=cached(key,lambda a=a,b=b,w=w,start=start,end=end,g0=g0,g1=g1:ribbon(a,b,w,spacing,start,end,g0,g1,oa,ob),stats);pieces.append((vs,fs,region))
     pieces,merge_report=merge_overlaps(pieces,spacing,stats)
     for vs,fs,region in pieces:add(vs,fs,region)
     loops=perimeter(verts,faces)
@@ -235,4 +243,11 @@ def build_network(paths,width,spacing,radii,graph,junction_radii=None):
             if center and item['applied']>0:
                 exposed=sum(abs(math.hypot(p[0]-center[0],p[1]-center[1])-item['applied'])<2e-5 for p in boundary)>=2
                 if not exposed:item.update(applied=0.,mode='merged',exposed=False,maximum=0.)
-    return verts,faces,regions,loops,dict(junctions=sum(len(v)>=3 for v in nodes.values()),junction_nodes=[list(p) for p,v in nodes.items() if len(v)>=3],unique_edges=len(edges),duplicate_segments_removed=duplicates,vertices=len(verts),faces=len(faces),perimeter_loops=len(loops),quad_faces=sum(len(f)==4 for f in faces),triangle_faces=sum(len(f)==3 for f in faces),active_corners=sorted(set(x['corner'] for x in limits)),radius_limits=limits,junction_area_error_m2=error,hidden_corners=sum(not x.get('exposed',True) for x in limits),**merge_report,**stats)
+    placements=[]
+    for p,offsets in (port_offsets or {}).items():
+        for q,value in offsets.items():
+            if p in patches:
+                gate=patches[p][2][q];c=Vector(tuple((gate[0][k]+gate[-1][k])/2 for k in range(3)));u=Vector(q)-Vector(p);u.z=0;u.normalize();distance=(c-Vector(p)).dot(u)
+            else:distance=0.;c=Vector(p)
+            placements.append(dict(junction=list(p),neighbor=list(q),offset=value,gate_distance=distance,gate_center=list(c)))
+    return verts,faces,regions,loops,dict(approach_ports=placements,junctions=sum(len(v)>=3 for v in nodes.values()),junction_nodes=[list(p) for p,v in nodes.items() if len(v)>=3],unique_edges=len(edges),duplicate_segments_removed=duplicates,vertices=len(verts),faces=len(faces),perimeter_loops=len(loops),quad_faces=sum(len(f)==4 for f in faces),triangle_faces=sum(len(f)==3 for f in faces),active_corners=sorted(set(x['corner'] for x in limits)),radius_limits=limits,junction_area_error_m2=error,hidden_corners=sum(not x.get('exposed',True) for x in limits),**merge_report,**stats)

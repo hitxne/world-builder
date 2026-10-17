@@ -79,9 +79,7 @@ def adapt(obj,config,plans,side):
     a,b=(tuple(points[lookup[v]].co[:3]) for v in config['endpoints']);delta=(b[0]-a[0],b[1]-a[1]);align=1 if ids.index(config['endpoints'][1])>ids.index(config['endpoints'][0]) else -1
     flow_sign=1 if side=='RIGHT' else -1
     def mode(spec):
-        p=spec['pocket'];flow=spec.get('junction_direction',0)*(1 if p.get('receiving') else -1) if p.get('junction') else -spec['side']*flow_sign
-        curb_side=-flow*flow_sign
-        return flow, bool(p.get('junction') and spec['side']!=curb_side)
+        return pocket_math.travel(spec,side)
     def shift(mark,point):
         station,u=project(coords,ss,point);left=(-u[1],u[0]);offset=0.;role=mark['role'];family=role[0]
         flow=role[1]*align if len(role)>1 and isinstance(role[1],(int,float)) else 0
@@ -101,7 +99,7 @@ def adapt(obj,config,plans,side):
                 if family=='outer':
                     total=sum(r['width'] for field in ('incoming','outgoing') for r in config[field])+config.get('median',0.)
                     baseline=min(ps.width(obj,lookup[v],values(obj)['road width']) for v in config['endpoints']);inset=max(.05,(baseline-total)/2)
-                    path=[snap_outer(obj,p,inset) for p in path]
+                    path=[snap_outer(obj,p,inset) for p in path];mark['pavement_anchored']=True
                 mark['path']=path
         else:mark['center']=shift(mark,mark['center'])
         if family=='arrow':
@@ -160,12 +158,12 @@ def adapt(obj,config,plans,side):
         s1,_=project(coords,ss,(c[0]-f[0]*half,c[1]-f[1]*half,c[2]));s2,_=project(coords,ss,(c[0]+f[0]*half,c[1]+f[1]*half,c[2]));lo=max(lo,min(s1,s2));hi=min(hi,max(s1,s2))
         for section,(x,y) in enumerate(((lo,min(hi,spec['lo'])),(max(lo,spec['lo']),min(hi,spec['hi'])),(max(lo,spec['hi']),hi))):
             if y-x<.1:continue
-            asset='line_white' if pocket.get('junction') and not pocket.get('receiving') and section==1 else 'broken_white' if section==1 else 'dotted_white'
+            asset='line_white' if pocket.get('junction') and not pocket_math.receiving(spec,side) and section==1 else 'broken_white' if section==1 else 'dotted_white'
             path=[]
             for i in range(max(1,math.ceil((y-x)/1.5))+1):
                 s=x+(y-x)*i/max(1,math.ceil((y-x)/1.5));co,tangent,_,_=pocket_math.sample(coords,ss,s);path.append([co[0]-tangent[1]*lateral,co[1]+tangent[0]*lateral,co[2]])
             mark=dict(asset=asset,center=path[len(path)//2],forward=[u[0]*incoming,u[1]*incoming],size=[.1524,y-x],path=path if incoming>0 else path[::-1],role=['pocket-divider',pocket['id'],section]);output.append(mark)
-        if pocket.get('junction') and not pocket.get('receiving'):
+        if pocket.get('junction') and not pocket_math.receiving(spec,side):
             s=min(hi-4.,spec['hi']-4.) if incoming>0 else max(lo+4.,spec['lo']+4.)
             if max(lo,spec['lo'])+2.<s<min(hi,spec['hi'])-2.:
                 co,u,_,_=pocket_math.sample(coords,ss,s);offset=lateral+spec['side']*pocket['width']/2
@@ -223,7 +221,7 @@ def adapt_connectors(obj,plans,side):
             for spec in specs:
                 amount=pocket_math.amount(station,spec)
                 if amount<1e-7:continue
-                pocket=spec['pocket'];flow=spec.get('junction_direction',0)*(1 if pocket.get('receiving') else -1) if pocket.get('junction') else -spec['side']*sign;median=pocket.get('junction') and spec['side']!= -flow*sign
+                pocket=spec['pocket'];flow,median=pocket_math.travel(spec,side)
                 moving=family in ('center-yellow','median-yellow','center-white') and median or family=='outer' and lateral*spec['side']>0
                 if moving:shift+=spec['side']*amount;changed=True
                 if family=='outer' and not median and lateral*spec['side']>0:dividers[pocket['id']]=(pocket,min(amount,dividers.get(pocket['id'],(None,amount))[1]))

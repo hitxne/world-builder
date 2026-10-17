@@ -88,7 +88,7 @@ spl.points.add(1);spl.points[2].co=(200,0,0,1);road_core.rebuild(ext,True)
 assert len(e.state(ext))==2 and len(e.state(ext)[1]['incoming'])==2 and len(e.state(ext)[1]['outgoing'])==1
 # Change a straight continuation from two lanes to one: create a bounded taper.
 configs=e.state(ext);configs[1]['incoming']=rows(1);ext['roadlab_lanes']=json.dumps(configs);e.rebuild(ext,scene,True)
-transitions=[m for m in json.loads(ext['roadlab_generated_marking_catalog']) if m.get('path')]
+transitions=[m for m in json.loads(ext['roadlab_generated_marking_catalog']) if m.get('path') and m['role'][0]=='bend']
 assert transitions and any(m['role'][1]=='divider' for m in transitions)
 assert not json.loads(ext['roadlab_marking_warnings']),ext['roadlab_marking_warnings']
 # A future branch preserves the explicit stop choice without inheriting an arbitrary lane layout.

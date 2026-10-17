@@ -71,7 +71,7 @@ def proposal(obj,choice,side,width,length,taper):
             anchors.update(pocket['anchors']);merged.append(pocket);changed=True
     pocket=dict(id=merged[0]['id'] if merged else uuid.uuid4().hex,anchors=[a for a in ident if a in anchors],axis=choice['axis'],side=side,width=width,length=merged[0].get('length',length) if merged else length,taper=merged[0].get('taper',taper) if merged else taper,junction=choice.get('junction',False),junction_direction=choice.get('junction_direction',0),junction_anchor=choice.get('junction_anchor') or (choice['anchors'][0] if choice.get('junction') else ''))
     if merged:
-        for key in ('movement','receiving','link_group'):
+        for key in ('movement','receiving','link_group','primary','paired','entry_taper','merge_taper'):
             if key in merged[0]:pocket[key]=merged[0][key]
         pocket['junction']=merged[0].get('junction',False)
         pocket['junction_direction']=resolved_spec(obj,coords,ident,merged[0])['junction_direction']
@@ -94,7 +94,7 @@ def proposal(obj,choice,side,width,length,taper):
         if old and max(old['start'],spec['start'])<min(old['end'],spec['end'])-1e-5:raise ValueError('These lane tapers overlap. Select the points between them to extend one lane.')
     return candidate,pocket,bool(merged)
 
-def preview_meshes(obj,pockets):
+def preview_meshes(obj,pockets,overrides=None,metadata=None):
     """Evaluate cloned road and feature nodes, then remove every preview datablock."""
     from . import road_core,native_layers
     from .native_extension import set_input
@@ -114,6 +114,7 @@ def preview_meshes(obj,pockets):
         for key in list(proxy.keys()):
             if any(s in key for s in ('marking','crosswalk','lanes','surface_contacts')):del proxy[key]
         proxy['roadlab_new_core']=False;proxy['roadlab_lane_pockets']=json.dumps(pockets)
+        for name,value in (overrides or {}).items():proxy[name]=value
         refs={}
         for key in ('roadlab_core_mesh','roadlab_core_outline'):
             original=obj[key];ref=copy(original,True)
@@ -134,6 +135,7 @@ def preview_meshes(obj,pockets):
         lane_editor.rebuild(proxy,bpy.context.scene,True)
         for extra in set(bpy.data.objects)-before:
             if extra not in created:created.append(extra);extra.hide_set(True);extra.hide_render=True
+        if metadata is not None:metadata.update(report=proxy.get('roadlab_core_report','{}'),signature=proxy.get('roadlab_core_signature',''))
         meshes=[(list(tuple(obj.matrix_world@v.co) for v in proxy['roadlab_core_mesh'].data.vertices),[tuple(p.vertices) for p in proxy['roadlab_core_mesh'].data.polygons])]
         # CurveToMesh and ramp deformation run with the same controls as the real layers.
         model=native_layers.model_for(obj);helper=None
@@ -470,9 +472,12 @@ def with_receiving_lane(obj,candidate,pocket,movement,merge_taper,traffic_side):
     if not targets:raise ValueError('This approach has no through street across the junction')
     if len(targets)>1 and targets[0][0]-targets[1][0]<.05:raise ValueError('The through destination is ambiguous; adjust the junction approaches')
     destination=targets[0][1];group=pocket.get('link_group',pocket['id']);pocket['link_group']=group
-    previous=next((p for p in candidate if p.get('link_group')==group and p.get('receiving')),None)
-    if pocket.get('receiving'):
+    previous=next((p for p in candidate if p.get('link_group')==group and p['id']!=pocket['id'] and (p.get('paired') or p.get('receiving') and not p.get('primary'))),None)
+    if pocket.get('paired'):
         return [pocket if p['id']==pocket['id'] else p for p in candidate],pocket
+    source_coords,source_ids=source_for_pocket(obj,pocket);primary_spec=resolved_spec(obj,source_coords,source_ids,pocket)
+    primary_receiving=lane_pockets.receiving(primary_spec,traffic_side)
+    entry_taper=pocket.get('entry_taper',pocket['taper']);pocket.update(primary=True,paired=False,receiving=primary_receiving,entry_taper=entry_taper,merge_taper=merge_taper,taper=merge_taper if primary_receiving else entry_taper)
     offset=0;rows=ps.records(obj);receiver=None
     for spline in obj.data.splines:
         ids=[r['id'] for r in rows[offset:offset+len(spline.points)]];offset+=len(ids)
@@ -484,7 +489,7 @@ def with_receiving_lane(obj,candidate,pocket,movement,merge_taper,traffic_side):
                 # Physical left/right follows flow even when source splines reverse.
                 relative_side=spec['side']*(-spec['junction_direction'])
                 direction=1 if j>i else -1
-                receiver=dict(id=previous['id'] if previous else uuid.uuid4().hex,anchors=[ids[i]],axis=ids[:2],side=relative_side*direction,width=pocket['width'],length=pocket['length'],taper=previous['taper'] if previous else merge_taper,junction=True,junction_anchor=ids[i],junction_direction=direction,movement='THROUGH',receiving=True,link_group=group)
+                receiver=dict(id=previous['id'] if previous else uuid.uuid4().hex,anchors=[ids[i]],axis=ids[:2],side=relative_side*direction,width=pocket['width'],length=pocket['length'],taper=previous['taper'] if previous else entry_taper if primary_receiving else merge_taper,junction=True,junction_anchor=ids[i],junction_direction=direction,movement='THROUGH',receiving=not primary_receiving,paired=True,primary=False,link_group=group)
                 if previous:
                     receiver['anchors']=previous['anchors'];receiver['length']=previous['length']
                 ss=lane_pockets.stations([tuple(p.co[:3]) for p in spline.points]);available=ss[-1]-ss[i] if direction>0 else ss[i]
@@ -494,9 +499,10 @@ def with_receiving_lane(obj,candidate,pocket,movement,merge_taper,traffic_side):
                 for config in lane_editor.state(obj):
                     if frozenset(config['endpoints'])!=frozenset((ids[i],ids[j])):continue
                     field='incoming' if config['endpoints']==[ids[i],ids[j]] else 'outgoing'
+                    if primary_receiving:field='outgoing' if field=='incoming' else 'incoming'
                     if len(config[field])>=7:raise ValueError('The receiving direction already has seven lanes')
     if receiver is None:raise ValueError('The receiving street must have editable control points')
-    candidate=[p for p in candidate if p['id']!=pocket['id'] and not (p.get('link_group')==group and p.get('receiving'))]+[pocket]
+    candidate=[p for p in candidate if p['id']!=pocket['id'] and not (p.get('link_group')==group)]+[pocket]
     receiver_coords,receiver_ids=source_for_pocket(obj,receiver);span=resolved_spec(obj,receiver_coords,receiver_ids,receiver)
     for other in candidate:
         if other.get('link_group')==group:continue

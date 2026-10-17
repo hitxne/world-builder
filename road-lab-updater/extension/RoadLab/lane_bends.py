@@ -3,7 +3,7 @@ import math,hashlib,json
 from mathutils import Vector
 from . import surface_network as surface
 
-def patches(nodes,edges,settings,overrides):
+def patches(nodes,edges,settings,overrides,port_offsets=None):
     result={};spacing=settings['resolution']
     for p,neighbors in nodes.items():
         if len(neighbors)!=2:continue
@@ -12,9 +12,13 @@ def patches(nodes,edges,settings,overrides):
         radii={k:settings['corner '+k] for k in ('NW','NE','SW','SE')};radii.update(overrides.get(p,{}))
         budgets={q:(.44 if len(nodes[q])>1 else .9) for q in neighbors}
         cachekey=('junction',p,tuple(sorted((q,edges[tuple(sorted((p,q)))],budgets[q]) for q in neighbors)),spacing,tuple(sorted(radii.items())))
+        offsets=(port_offsets or {}).get(p,{})
+        gate=getattr(port_offsets,'gates',{}).get(p,0.)
+        if offsets:cachekey+=('ports',tuple(sorted(offsets.items())))
+        if gate:cachekey+=('gate',gate)
         patch=surface._CACHE.get(cachekey)
         if patch is None:
-            try:patch=surface.junction(p,neighbors,edges,spacing,radii,budgets)
+            try:patch=surface.junction(p,neighbors,edges,spacing,radii,budgets,offsets,gate)
             except surface.NeedsFootprintMerge:continue # Retain a paint gap when a clean corridor is unavailable.
         result[p]=patch
     return result
@@ -90,7 +94,7 @@ def connect(bends,arms,hidden):
                 plans.append(dict(asset=ra['asset'],center=list(resample([Vector(x) for x in path],.5)),forward=[delta.x,delta.y],size=[ra['width'],length],path=path,role=['bend',family,index],id=identity,edge_inset=(ra.get('edge_inset',.5)+rb.get('edge_inset',.5))/2))
     return plans,warnings
 
-def profile_transitions(nodes,edges,configs,positions,settings,stop_nodes=()):
+def profile_transitions(nodes,edges,configs,positions,settings,stop_nodes=(),port_offsets=None):
     """Add paint-only corridors at straight two-road profile changes."""
     incident={}
     for config in configs:
@@ -122,8 +126,8 @@ def profile_transitions(nodes,edges,configs,positions,settings,stop_nodes=()):
         if ua.dot(ub)>-.9999:continue
         seams={}
         for q,u in ((a,ua),(b,ub)):
-            distance=min(max(row[1] for row in rows)/2,(Vector(q)-Vector(p)).length*.4)
-            center=Vector(p)+u*distance;normal=Vector((-u.y,u.x,0));width=surface.edge_width(edges,p,q)
+            distance=getattr(port_offsets,'gates',{}).get(p,min(max(row[1] for row in rows)/2,(Vector(q)-Vector(p)).length*.4))
+            center=Vector(p)+u*distance;normal=Vector((-u.y,u.x,0));center+=normal*(port_offsets or {}).get(p,{}).get(q,0.);width=surface.edge_width(edges,p,q)
             seams[q]=[tuple(center-normal*width/2),tuple(center+normal*width/2)]
         verts=[seams[a][0],seams[a][1],seams[b][0],seams[b][1]]
         result[p]=(verts,[[0,1,2,3]],seams,None,[],0)

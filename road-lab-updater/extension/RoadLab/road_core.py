@@ -6,7 +6,7 @@ import bpy
 from mathutils import Vector
 from .native_extension import socket,set_input
 EPS=1e-6
-SCHEMA=8
+SCHEMA=9
 _busy=False
 _defer_markings=False
 _deferred_markings=set()
@@ -30,7 +30,7 @@ def inside(p,poly):
     return hit
 
 
-def graph(paths,width):
+def graph(paths,width,protected=()):
     segments=[]
     for points,radius in paths:
         values=[radius]*len(points) if isinstance(radius,(float,int)) else radius
@@ -72,7 +72,7 @@ def graph(paths,width):
     while changed:
         changed=False
         for p,neighbors in list(nodes.items()):
-            if len(neighbors)!=2:continue
+            if len(neighbors)!=2 or p in protected:continue
             a,b=list(neighbors);va=Vector(sub(a,p));vb=Vector(sub(b,p))
             if va.normalized().dot(vb.normalized())<-.99999:
                 ea,eb=tuple(sorted((a,p))),tuple(sorted((b,p)))
@@ -83,9 +83,10 @@ def graph(paths,width):
     return nodes,edges,duplicates
 
 
-def build(paths,width=6.,spacing=1.,radii=None,junction_radii=None):
+def build(paths,width=6.,spacing=1.,radii=None,junction_radii=None,port_offsets=None,protected_nodes=()):
     from .surface_network import build_network
-    return build_network(paths,width,spacing,radii,graph,junction_radii)
+    kernel_graph=(lambda paths,width:graph(paths,width,protected_nodes)) if protected_nodes else graph
+    return build_network(paths,width,spacing,radii,kernel_graph,junction_radii,port_offsets)
 
 
 def modifier(road):return next((m for m in road.modifiers if m.type=='NODES' and m.node_group and m.node_group.name.split('.')[0]=='ROADLAB_ROAD_CORE'),None)
@@ -120,7 +121,9 @@ def _rebuild(road,force=False):
         coords=[tuple(p.co[:3]) for p in spline.points]
         if spline.use_cyclic_u and coords:coords.append(coords[0]);radii.append(radii[0]);angles.append(angles[0])
         paths.append((coords,radii));tilts.append(angles)
-    shape_signature=hashlib.sha256(json.dumps([SCHEMA,paths,tilts,settings,road.get('roadlab_lane_pockets','[]'),[(list(k),v) for k,v in point_settings.junction_overrides(road).items()],[(list(k),v) for k,v in point_settings.corner_lifts(road).items()]],sort_keys=True).encode()).hexdigest()
+    from . import approach_alignment
+    alignment_signature=approach_alignment.signature(road)
+    shape_signature=hashlib.sha256(json.dumps([SCHEMA,alignment_signature,paths,tilts,settings,road.get('roadlab_lane_pockets','[]'),[(list(k),v) for k,v in point_settings.junction_overrides(road).items()],[(list(k),v) for k,v in point_settings.corner_lifts(road).items()]],sort_keys=True).encode()).hexdigest()
     signature=hashlib.sha256((shape_signature+road.get('roadlab_sculpt_field','')+road.get('roadlab_bridge_cuts','')).encode()).hexdigest()
     output=road.get('roadlab_core_mesh');outline=road.get('roadlab_core_outline')
     if output is None or outline is None:raise ValueError('Generated references are missing; reopen the prototype scene')
@@ -146,7 +149,8 @@ def _rebuild(road,force=False):
         paths,tilts,pocket_details=lane_pockets.expand(paths,ids_by_path,pockets,settings['road width'],tilts,[p for p,n in nodes.items() if len(n)>=3],max(settings['corner '+k] for k in ('NW','NE','SW','SE')))
         source_positions={key(co):key(p) for detail in pocket_details for co,p in detail['source_positions'].items()}
         derived_overrides={source_positions.get(co,co):v for co,v in point_settings.junction_overrides(road).items()}
-    verts,faces,regions,loops,report=build(paths,settings['road width'],settings['resolution'],{k:settings['corner '+k] for k in ('NW','NE','SW','SE')},derived_overrides)
+    ports=(lambda nodes,edges:approach_alignment.ports(road,nodes,source_positions,edges)) if any(alignment_signature) else None
+    verts,faces,regions,loops,report=build(paths,settings['road width'],settings['resolution'],{k:settings['corner '+k] for k in ('NW','NE','SW','SE')},derived_overrides,port_offsets=ports,protected_nodes=approach_alignment.protected(road,source_positions))
     from . import road_heightfield,road_sculpt
     from . import curve_bank
     if any(abs(a)>1e-8 for row in tilts for a in row):verts=[(x,y,z+curve_bank.displacement([p[0] for p in paths],tilts,settings['road width'],x,y)) for x,y,z in verts]
@@ -186,7 +190,7 @@ def _rebuild(road,force=False):
     for loop in loops:
         spline=outline.data.splines.new('POLY');spline.points.add(len(loop)-1);spline.use_cyclic_u=True
         spline.points.foreach_set('co',[c for index in loop for c in (*verts[index],1)])
-    outline.data.update_tag();road['roadlab_core_signature']=signature;road['roadlab_core_report']=json.dumps(report);road['roadlab_core_error']='';road.update_tag()
+    outline.data.update_tag();road['roadlab_alignment_signature']=json.dumps(alignment_signature,sort_keys=True);road['roadlab_core_signature']=signature;road['roadlab_core_report']=json.dumps(report);road['roadlab_core_error']='';road.update_tag()
     from . import road_draw_preview
     road_draw_preview.remember(road,settings['road width'])
     refresh_markings(road)
