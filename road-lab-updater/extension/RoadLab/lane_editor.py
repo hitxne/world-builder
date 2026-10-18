@@ -331,7 +331,8 @@ def _rebuild(obj,scene,force=False):
     pad_triangles,pad_footprint=crosswalk_layout.concrete(obj) if any(m['asset']=='tactile_pad' for m in plans) else ([],None)
     crosswalk_layout.place_pads(plans,pad_footprint,pad_triangles)
     obj['roadlab_generated_marking_catalog']=json.dumps(plans)
-    pad_tree=crosswalk_ramps.surface_tree(obj) if any(m.get('on_terrain') for m in plans) else None
+    pad_points=[p for tri in pad_triangles for p in tri]
+    pad_tree=BVHTree.FromPolygons(pad_points,[(i,i+1,i+2) for i in range(0,len(pad_points),3)],all_triangles=True) if pad_points else crosswalk_ramps.surface_tree(obj) if any(m.get('on_terrain') for m in plans) else None
     def surface(x,y,expected,on_terrain=False):
         # At overpasses choose the nearest road elevation, not the topmost deck.
         hits=[];origin=top

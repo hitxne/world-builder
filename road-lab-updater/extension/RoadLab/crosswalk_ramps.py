@@ -91,7 +91,7 @@ def surface_tree(road):
         evaluated=layer.object.evaluated_get(depsgraph);mesh=evaluated.to_mesh()
         try:
             mesh.calc_loop_triangles()
-            offset=len(verts);matrix=inverse@evaluated.matrix_world;normal=matrix.to_3x3().inverted().transposed()
-            verts.extend(matrix@v.co for v in mesh.vertices);faces.extend(tuple(offset+i for i in t.vertices) for t in mesh.loop_triangles if (normal@mesh.polygons[t.polygon_index].normal).z>.05)
+            offset=len(verts);matrix=inverse@evaluated.matrix_world
+            verts.extend(matrix@v.co for v in mesh.vertices);faces.extend(tuple(offset+i for i in t.vertices) for t in mesh.loop_triangles)
         finally:evaluated.to_mesh_clear()
     return BVHTree.FromPolygons(verts,faces) if faces else None
