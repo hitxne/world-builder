@@ -55,7 +55,7 @@ class RoadStrokePreview:
                 matrix=terrain.matrix_world.inverted()@self.road.matrix_world
                 a,b,c,d=self.bounds;points=[matrix@Vector((x,y,0)) for x,y in ((a,b),(a,d),(c,b),(c,d))]
                 lo=(min(p.x for p in points),min(p.y for p in points));hi=(max(p.x for p in points),max(p.y for p in points))
-                center=((lo[0]+hi[0])/2,(lo[1]+hi[1])/2);radius=max(hi[0]-lo[0],hi[1]-lo[1])/2+terrain.roadlab_core_blend
+                center=((lo[0]+hi[0])/2,(lo[1]+hi[1])/2);radius=max(hi[0]-lo[0],hi[1]-lo[1])/2+max(terrain.roadlab_core_blend,self.grade.reach)
                 terrain_sculpt.mark(terrain,center,radius)
         self.grade.close();self.surface.close()
         for paint in self.paint:paint.close()

@@ -1,6 +1,6 @@
 # RoadLab Blender extension and update repository
 
-The full RoadLab 0.18.30 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
+The full RoadLab 0.18.31 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
 
 ## Install once
 
@@ -378,3 +378,15 @@ Road height brushes include the one-cell sampling halo required at pavement edge
 Select the road, enter Edit Mode, and select one or more control points. Open RoadLab > Edge layers > Sidewalks, expand the sidewalk layer, and choose **Adjust width and offset…**. Width and Road edge offset preview together in blue; Apply sidewalk saves only to the selected points. Road edge offset measures from the asphalt perimeter to the sidewalk’s inner edge, including any preceding curb/grass layers. Following layers move outward with the sidewalk. Cancel restores the saved geometry.
 
 The sidebar summaries read actual selected-point values and identify mixed selections. Changing only width preserves independent offsets; changing only offset preserves independent widths. An empty Edit-mode selection cannot silently apply to the whole road. In Object Mode, the window clearly applies to all road points. Saved point data and the existing width-operator identifier remain compatible.
+
+
+## Terrain support under raised sidewalks (0.18.31)
+
+Ground grading now meets the evaluated underside of curbs and sidewalks before
+blending back into the surrounding terrain. Raising the road with curve points
+or a height brush preserves sidewalk slab thickness and carries its supporting
+ground with it. The height-only brush preview caches contact footprints once per
+stroke; it does not rebuild terrain topology per brush sample. Bridge spans remain
+excluded. Terrain brush edits remain masked under the concrete, and the original
+terrain plane is unchanged. Wide sidewalk and setback footprints participate in
+local terrain refinement as well as the asphalt footprint.

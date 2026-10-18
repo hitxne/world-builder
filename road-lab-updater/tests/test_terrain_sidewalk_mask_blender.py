@@ -35,5 +35,6 @@ assert all(len(p.vertices)==4 for p in helper.data.polygons)
 # Lowering near a sidewalk must not excavate its supporting terrain either.
 terrain['roadlab_terrain_field']=field.encode({k:-v for k,v in values.items()});core_terrain.rebuild(scene,True)
 protected=[v.co.z for v in helper.data.vertices if 4.5<v.co.x<7.3 and 28<v.co.y<36]
-assert min(protected)>-.01
+# The default slab underside is 4.76 cm below the road reference.
+assert min(protected)>-.04
 print('TERRAIN_SIDEWALK_MASK_PASS',flush=True)

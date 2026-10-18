@@ -21,9 +21,9 @@ session=RoadStrokePreview(scene,road)
 for _ in range(10):session.stamp((0,3.7),'RAISE',8,3,.1)
 session.close(True);road_core.rebuild(road,True);core_terrain.rebuild(scene,True)
 light=bpy.data.lights.new('Sun','SUN');light.energy=3;sun=bpy.data.objects.new('Sun',light);scene.collection.objects.link(sun);sun.rotation_euler=(.3,-.35,-.3);scene.world.color=(.3,.3,.3)
-cam=bpy.data.cameras.new('Sidewalk sculpt overview');cam.type='ORTHO';cam.ortho_scale=35
-camera=bpy.data.objects.new('Sidewalk sculpt overview',cam);scene.collection.objects.link(camera);camera.location=(17,25,18);camera.rotation_euler=(Vector((0,1,1))-camera.location).to_track_quat('-Z','Y').to_euler();scene.camera=camera
+cam=bpy.data.cameras.new('Sidewalk sculpt overview');cam.type='ORTHO';cam.ortho_scale=65
+camera=bpy.data.objects.new('Sidewalk sculpt overview',cam);scene.collection.objects.link(camera);camera.location=(26,40,32);camera.rotation_euler=(Vector((0,1,1))-camera.location).to_track_quat('-Z','Y').to_euler();scene.camera=camera
 scene.render.engine='CYCLES';scene.cycles.samples=24;scene.cycles.use_denoising=True
-scene.render.resolution_x=1200;scene.render.resolution_y=850;scene.render.resolution_percentage=100
-scene.render.image_settings.file_format='PNG';scene.render.filepath=str(root/'docs'/'sidewalk-sculpt-01829.png');bpy.ops.render.render(write_still=True)
+scene.render.resolution_x=1400;scene.render.resolution_y=1000;scene.render.resolution_percentage=100
+scene.render.image_settings.file_format='PNG';scene.render.filepath=str(root/'docs'/'sidewalk-supported-01831.png');bpy.ops.render.render(write_still=True)
 print('SIDEWALK_SCULPT_RENDER',scene.render.filepath,flush=True)

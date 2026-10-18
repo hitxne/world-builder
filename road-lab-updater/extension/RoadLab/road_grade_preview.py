@@ -7,7 +7,7 @@ from .surface_network import perimeter
 
 class RoadGradePreview:
     def __init__(self,scene,road):
-        self.terrain=scene.wb_native.terrain;self.helper=None;self.bindings=[];self.road=road
+        self.terrain=scene.wb_native.terrain;self.helper=None;self.bindings=[];self.road=road;self.reach=0.
         terrain=self.terrain
         if terrain is None or not terrain.roadlab_core_terrain_enabled:return
         helper=terrain.get('roadlab_core_terrain_mesh')
@@ -18,6 +18,8 @@ class RoadGradePreview:
         ground=BVHTree.FromPolygons([v.co for v in terrain.data.vertices],[tuple(t.vertices) for t in terrain.data.loop_triangles],all_triangles=True)
         sculpt=road_heightfield.decode(terrain.get('roadlab_terrain_field',''))
         self.blend=blend
+        from .terrain_contacts import ContactMask
+        self.contacts=ContactMask(scene,terrain,blend)
         for owner in scene.objects:
             if owner.type!='CURVE' or not owner.get('roadlab_new_core') or not owner.roadlab_core_ground_contact:continue
             source=owner.get('roadlab_core_mesh')
@@ -39,11 +41,15 @@ class RoadGradePreview:
                 t=max(0.,min(1.,(p-u.xy).dot(d)/max(d.length_squared,1e-12)));q=u+(v-u)*t;dist=(p-q.xy).length
                 if best is None or dist<best[0]:best=(dist,owner,a,b,t,q)
             dist,owner,a,b,t,q=best
-            if owner!=road or dist>=blend:continue
+            if owner!=road or (dist>=blend and self.contacts.contact(p.x,p.y)[2] is None):continue
             hit=ground.ray_cast(Vector((p.x,p.y,100000)),Vector((0,0,-1)))[0]
             source=(hit.z if hit is not None else 0.)+road_heightfield.sample(sculpt,p.x,p.y)
             before=terrain_grading.height(source,q.z,dist,blend)
-            self.bindings.append((vertex.index,a,b,t,dist,source,before,vertex.co.z))
+            baseline=hit.z if hit is not None else 0.
+            baseline=terrain_grading.height(baseline,q.z,dist,blend)
+            before=self.contacts.grade(p.x,p.y,baseline,before)
+            self.bindings.append((vertex.index,a,b,t,dist,source,baseline,before,vertex.co.z,q.z))
+        self.reach=max((binding[4] for binding in self.bindings),default=blend)
         self.matrix=inv@road['roadlab_core_mesh'].matrix_world
         source=terrain_quads.base_mesh(road['roadlab_core_mesh'])
         self.index=KDTree(len(self.bindings))
@@ -60,9 +66,12 @@ class RoadGradePreview:
         candidates=(range(len(self.bindings)) if center is None else
                     (item[1] for item in self.index.find_range(Vector((center[0],center[1],0)),radius+1.5)))
         for binding in candidates:
-            i,a,b,t,dist,source,before,z=self.bindings[binding]
+            i,a,b,t,dist,source,baseline,before,z,old_edge=self.bindings[binding]
             u,v=point(a),point(b);q=u+(v-u)*t
             vertex=self.mesh.vertices[i];after=terrain_grading.height(source,q.z,dist,self.blend)
+            # The contact footprint is cached once; only its elevation changes.
+            base=baseline+(q.z-old_edge)*terrain_grading.height(0.,1.,dist,self.blend)
+            after=self.contacts.grade(vertex.co.x,vertex.co.y,base,after,q.z-old_edge)
             vertex.co.z=z+after-before
         self.mesh.update()
     def close(self):

@@ -82,6 +82,7 @@ mesh=bpy.data.meshes.new('Grading source');mesh.from_pydata([(-40,-30,0),(40,-30
 terrain=bpy.data.objects.new('Grading source',mesh);scene.collection.objects.link(terrain);scene.wb_native.terrain=terrain;terrain.roadlab_core_terrain_enabled=True;core_terrain.rebuild(scene,True)
 session=RoadStrokePreview(scene,road)
 for _ in range(10):assert session.stamp((0,3.7),'RAISE',8,3,.1)
+live_ground=[tuple(v.co) for v in terrain['roadlab_core_terrain_mesh'].data.vertices]
 session.close(True);assert terrain_sculpt.pending(terrain)['refine']
 road_core.rebuild(road,True);core_terrain.rebuild(scene,True)
 walktree=coverage(walk,False,True);mesh=terrain['roadlab_core_terrain_mesh'].data
@@ -95,4 +96,41 @@ for i in range(-18,19):
    checked+=1
 assert checked>70
 assert ground.ray_cast(Vector((.1,5.2,30)),Vector((0,0,-1)))[0].z>2.5,'Terrain stayed flat beneath raised sidewalk'
-print('SIDEWALK_SCULPT_TERRAIN_PASS',flush=True)
+# Check underside support rather than merely avoiding top-surface penetration.
+errors=[];live_errors=[]
+for x,y,z in live_ground:
+ if abs(x)>6 or not 4.6<y<6.4:continue
+ expected=.02+field.sample(field.decode(road['roadlab_sculpt_field']),x,4)-.0476-.005
+ live_errors.append(abs(z-expected))
+ hit=ground.ray_cast(Vector((x,y,30)),Vector((0,0,-1)))[0]
+ if hit is not None:errors.append(abs(hit.z-expected))
+assert errors and max(errors)<.06,('Unsupported final sidewalk',max(errors,default=-1))
+assert live_errors and max(live_errors)<.06,('Unsupported preview sidewalk',max(live_errors,default=-1))
+assert all(len(p.vertices)==4 for p in mesh.polygons)
+print('SIDEWALK_SCULPT_TERRAIN_PASS',{'final_support_error':max(errors),'live_support_error':max(live_errors)},flush=True)
+
+# Raising authored curve points supports the full sidewalk, including its end.
+# A wide setback also exercises contacts beyond the asphalt's blend radius.
+from RoadLab import native_layers
+from RoadLab.sidewalk_width import WidthDraft
+road['roadlab_sculpt_field']=''
+for p in road.data.splines[0].points:p.co.z=5.02
+road_core.rebuild(road,True)
+model=native_layers.model_for(road);layer=next(l for l in model.wb_layers if l.object==walk)
+for obj in bpy.context.selected_objects:obj.select_set(False)
+road.select_set(True);bpy.context.view_layer.objects.active=road
+profile=WidthDraft(bpy.context,layer.uid);profile.update(width=5.,offset=10.);profile.accept()
+core_terrain.rebuild(scene,True)
+from RoadLab.terrain_contacts import ContactMask
+contacts=ContactMask(scene,terrain,terrain.roadlab_core_blend)
+mesh=terrain['roadlab_core_terrain_mesh'].data
+ground=BVHTree.FromPolygons([v.co for v in mesh.vertices],[tuple(p.vertices) for p in mesh.polygons])
+checks=0
+for x,y in ((0.071,15.),(0.071,-15.),(24.,16.),(36.,.071)):
+ weight,roof,support=contacts.contact(x,y)
+ if weight>1e-8:continue
+ hit=ground.ray_cast(Vector((x,y,30)),Vector((0,0,-1)))[0]
+ assert hit is not None and abs(hit.z-(support-.005))<.06,('Raised curve sidewalk unsupported',x,y,hit,support)
+ checks+=1
+assert checks==4
+print('RAISED_CURVE_SIDEWALK_SUPPORT_PASS',checks,flush=True)
