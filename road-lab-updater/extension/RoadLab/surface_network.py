@@ -214,12 +214,22 @@ def build_network(paths,width,spacing,radii,graph,junction_radii=None,port_offse
         key+=('frames',tuple((q,getattr(port_offsets,'directions',{}).get((p,q))) for q in sorted(neighbors)))
         patches[p]=cached(key,lambda p=p,neighbors=neighbors:make_junction(p,neighbors,budgets,local_radii),stats)
         limits.extend(dict(item,junction=list(p)) for item in patches[p][4]);error=max(error,patches[p][5])
-    verts=[];faces=[];regions=[];lookup={}
+    verts=[];faces=[];regions=[];lookup={};buckets={};weld=1e-4
     def add(vs,fs,region):
         ids=[]
         for p in vs:
             k=tuple(round(float(v),6) for v in p)
-            if k not in lookup:lookup[k]=len(verts);verts.append(k)
+            if k not in lookup:
+                cell=tuple(math.floor(v/weld) for v in k);nearest=None
+                for dx in (-1,0,1):
+                    for dy in (-1,0,1):
+                        for dz in (-1,0,1):
+                            for index in buckets.get((cell[0]+dx,cell[1]+dy,cell[2]+dz),()):
+                                error=sum((verts[index][j]-k[j])**2 for j in range(3))
+                                if error<weld*weld and (nearest is None or error<nearest[0]):nearest=(error,index)
+                if nearest is not None:lookup[k]=nearest[1]
+                else:
+                    lookup[k]=len(verts);verts.append(k);buckets.setdefault(cell,[]).append(lookup[k])
             ids.append(lookup[k])
         for f in fs:
             f=[ids[i] for i in f]

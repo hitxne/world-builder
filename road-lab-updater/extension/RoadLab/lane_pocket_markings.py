@@ -1,6 +1,6 @@
 """Keep existing travel lanes aligned while lane pockets widen one road edge."""
 import math,copy,json
-from . import lane_pockets as pocket_math,lane_markings
+from . import lane_pockets as pocket_math,lane_markings,point_settings
 
 _CACHE={}
 
@@ -30,11 +30,14 @@ def source(obj,config):
         if all(a in ids for a in config['endpoints']):return coords,ids,specs
     return None
 
-def effective_width(obj,config,point,width):
+def effective_width(obj,config,point,width,toward=None):
     if not obj.get('roadlab_lane_pockets') or obj.get('roadlab_lane_pockets')=='[]':return width
     data=source(obj,config)
     if not data:return width
-    coords,ids,specs=data;station,_=project(coords,pocket_math.stations(coords),point);left,right=pocket_math.offsets(station,specs)
+    coords,ids,specs=data;a,b=(next(r['co'] for r in point_settings.records(obj) if r['id']==v) for v in config['endpoints'])
+    other=toward if toward is not None else b if math.dist(point,a)<math.dist(point,b) else a
+    near=[point[k]+(other[k]-point[k])*1e-6 for k in range(3)]
+    station,_=project(coords,pocket_math.stations(coords),near);left,right=pocket_math.offsets(station,specs)
     return width+left+right
 
 def warp_neighbor(obj,config,plans):
@@ -43,6 +46,8 @@ def warp_neighbor(obj,config,plans):
     da=shifts.get(pocket_math.point_key(a),(0.,0.));db=shifts.get(pocket_math.point_key(b),(0.,0.))
     if not any(abs(x)>1e-8 for d in (da,db) for x in d):return plans
     dx,dy=b[0]-a[0],b[1]-a[1];length2=dx*dx+dy*dy
+    axis=(dx/math.sqrt(length2),dy/math.sqrt(length2))
+    da=tuple(axis[k]*(da[0]*axis[0]+da[1]*axis[1]) for k in range(2));db=tuple(axis[k]*(db[0]*axis[0]+db[1]*axis[1]) for k in range(2))
     def warp(p):
         t=max(0.,min(1.,((p[0]-a[0])*dx+(p[1]-a[1])*dy)/max(length2,1e-9)))
         return [p[0]+da[0]*(1-t)+db[0]*t,p[1]+da[1]*(1-t)+db[1]*t,p[2]]
@@ -106,7 +111,7 @@ def adapt(obj,config,plans,side):
             station,_=project(coords,ss,original['center']);flow=mark['role'][1]*align
             for spec in specs:
                 incoming,median=mode(spec)
-                if not spec['pocket'].get('junction') or spec['pocket'].get('movement')=='THROUGH' or incoming!=flow or pocket_math.amount(station,spec)<spec['width']*.9:continue
+                if not spec['pocket'].get('junction') or pocket_math.has_through(spec['pocket']) or incoming!=flow or pocket_math.amount(station,spec)<spec['width']*.9:continue
                 direction='incoming' if mark['role'][1]>0 else 'outgoing';index=mark['role'][2]
                 allowed=config[direction][index]['movement'].split('_')
                 movement=('LEFT' if side=='RIGHT' else 'RIGHT') if median else ('RIGHT' if side=='RIGHT' else 'LEFT')
@@ -168,8 +173,8 @@ def adapt(obj,config,plans,side):
             if max(lo,spec['lo'])+2.<s<min(hi,spec['hi'])-2.:
                 co,u,_,_=pocket_math.sample(coords,ss,s);offset=lateral+spec['side']*pocket['width']/2
                 movement=('LEFT' if side=='RIGHT' else 'RIGHT') if median else ('RIGHT' if side=='RIGHT' else 'LEFT')
-                if pocket.get('movement')=='THROUGH':movement='THROUGH'
-                asset=lane_markings.arrow_id([movement],side);definition=lane_markings.manifest()[asset];canvas=definition['physical_canvas_m'];anchor=definition['anchor_uv'][0];scale=min(1.,(pocket['width']/2-.15)/(canvas[0]*max(anchor,1-anchor)));canvas=[v*scale for v in canvas];offset+=incoming*(.5-anchor)*canvas[0]
+                if pocket_math.has_through(pocket):movement=pocket['movement']
+                asset=lane_markings.arrow_id(movement.split('_'),side);definition=lane_markings.manifest()[asset];canvas=definition['physical_canvas_m'];scale=min(1.,(pocket['width']-.3)/canvas[0]);canvas=[v*scale for v in canvas]
                 output.append(dict(asset=asset,center=[co[0]-u[1]*offset,co[1]+u[0]*offset,co[2]],forward=[u[0]*incoming,u[1]*incoming],size=list(canvas),role=['pocket-arrow',pocket['id'],movement]))
     return output
 
@@ -199,7 +204,7 @@ def snap_outer(obj,point,inset=.5):
     if best is None:return list(point)
     q=best[1]+best[2]*inset;return [q.x,q.y,point[2]]
 
-def adapt_connectors(obj,plans,side):
+def adapt_connectors(obj,plans,side,segments=()):
     if not obj.get('roadlab_lane_pockets') or obj.get('roadlab_lane_pockets')=='[]':return plans
     from mathutils import Vector
     records,_=context(obj);result=[];sign=1 if side=='RIGHT' else -1
@@ -217,19 +222,26 @@ def adapt_connectors(obj,plans,side):
             if nearest is None:continue
             _,station,u,co,specs=nearest
             if tangent.x*u[0]+tangent.y*u[1]<0:tangent=-tangent
-            normal=Vector((-tangent.y,tangent.x,0));lateral=(p[0]-co[0])*-u[1]+(p[1]-co[1])*u[0];shift=0.
+            normal=Vector((-tangent.y,tangent.x,0));lateral=(p[0]-co[0])*-u[1]+(p[1]-co[1])*u[0];active=False
             for spec in specs:
                 amount=pocket_math.amount(station,spec)
                 if amount<1e-7:continue
                 pocket=spec['pocket'];flow,median=pocket_math.travel(spec,side)
                 moving=family in ('center-yellow','median-yellow','center-white') and median or family=='outer' and lateral*spec['side']>0
-                if moving:shift+=spec['side']*amount;changed=True
+                if moving:active=True;changed=True
                 if family=='outer' and not median and lateral*spec['side']>0:dividers[pocket['id']]=(pocket,min(amount,dividers.get(pocket['id'],(None,amount))[1]))
-            candidate=Vector(p)+normal*shift
-            if abs(shift)>1e-7:mark['path'][i]=snap_outer(obj,candidate,mark.get('edge_inset',.5)) if family=='outer' else list(candidate)
+            if active and family=='outer':mark['path'][i]=snap_outer(obj,p,mark.get('edge_inset',.5))
         if changed:
             mark['center']=list(mark['path'][len(mark['path'])//2]);mark['size'][1]=sum(math.dist(a,b) for a,b in zip(mark['path'],mark['path'][1:]))
         result.append(mark)
         for ident,(pocket,minimum) in dividers.items():
-            divider=copy.deepcopy(original);divider['asset']='line_white' if pocket.get('junction') and minimum>pocket['width']*.95 else 'broken_white' if minimum>pocket['width']*.95 else 'dotted_white';divider['role']=['pocket-bend-divider',ident,*original['role'][1:]];divider['id']=original['id']+'-'+ident;result.append(divider)
+            divider=copy.deepcopy(original)
+            divider['path']=copy.deepcopy(original.get('unexpanded_path') or original['path'])
+            joins=[p for m in segments if m['role'][0]=='pocket-divider' and m['role'][1]==ident for p in (m['path'][0],m['path'][-1])]
+            if joins:
+                path=divider['path'];deltas=[]
+                for p in (path[0],path[-1]):
+                    q=min(joins,key=lambda q:math.dist(p,q));deltas.append([q[k]-p[k] for k in range(3)] if math.dist(p,q)<.5 else [0.,0.,0.])
+                divider['path']=[[p[k]+deltas[0][k]*(1-i/(len(path)-1))+deltas[1][k]*i/(len(path)-1) for k in range(3)] for i,p in enumerate(path)]
+            divider['center']=divider['path'][len(divider['path'])//2];divider['size'][1]=sum(math.dist(a,b) for a,b in zip(divider['path'],divider['path'][1:]));divider['asset']='line_white' if pocket.get('junction') and minimum>pocket['width']*.95 else 'broken_white' if minimum>pocket['width']*.95 else 'dotted_white';divider['role']=['pocket-bend-divider',ident,*original['role'][1:]];divider['id']=original['id']+'-'+ident;result.append(divider)
     return result

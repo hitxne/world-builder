@@ -283,7 +283,7 @@ def _rebuild(obj,scene,force=False):
                 if key(finish) in stop_nodes:paint_settings['control_incoming']='STOP'
                 if key(start) in stop_nodes:paint_settings['control_outgoing']='STOP'
                 from . import lane_pocket_markings
-                start_width=lane_pocket_markings.effective_width(obj,config,start,width);end_width=lane_pocket_markings.effective_width(obj,config,finish,width)
+                start_width=lane_pocket_markings.effective_width(obj,config,start,width,finish);end_width=lane_pocket_markings.effective_width(obj,config,finish,width,start)
                 segment_plans=lane_markings.plan(start,finish,entries(config['incoming'],'i'),entries(config['outgoing'],'o'),width,side,config['median'],clearance(start,start_width,finish),clearance(finish,end_width,start),config['spacing'],**paint_settings,allowed_incoming=available(start,finish),allowed_outgoing=available(finish,start),junction_start=len(nodes.get(key(start),[]))>=3 or key(start) in stop_nodes,junction_end=len(nodes.get(key(finish),[]))>=3 or key(finish) in stop_nodes,emerging_incoming=[i for i,row in enumerate(config['incoming']) if row.get('entry')=='ADDED'],emerging_outgoing=[i for i,row in enumerate(config['outgoing']) if row.get('entry')=='ADDED'])
                 from . import lane_pocket_markings
                 segment_plans=lane_pocket_markings.adapt(obj,config,segment_plans,side)
@@ -311,7 +311,7 @@ def _rebuild(obj,scene,force=False):
         except ValueError as error:warnings.append(str(error))
     connectors,notes=lane_bends.connect(bends,bend_arms,hidden)
     from . import lane_pocket_markings
-    connectors=lane_pocket_markings.adapt_connectors(obj,connectors,side);plans.extend(connectors);warnings.extend(notes)
+    connectors=lane_pocket_markings.adapt_connectors(obj,connectors,side,plans);plans.extend(connectors);warnings.extend(notes)
     obj['roadlab_generated_marking_catalog']=json.dumps(plans)
     from . import crosswalk_ramps
     crosswalk_ramps.rebuild(obj,scene,crossing_definitions)
@@ -1057,7 +1057,7 @@ class ROADLAB_PT_lanes(bpy.types.Panel):
         if context.mode=='EDIT_CURVE':self.layout.operator('roadlab.approach_alignment',text='Approach alignment…',icon='ARROW_LEFTRIGHT')
         for index,pocket in enumerate(json.loads(road(context).get('roadlab_lane_pockets','[]'))):
             if pocket.get('paired') or pocket.get('receiving') and not pocket.get('primary'):continue
-            label='Through lane + merge' if pocket.get('movement')=='THROUGH' else 'Lane pocket'
+            label='Through lane + merge' if 'THROUGH' in pocket.get('movement','') else 'Lane pocket'
             row=self.layout.row(align=True);row.label(text=f'{label} · {pocket["width"]:.1f} m');row.operator('roadlab.remove_lane_pocket',text='',icon='TRASH').pocket_id=pocket['id']
         for warning in json.loads(road(context).get('roadlab_marking_warnings','[]')):self.layout.label(text=warning,icon='ERROR')
 

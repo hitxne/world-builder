@@ -6,7 +6,7 @@ import bpy
 from mathutils import Vector
 from .native_extension import socket,set_input
 EPS=1e-6
-SCHEMA=10
+SCHEMA=11
 _busy=False
 _defer_markings=False
 _deferred_markings=set()
@@ -150,7 +150,16 @@ def _rebuild(road,force=False):
         source_positions={key(co):key(p) for detail in pocket_details for co,p in detail['source_positions'].items()}
         derived_overrides={source_positions.get(co,co):v for co,v in point_settings.junction_overrides(road).items()}
     def ports(nodes,edges):
+        corrections=[]
+        for detail in pocket_details if pockets else []:
+            for p,u,width,desired in detail['junction_ports']:
+                if p not in nodes:continue
+                q=max(nodes[p],key=lambda q:(Vector(q)-Vector(p)).normalized().dot(Vector((*u,0))))
+                edge=tuple(sorted((p,q)));pair=edges[edge];pair=list(pair if isinstance(pair,tuple) else (pair,pair));pair[0 if p==edge[0] else 1]=width;edges[edge]=pair[0] if abs(pair[0]-pair[1])<1e-8 else tuple(pair)
+                shift=(desired[0]-p[0])*-u[1]+(desired[1]-p[1])*u[0];corrections.append((p,q,shift))
         result=approach_alignment.ports(road,nodes,source_positions,edges)
+        for p,q,shift in corrections:
+            if abs(shift)>1e-7:result.setdefault(p,{})[q]=result.get(p,{}).get(q,0.)+shift
         frames={}
         for detail in pocket_details if pockets else []:
             for a,b,u in detail['frames']:

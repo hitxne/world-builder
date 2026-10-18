@@ -127,6 +127,18 @@ def expand(paths,ids_by_path,pockets,default,tilts=None,junctions=(),corner_radi
             vs.append((p[0]+delta[0],p[1]+delta[1],p[2]));rs.append((radii[i]*(1-t)+radii[i+1]*t)+(left+right)/default)
             source_tilts=tilts[path_index] if tilts else [0.]*len(coords);ts.append(source_tilts[i]*(1-t)+source_tilts[i+1]*t)
         result.append((vs,rs));angles.append(ts);details.append(dict(specs=specs,source_positions={tuple(p):vs[retained.index(s)] for p,s in zip(coords,ss)},frames=[(point_key(a),point_key(b),sample(coords,ss,(s+t)/2)[1]) for a,b,s,t in zip(vs,vs[1:],cuts,cuts[1:])]))
+    for detail,((coords,radii),ids) in zip(details,zip(paths,ids_by_path)):
+        ss=stations(coords);ports=[]
+        for i,p in enumerate(coords):
+            if not any(math.dist(p,q)<1e-5 for q in junctions):continue
+            center=detail['source_positions'].get(tuple(p),p)
+            for j in (i-1,i+1):
+                if not 0<=j<len(coords):continue
+                s=ss[i]+(1e-4 if j>i else -1e-4);_,u,_,_=sample(coords,ss,s)
+                left,right=offsets(s,detail['specs']);desired=(p[0]-u[1]*(left-right)/2,p[1]+u[0]*(left-right)/2)
+                outward=(u[0],u[1]) if j>i else (-u[0],-u[1])
+                ports.append((point_key(center),outward,radii[i]*default+left+right,desired))
+        detail['junction_ports']=ports
     return result,angles,details
 
 
@@ -151,6 +163,8 @@ def junction_shifts(paths,ids_by_path,pockets,junctions,default=8.,corner_radius
     return result
 
 
+def has_through(pocket):return 'THROUGH' in pocket.get('movement','').split('_')
+
 def travel(spec,traffic_side):
     """Return physical travel direction and whether widening uses the median.
 
@@ -160,10 +174,10 @@ def travel(spec,traffic_side):
     """
     sign=1 if traffic_side=='RIGHT' else -1
     pocket=spec['pocket']
-    if pocket.get('movement')=='THROUGH':return -spec['side']*sign,False
+    if has_through(pocket):return -spec['side']*sign,False
     flow=spec.get('junction_direction',0)*(1 if pocket.get('receiving') else -1) if pocket.get('junction') else -spec['side']*sign
     return flow,bool(pocket.get('junction') and spec['side']!=-flow*sign)
 
 def receiving(spec,traffic_side):
-    if spec['pocket'].get('movement')=='THROUGH':return travel(spec,traffic_side)[0]==spec.get('junction_direction',0)
+    if has_through(spec['pocket']):return travel(spec,traffic_side)[0]==spec.get('junction_direction',0)
     return bool(spec['pocket'].get('receiving'))

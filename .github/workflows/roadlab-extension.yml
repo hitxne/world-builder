@@ -32,6 +32,8 @@ jobs:
           for test in road-lab-updater/tests/*_blender.py; do
             /tmp/roadlab-blender52/blender -b --factory-startup -t 4 --python-exit-code 1 --python "$test"
           done
+      - name: Test pocket arrow centering and movement-specific receiving lanes
+        run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_pocket_arrow_center_blender.py
       - name: Test per-point lane width and edge gaps in Blender 5.1
         run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_point_lane_edges_blender.py
       - name: Test lane direction and junction alignment

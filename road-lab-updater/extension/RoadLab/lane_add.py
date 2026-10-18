@@ -219,7 +219,7 @@ class ROADLAB_OT_add_lane(bpy.types.Operator):
     choices_json:StringProperty(default='[]',options={'HIDDEN'})
     approach:EnumProperty(name='Street / approach',items=approach_items)
     side:EnumProperty(name='Road edge',items=[('RIGHT','Right edge','Right of the source street direction'),('LEFT','Left edge','Left of the source street direction')],default='RIGHT')
-    movement:EnumProperty(name='Lane purpose',items=[('TURN','Turn lane','A dedicated turn lane using available receiving capacity'),('THROUGH','Through lane','Add a receiving lane across the junction, merging after the junction')],default='TURN')
+    movement:EnumProperty(name='Lane purpose',items=[('TURN','Turn lane','A dedicated turn lane using available receiving capacity'),('THROUGH','Through lane','Add a receiving lane across the junction, merging after the junction'),('RIGHT_THROUGH','Through + right','Continue into a receiving lane and allow a right turn')],default='TURN')
     width:FloatProperty(name='Lane width (m)',default=3.5,min=2.,max=5.)
     length:FloatProperty(name='Pocket length (m)',default=12.,min=3.,max=100.)
     taper:FloatProperty(name='Taper length (m)',default=15.,min=3.,max=500.)
@@ -254,7 +254,7 @@ class ROADLAB_OT_add_lane(bpy.types.Operator):
         try:
             proposal_rows,pocket,self._extension=proposal(self._road,self._choices[int(self.approach)],1 if self.side=='LEFT' else -1,self.width,self.length,self.taper)
             proposal_rows,pocket=with_receiving_lane(self._road,proposal_rows,pocket,self.movement,self.merge_taper,context.scene.roadlab_map_settings.traffic_side)
-            if self._extension and pocket.get('movement')=='THROUGH':self.movement='THROUGH'
+            if self._extension and lane_pockets.has_through(pocket):self.movement=pocket['movement']
             if self._extension:self.width=pocket['width'];self.length=pocket['length'];self.taper=pocket['taper']
             validate_turn(self._road,pocket,context.scene.roadlab_map_settings.traffic_side)
             _ACTIVE['batches']=None
@@ -272,11 +272,11 @@ class ROADLAB_OT_add_lane(bpy.types.Operator):
         l.label(text='Blue = proposed road, curb and sidewalk')
         l.label(text='Extend existing lane' if self._extension else 'Local widening with entry and exit tapers')
         turn=pocket_turn(self._road,self._primary,context.scene.roadlab_map_settings.traffic_side) if not self._error and getattr(self,'_candidate',None) else None
-        if turn:l.label(text='Through lane + receiving merge' if turn[0]=='THROUGH' else turn[0].title()+' turn pocket')
+        if turn:l.label(text='Through lane + receiving merge' if 'THROUGH' in turn[0] else turn[0].title()+' turn pocket')
         l.prop(self,'side');l.operator('roadlab.pending_lane_flip',icon='ARROW_LEFTRIGHT')
         settings=l.column();settings.enabled=not self._extension
         for key in ('width','length','taper'):settings.prop(self,key)
-        if self.movement=='THROUGH' and self._choices[int(self.approach)].get('junction'):
+        if 'THROUGH' in self.movement and self._choices[int(self.approach)].get('junction'):
             l.prop(self,'merge_taper');l.label(text='Receiving lane merges after the junction')
         l.label(text='Original road points stay editable',icon='CURVE_PATH')
         if self._error:l.label(text=self._error,icon='ERROR')
@@ -325,7 +325,7 @@ def pocket_turn(obj,pocket,traffic_side):
     coords,ids,specs=data;spec=resolved_spec(obj,coords,ids,pocket);flow=-spec['junction_direction'];curb=-flow*(1 if traffic_side=='RIGHT' else -1)
     median=spec['side']!=curb
     movement=('LEFT' if traffic_side=='RIGHT' else 'RIGHT') if median else ('RIGHT' if traffic_side=='RIGHT' else 'LEFT')
-    if pocket.get('movement')=='THROUGH':movement='THROUGH'
+    if lane_pockets.has_through(pocket):movement=pocket['movement']
     at=ids.index(pocket['anchors'][0] if len(pocket['anchors'])==1 else next(a for a in pocket['anchors'] if a==pocket.get('junction_anchor',pocket['anchors'][0])))
     # Locate the selected junction rather than assuming a curve endpoint.
     from .road_core import graph,values,key
@@ -348,19 +348,20 @@ def validate_turn(obj,pocket,traffic_side):
     from . import lane_logic
     from .road_core import key
     movement,a,b,nodes,_,_=info
-    if movement not in lane_logic.available_movements(key(a),key(b),nodes[key(b)]):raise ValueError(f'There is no {movement.lower()}-turn destination on this approach. Change side or choose another approach.')
+    if not set(movement.split('_')).issubset(lane_logic.available_movements(key(a),key(b),nodes[key(b)])):raise ValueError(f'There is no {movement.lower()}-turn destination on this approach. Change side or choose another approach.')
+    if movement=='THROUGH':return
+    if movement=='RIGHT_THROUGH':movement='RIGHT'
     from . import lane_editor
     turn_count=1
     for config in lane_editor.state(obj):
         if frozenset(config['endpoints'])!=frozenset(info[4:]):continue
         direction='incoming' if config['endpoints']==list(info[4:]) else 'outgoing'
-        turn_count+=sum(row['movement']==movement for row in config[direction])
+        turn_count+=sum(row['movement']==movement or pocket.get('movement')=='RIGHT_THROUGH' and movement in row['movement'].split('_') for row in config[direction])
     for other in json.loads(obj.get('roadlab_lane_pockets','[]')):
         if other['id']==pocket['id']:continue
         other_turn=pocket_turn(obj,other,traffic_side)
-        if other_turn and other_turn[0]==movement and other_turn[4:]==info[4:]:turn_count+=1
-    if pocket.get('movement')=='THROUGH':return
-    capacity=receiving_capacity(obj,info)
+        if other_turn and movement in other_turn[0].split('_') and other_turn[4:]==info[4:]:turn_count+=1
+    capacity=receiving_capacity(obj,(movement,*info[1:]))
     if turn_count>capacity:raise ValueError(f'This turn needs {turn_count} receiving lanes; the destination has {capacity}. Configure the destination first.')
 
 def ensure_baseline(obj,pocket,traffic_side):
@@ -455,8 +456,8 @@ def with_receiving_lane(obj,candidate,pocket,movement,merge_taper,traffic_side):
     if not pocket.get('junction'):return candidate,pocket
     # Extending a saved lane retains its purpose and its paired receiving arm.
     movement=pocket.get('movement',movement)
-    if movement!='THROUGH':return candidate,pocket
-    pocket=dict(pocket,movement='THROUGH')
+    if 'THROUGH' not in movement.split('_'):return candidate,pocket
+    pocket=dict(pocket,movement=movement)
     info=pocket_turn(obj,pocket,traffic_side)
     if not info:raise ValueError('Select a junction approach for a through lane')
     _,start,junction,nodes,_,_=info
@@ -477,6 +478,7 @@ def with_receiving_lane(obj,candidate,pocket,movement,merge_taper,traffic_side):
         return [pocket if p['id']==pocket['id'] else p for p in candidate],pocket
     source_coords,source_ids=source_for_pocket(obj,pocket);primary_spec=resolved_spec(obj,source_coords,source_ids,pocket)
     primary_receiving=lane_pockets.receiving(primary_spec,traffic_side)
+    if movement=='RIGHT_THROUGH' and primary_receiving:raise ValueError('Choose the arriving side of this approach for a through + right lane')
     entry_taper=pocket.get('entry_taper',pocket['taper']);pocket.update(primary=True,paired=False,receiving=primary_receiving,entry_taper=entry_taper,merge_taper=merge_taper,taper=merge_taper if primary_receiving else entry_taper)
     offset=0;rows=ps.records(obj);receiver=None
     for spline in obj.data.splines:

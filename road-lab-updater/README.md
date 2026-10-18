@@ -1,6 +1,6 @@
 # RoadLab Blender extension and update repository
 
-The full RoadLab 0.18.26 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
+The full RoadLab 0.18.27 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
 
 ## Install once
 
@@ -354,3 +354,13 @@ Regression coverage includes endpoint/interior selection, isolated width preview
 ## Curved edge-line continuity (0.18.26)
 
 Rounded-corner connectors now use the actual adjoining line endpoints at each pavement gate rather than each street marking’s midpoint. Independent per-point gap changes therefore remain joined through curves. A regression checks both sides of a 90-degree bend with different left/right gaps against the adjoining line endpoints.
+
+## Turn-arrow centering (0.18.27)
+
+Added-lane arrows now center the full painted symbol between the lane boundaries. Narrow lanes scale the full symbol to preserve a paint margin on both sides. The correction applies to left/right turns and both map traffic sides.
+
+Turn-only pockets no longer leak widening into the opposite street through the shared junction width. Each junction arm gets its own cross-section and curb alignment. **Add lane → Lane purpose → Through + right** creates a receiving lane and downstream merge, just like Through; dedicated Turn lanes do not. Combined arrows reflect both permitted movements.
+
+Curved pocket dividers keep the pre-widening lane boundary through intermediate road handles and join the neighboring divider endpoints. Bend connectors no longer apply lane widening twice. Regression coverage includes a gentle bend inside a long turn-lane taper.
+
+The bent-road regression also compares the westbound curb, outer white line and yellow divider before and after adding an eastbound lane. All remain in their original alignment. Near-identical local union seam vertices are welded within 0.1 mm so the connected road retains a single perimeter instead of generating internal curb/sidewalk caps.
