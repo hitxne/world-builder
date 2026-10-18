@@ -5,6 +5,7 @@ on:
     paths:
       - 'road-lab-updater/extension/**'
       - 'road-lab-updater/tools/**'
+      - 'road-lab-updater/tests/**'
       - '.github/workflows/roadlab-extension.yml'
   workflow_dispatch:
 permissions:
@@ -84,7 +85,7 @@ jobs:
         run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_pbr_materials_blender.py
       - name: Test lane pocket taper logic
         run: python road-lab-updater/tests/test_lane_pockets.py
-      - name: Test sidewalk panel topology
+      - name: Test sidewalk blocks and lowered crossing landings
         run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_sidewalk_panels_blender.py
       - name: Test lane pocket geometry and markings
         run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_lane_pockets_blender.py

@@ -23,7 +23,12 @@ for v in bm.verts:
  components.append((len(vs),lo,hi))
 print('COMPONENTS',len(components),'straight',[(n,tuple(round(b-a,4) for a,b in zip(lo,hi))) for n,lo,hi in components if lo[0]>4.32 and hi[0]<7.6 and hi[1]<-15][:15],flush=True)
 assert len(components)>200
-assert all(abs(hi[2]-.1724)<1e-5 for n,lo,hi in components),'Flat example panels must share the same top elevation'
+# Crosswalk landings intentionally lower whole inner blocks. Ordinary
+# blocks away from the crossing must retain the stock top and thickness.
+flat=[(n,lo,hi) for n,lo,hi in components if lo[0]>18 or hi[0]<-18 or lo[1]>18 or hi[1]<-18]
+assert len(flat)>100 and all(abs(hi[2]-.1724)<1e-5 for n,lo,hi in flat),'Flat panels away from crossings changed elevation'
+assert all(.0199<=hi[2]<=.1725 for n,lo,hi in components),'Crossing panels rose above the sidewalk or below the street'
+assert any(hi[2]<.16 for n,lo,hi in components),'No complete sidewalk block followed the lowered crossing landing'
 # End-cap miters extend beyond their source interval; measure ordinary straight
 # blocks away from both the junction and the road-end construction joint.
 rectangles=[(n,lo,hi) for n,lo,hi in components if n==8 and lo[0]>4.32 and hi[0]<7.6 and lo[1]>-50 and hi[1]<-15]
