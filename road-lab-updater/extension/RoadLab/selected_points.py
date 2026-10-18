@@ -144,8 +144,10 @@ class ROADLAB_OT_point_corner(PointOperator,bpy.types.Operator):
         obj=road(context);selected=set(junctions(context));items=data.sync(obj)
         available={tuple(x['junction']) for x in json.loads(obj.get('roadlab_core_report','{}')).get('radius_limits',[]) if x.get('corner')==self.corner}
         selected &= available
+        effective=data.junction_overrides(obj)
         for item in items:
             if tuple(item['co']) in selected:
+                if 'bend_radius' in item:item.setdefault('corners',{}).update(effective.get(tuple(item['co']),{}))
                 item.pop('bend_radius',None);item.setdefault('corners',{})[self.corner]=self.value
         data.save(obj,items);notify(context,obj);return {'FINISHED'}
 

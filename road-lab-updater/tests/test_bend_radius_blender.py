@@ -33,7 +33,9 @@ bpy.ops.object.mode_set(mode='OBJECT');road.data.splines[0].points[2].co.y=-80;r
 corners=json.loads(road['roadlab_core_report'])['radius_limits']
 assert all(abs(c['requested']-(6 if c['kind']=='interior' else 14))<1e-4 for c in corners)
 # Existing independent corner controls remain available and unlink the bend.
-bpy.ops.object.mode_set(mode='EDIT');corner=corners[0]['corner'];bpy.ops.roadlab.point_corner(corner=corner,value=7.)
+bpy.ops.object.mode_set(mode='EDIT');corner=corners[0]['corner'];effective=ps.junction_overrides(road)[tuple(ps.records(road)[1]['co'])];bpy.ops.roadlab.point_corner(corner=corner,value=7.)
+after=ps.junction_overrides(road)[tuple(ps.records(road)[1]['co'])]
+assert all(abs(after[c]-v)<1e-5 for c,v in effective.items() if c!=corner),'Unlinking reset the other road edge'
 assert 'bend_radius' not in ps.records(road)[1]
 bpy.ops.roadlab.point_reset(field='CORNERS');assert 'corners' not in ps.records(road)[1]
 bpy.ops.object.mode_set(mode='OBJECT')
