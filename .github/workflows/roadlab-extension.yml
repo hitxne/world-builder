@@ -48,7 +48,7 @@ jobs:
         run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_sidewalk_upgrade_blender.py
       - name: Test sidewalk corner winding and overlap
         run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_sidewalk_corners_blender.py
-      - name: Test isolated sidewalk width drafts and acceptance
+      - name: Test selected-point sidewalk width and offset
         run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_sidewalk_width_blender.py
       - name: Test width brushes and road extension preview
         run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_sculpt_tools_blender.py

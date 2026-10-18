@@ -1,6 +1,6 @@
 # RoadLab Blender extension and update repository
 
-The full RoadLab 0.18.29 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
+The full RoadLab 0.18.30 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
 
 ## Install once
 
@@ -372,3 +372,9 @@ Derived lane-taper samples leave space for the existing bend radius. Adding a la
 ## Continuous sidewalk sculpting (0.18.29)
 
 Road height brushes include the one-cell sampling halo required at pavement edges, so raising beside a curb no longer leaves the boundary pinned down. Live previews bind original mesh vertices directly and agree with the saved result. Sidewalk slab identities and joint spacing use planar distance, keeping their footprint stable while the road, curb and sidewalk rise together. Cyclic border simplification preserves the original height-sampling station, preventing shifted sidewalk hills. Render cleanup uses a vertical road cutter. Completed strokes request local terrain detail only where grading changed. The saved extrusion graph upgrades in place without losing layer settings. Raise, lower, flatten, smooth, cancel and commit are checked at integer and fractional road widths on both sides. Existing sculpted fields remain intact. Corrected sidewalk sampling also applies when existing roads regenerate; brush sampling improvements apply to new strokes.
+
+## Sidewalk profiles at selected points (0.18.30)
+
+Select the road, enter Edit Mode, and select one or more control points. Open RoadLab > Edge layers > Sidewalks, expand the sidewalk layer, and choose **Adjust width and offset…**. Width and Road edge offset preview together in blue; Apply sidewalk saves only to the selected points. Road edge offset measures from the asphalt perimeter to the sidewalk’s inner edge, including any preceding curb/grass layers. Following layers move outward with the sidewalk. Cancel restores the saved geometry.
+
+The sidebar summaries read actual selected-point values and identify mixed selections. Changing only width preserves independent offsets; changing only offset preserves independent widths. An empty Edit-mode selection cannot silently apply to the whole road. In Object Mode, the window clearly applies to all road points. Saved point data and the existing width-operator identifier remain compatible.

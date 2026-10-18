@@ -286,9 +286,16 @@ class WB_PT_layer_controls(bpy.types.Panel):
                         break
             col.prop(layer,'vertex_enabled')
             if layer.kind=='sidewalk':
-                row=col.row(align=True);row.label(text=f'Width: {layer.width:.2f} m');row.operator('roadlab.sidewalk_width',text='Adjust…').uid=layer.uid
+                from .selected_points import summarize
+                scope=indices if road_edit else list(range(len(model.data.vertices)))
+                widths=read(model,prefix(layer)+'width');gaps=read(model,prefix(layer)+'offset');stack=read(model,prefix(layer)+'stack')
+                scope=[i for i in scope if i<min(len(widths),len(gaps),len(stack))]
+                col.label(text='Width: '+summarize([widths[i] for i in scope]))
+                col.label(text='Road edge offset: '+summarize([stack[i]+gaps[i] for i in scope]))
+                col.operator('roadlab.sidewalk_width',text='Adjust width and offset…').uid=layer.uid
             else:col.prop(layer,'width')
-            col.prop(layer,'offset');col.prop(layer,'zpos',text='Inner height offset (m)' if layer.kind=='grass' else 'Height offset (m)')
+            if layer.kind!='sidewalk':col.prop(layer,'offset')
+            col.prop(layer,'zpos',text='Inner height offset (m)' if layer.kind=='grass' else 'Height offset (m)')
 
 class WB_PT_curbs(WB_PT_layer_controls):bl_idname='WB_PT_curbs';bl_label='Curbs';bl_order=0;kind='curb'
 class WB_PT_grass(WB_PT_layer_controls):bl_idname='WB_PT_grass';bl_label='Grass strips';bl_order=1;kind='grass'
