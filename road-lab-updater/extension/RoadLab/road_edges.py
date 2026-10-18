@@ -64,8 +64,11 @@ def fit(obj,config,plans):
             # Measure perpendicular to the boundary, including a widening taper.
             slopes=[(w-v)/(y-x) for x,y,v,w in bins.get(math.floor(s/cell),[]) if min(x,y)-1e-5<=s<=max(x,y)+1e-5 and abs(v+(w-v)*(s-x)/(y-x)-edge)<1e-5]
             slope=min(slopes,key=abs) if slopes else 0.
-            lateral=edge+(-1 if positive else 1)*gap*math.sqrt(1+slope*slope)
-            result.append(list(point+n*(lateral-old)));last_gap=gap
+            # Offset along the boundary normal. Converting a normal gap to
+            # a transverse gap explodes near a perpendicular junction edge
+            # and can send a white line diagonally across the carriageway.
+            inward=(-1 if positive else 1)*(n-u*slope)/math.sqrt(1+slope*slope)
+            result.append(list(point+n*(edge-old)+inward*gap));last_gap=gap
         mark['path']=result;mark['center']=result[len(result)//2];mark['size'][1]=sum(math.dist(p,q) for p,q in zip(result,result[1:]));mark['edge_inset']=last_gap;mark['pavement_anchored']=True
         output.append(mark)
     return output

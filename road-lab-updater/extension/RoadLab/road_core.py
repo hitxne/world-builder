@@ -6,7 +6,7 @@ import bpy
 from mathutils import Vector
 from .native_extension import socket,set_input
 EPS=1e-6
-SCHEMA=13
+SCHEMA=14
 _busy=False
 _defer_markings=False
 _deferred_markings=set()

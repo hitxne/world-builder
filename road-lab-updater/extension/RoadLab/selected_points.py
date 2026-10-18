@@ -20,6 +20,49 @@ def junctions(context):
     available={tuple(item['junction']) for item in json.loads(obj.get('roadlab_core_report','{}')).get('radius_limits',[]) if 'junction' in item}
     return sorted({tuple(round(v,6) for v in data.points(obj)[i].co[:3]) for i in indices(context)} & available)
 
+def bend_points(context):
+    obj=road(context)
+    if not obj:return []
+    selected={tuple(round(v,6) for v in data.points(obj)[i].co[:3]) for i in indices(context)};neighbors={co:set() for co in selected}
+    for spline in obj.data.splines:
+        coords=[tuple(round(v,6) for v in p.co[:3]) for p in spline.points]
+        for i in range(len(coords) if spline.use_cyclic_u else len(coords)-1):
+            a,b=coords[i],coords[(i+1)%len(coords)]
+            if a in neighbors:neighbors[a].add(b)
+            if b in neighbors:neighbors[b].add(a)
+    junction_nodes={tuple(p) for p in json.loads(obj.get('roadlab_core_report','{}')).get('junction_nodes',[])}
+    result=[]
+    for co,arms in neighbors.items():
+        if len(arms)!=2 or co in junction_nodes:continue
+        a,b=[Vector((p[0]-co[0],p[1]-co[1])).normalized() for p in arms]
+        if abs(a.x*b.y-a.y*b.x)>1e-5:result.append(co)
+    return sorted(result)
+
+
+def bend_radius_get(self):
+    context=bpy.context;obj=road(context);selected=bend_points(context)
+    if not obj or not selected:return 8.
+    from .road_core import values
+    defaults=values(obj);overrides=data.junction_overrides(obj);items=data.records(obj)
+    limits=json.loads(obj.get('roadlab_core_report','{}')).get('radius_limits',[]);radii=[]
+    for co in selected:
+        i=next(i for i,item in enumerate(items) if tuple(item['co'])==co)
+        inner=next((row['corner'] for row in limits if tuple(row.get('junction',()))==co and row.get('kind','interior')=='interior'),'NW')
+        half=data.width(obj,i,defaults['road width'])/2
+        radii.append(max(half+.02,items[i].get('bend_radius',overrides.get(co,{}).get(inner,defaults['corner '+inner])+half)))
+    return sum(radii)/len(radii)
+
+
+def bend_radius_set(self,value):
+    context=bpy.context;obj=road(context);selected=set(bend_points(context))
+    if not obj or not selected:return
+    from .road_core import values
+    default=values(obj)['road width'];items=data.sync(obj)
+    for i,item in enumerate(items):
+        if tuple(item['co']) in selected:item['bend_radius']=max(value,data.width(obj,i,default)/2+.02)
+    data.save(obj,items);notify(context,obj)
+
+
 def notify(context,obj):
     from . import road_core
     obj.data.update_tag();obj.update_tag()
@@ -102,7 +145,8 @@ class ROADLAB_OT_point_corner(PointOperator,bpy.types.Operator):
         available={tuple(x['junction']) for x in json.loads(obj.get('roadlab_core_report','{}')).get('radius_limits',[]) if x.get('corner')==self.corner}
         selected &= available
         for item in items:
-            if tuple(item['co']) in selected:item.setdefault('corners',{})[self.corner]=self.value
+            if tuple(item['co']) in selected:
+                item.pop('bend_radius',None);item.setdefault('corners',{})[self.corner]=self.value
         data.save(obj,items);notify(context,obj);return {'FINISHED'}
 
 
@@ -139,7 +183,7 @@ class ROADLAB_OT_point_reset(PointOperator,bpy.types.Operator):
         else:
             selected=set(junctions(context))
             for item in items:
-                if tuple(item['co']) in selected:item.pop('corners',None);item.pop('corner_lifts',None)
+                if tuple(item['co']) in selected:item.pop('corners',None);item.pop('corner_lifts',None);item.pop('bend_radius',None)
         data.save(obj,items);notify(context,obj);return {'FINISHED'}
 
 
@@ -177,6 +221,11 @@ class ROADLAB_PT_point_geometry(SelectedPanel,bpy.types.Panel):
         obj=road(context);ps=data.points(obj);selected=indices(context);default=values(obj)['road width']
         row=self.layout.row(align=True);row.operator('roadlab.point_width',text='Width: '+summarize(data.widths(obj,selected,default)))
         row.operator('roadlab.point_reset',text='',icon='LOOP_BACK').field='WIDTH'
+        if bend_points(context):
+            self.layout.prop(context.scene,'roadlab_bend_radius',text='Bend radius (m)',slider=True)
+            self.layout.label(text='Centerline radius · keeps road width')
+            bends=set(bend_points(context));limits=json.loads(obj.get('roadlab_core_report','{}')).get('radius_limits',[])
+            if any(tuple(c.get('junction',())) in bends and c['applied']<c['requested']-1e-4 for c in limits):self.layout.label(text='Limited by adjacent points',icon='INFO')
         self.layout.label(text='Move points with G, then Z for elevation')
         self.layout.label(text='Reset arrow restores the network width')
 
@@ -220,8 +269,10 @@ class ROADLAB_PT_point_corners(SelectedPanel,bpy.types.Panel):
 
 classes=(ROADLAB_OT_point_width,ROADLAB_OT_point_height,ROADLAB_OT_point_corner,ROADLAB_OT_corner_lift,ROADLAB_OT_point_reset,ROADLAB_OT_choose_corner,ROADLAB_PT_selected,ROADLAB_PT_point_geometry,ROADLAB_PT_point_corners)
 def register():
+    bpy.types.Scene.roadlab_bend_radius=FloatProperty(name='Bend radius',description='Round selected road bends with a centerline radius; road width is preserved and available length limits the result',min=.02,soft_max=50.,get=bend_radius_get,set=bend_radius_set)
     bpy.types.Scene.roadlab_active_corner=StringProperty(default='NW')
     for cls in classes:bpy.utils.register_class(cls)
 def unregister():
+    del bpy.types.Scene.roadlab_bend_radius
     del bpy.types.Scene.roadlab_active_corner
     for cls in reversed(classes):bpy.utils.unregister_class(cls)

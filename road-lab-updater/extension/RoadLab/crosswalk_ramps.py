@@ -53,9 +53,15 @@ def rebuild(road,scene,plans):
         if identity in seen:continue
         seen.add(identity);a,b=map(Vector,mark['crosswalk_ends']);tangent=(b-a).normalized();normal=Vector((tangent.y,-tangent.x,0))
         half=mark['size'][1]/2;run=mark.get('ramp_run',1.8);start=len(verts)
-        for center,weight in ((a-tangent*run,0),(a,1),(b,1),(b+tangent*run,0)):
+        landing=1.05;sections=[]
+        for i in range(9):
+            t=i/8;weight=t*t*t*(t*(t*6-15)+10);sections.append((a-tangent*(landing+run*(1-t)),weight))
+        sections.append((b+tangent*landing,1.))
+        for i in range(1,9):
+            t=i/8;weight=1-t*t*t*(t*(t*6-15)+10);sections.append((b+tangent*(landing+run*t),weight))
+        for center,weight in sections:
             for sign in (-1,1):verts.append(road_height(center+normal*(sign*half)));weights.append(weight)
-        faces.extend((start+2*i,start+2*i+1,start+2*i+3,start+2*i+2) for i in range(3))
+        faces.extend((start+2*i,start+2*i+1,start+2*i+3,start+2*i+2) for i in range(len(sections)-1))
     guide=road.get('roadlab_crosswalk_guide')
     if guide is None and not faces:return
     signature=hashlib.sha256(json.dumps([verts,faces,weights,[list(row) for row in road.matrix_world]]).encode()).hexdigest()
@@ -84,7 +90,8 @@ def surface_tree(road):
     for layer in layers(road):
         evaluated=layer.object.evaluated_get(depsgraph);mesh=evaluated.to_mesh()
         try:
-            offset=len(verts);matrix=inverse@evaluated.matrix_world
-            verts.extend(matrix@v.co for v in mesh.vertices);faces.extend(tuple(offset+i for i in p.vertices) for p in mesh.polygons)
+            mesh.calc_loop_triangles()
+            offset=len(verts);matrix=inverse@evaluated.matrix_world;normal=matrix.to_3x3().inverted().transposed()
+            verts.extend(matrix@v.co for v in mesh.vertices);faces.extend(tuple(offset+i for i in t.vertices) for t in mesh.loop_triangles if (normal@mesh.polygons[t.polygon_index].normal).z>.05)
         finally:evaluated.to_mesh_clear()
     return BVHTree.FromPolygons(verts,faces) if faces else None

@@ -225,7 +225,7 @@ def _rebuild(obj,scene,force=False):
     configs=state(obj);output=obj.get('roadlab_core_mesh')
     if output is None:return
     side=scene.roadlab_map_settings.traffic_side
-    signature=hashlib.sha256(json.dumps(['point-edge-lines-v6',[(r['id'],r.get('edge_left',.5),r.get('edge_right',.5)) for r in point_settings.records(obj)],getattr(scene.wb_native.terrain,'get',lambda *args:None)('roadlab_core_terrain_signature'),[(row.get('co'),row.get('connection_mode')) for row in point_settings.records(obj) if row.get('connection_mode')],obj.get('roadlab_hidden_lane_markings','[]'),configs,obj.get('roadlab_core_signature'),output.data.as_pointer(),side],sort_keys=True).encode()).hexdigest()
+    signature=hashlib.sha256(json.dumps(['crossing-surface-v7',[(r['id'],r.get('edge_left',.5),r.get('edge_right',.5)) for r in point_settings.records(obj)],getattr(scene.wb_native.terrain,'get',lambda *args:None)('roadlab_core_terrain_signature'),[(row.get('co'),row.get('connection_mode')) for row in point_settings.records(obj) if row.get('connection_mode')],obj.get('roadlab_hidden_lane_markings','[]'),configs,obj.get('roadlab_core_signature'),output.data.as_pointer(),side],sort_keys=True).encode()).hexdigest()
     existing=obj.get('roadlab_marking_object')
     owned=existing is not None and (existing.get('roadlab_markings_owner_object')==obj or existing.get('roadlab_markings_owner')==obj.name)
     if not force and owned and obj.get('roadlab_marking_signature')==signature:
@@ -291,6 +291,8 @@ def _rebuild(obj,scene,force=False):
                 segment_plans=approach_alignment.warp(obj,config,segment_plans,side)
                 from . import road_edges
                 segment_plans=road_edges.fit(obj,config,segment_plans)
+                from . import crosswalk_layout
+                segment_plans=crosswalk_layout.fit(obj,segment_plans)
                 for co,other in ((start,finish),(finish,start)):
                     if key(co) not in bends or key(co) in stop_nodes:continue
                     neighbor=max(nodes[key(co)],key=lambda n:(Vector(n)-Vector(co)).normalized().dot((Vector(other)-Vector(co)).normalized()))
@@ -312,11 +314,11 @@ def _rebuild(obj,scene,force=False):
     connectors,notes=lane_bends.connect(bends,bend_arms,hidden)
     from . import lane_pocket_markings
     connectors=lane_pocket_markings.adapt_connectors(obj,connectors,side,plans);plans.extend(connectors);warnings.extend(notes)
-    obj['roadlab_generated_marking_catalog']=json.dumps(plans)
     from . import crosswalk_ramps
     crosswalk_ramps.rebuild(obj,scene,crossing_definitions)
     mesh=output.data;vs=[v.co.copy() for v in mesh.vertices];polys=[tuple(p.vertices) for p in mesh.polygons]
-    bvh=BVHTree.FromPolygons(vs,polys);top=max((v.z for v in vs),default=0)+100;bottom=min((v.z for v in vs),default=0)-100
+    mesh.calc_loop_triangles();road_triangles=[tuple(vs[i] for i in t.vertices) for t in mesh.loop_triangles if mesh.polygons[t.polygon_index].normal.z>.05]
+    bvh=BVHTree.FromPolygons(vs,[tuple(t.vertices) for t in mesh.loop_triangles],all_triangles=True);top=max((v.z for v in vs),default=0)+100;bottom=min((v.z for v in vs),default=0)-100
     terrain=scene.wb_native.terrain;terrain_tree=None
     if terrain is not None and any(m.get('on_terrain') for m in plans):
         helper=terrain.get('roadlab_core_terrain_mesh')
@@ -325,35 +327,37 @@ def _rebuild(obj,scene,force=False):
             terrain_vertices=[matrix@v.co for v in mesh.vertices]
             terrain_tree=BVHTree.FromPolygons(terrain_vertices,[tuple(p.vertices) for p in mesh.polygons])
             top=max(top,max(v.z for v in terrain_vertices)+100);bottom=min(bottom,min(v.z for v in terrain_vertices)-100)
+    from . import crosswalk_layout
+    pad_triangles,pad_footprint=crosswalk_layout.concrete(obj) if any(m['asset']=='tactile_pad' for m in plans) else ([],None)
+    crosswalk_layout.place_pads(plans,pad_footprint,pad_triangles)
+    obj['roadlab_generated_marking_catalog']=json.dumps(plans)
     pad_tree=crosswalk_ramps.surface_tree(obj) if any(m.get('on_terrain') for m in plans) else None
     def surface(x,y,expected,on_terrain=False):
-        if on_terrain and pad_tree is not None:
-            hit,normal,face,distance=pad_tree.ray_cast(Vector((x,y,top)),Vector((0,0,-1)),top-bottom)
-            if hit is not None:
-                if normal.z<0:normal=-normal
-                return (hit.x,hit.y,hit.z+.003)
         # At overpasses choose the nearest road elevation, not the topmost deck.
         hits=[];origin=top
         for _ in range(32):
-            hit,normal,face,distance=(terrain_tree if on_terrain and terrain_tree is not None else bvh).ray_cast(Vector((x,y,origin)),Vector((0,0,-1)),origin-bottom)
+            hit,normal,face,distance=(pad_tree if on_terrain and pad_tree is not None else terrain_tree if on_terrain and terrain_tree is not None else bvh).ray_cast(Vector((x,y,origin)),Vector((0,0,-1)),origin-bottom)
             if hit is None:break
             hits.append((abs(hit.z-expected),hit,normal));origin=hit.z-.001
         if not hits:return None
         _,hit,normal=min(hits,key=lambda h:h[0])
         if normal.z<0:normal=-normal
-        return tuple(hit+normal*.003)
+        return (hit.x,hit.y,hit.z+.003) if on_terrain else tuple(hit+normal*.003)
     verts=[];faces=[];uvs=[];materials=[];slots=[]
     for marking in plans:
         if marking['asset'] not in slots:slots.append(marking['asset'])
-        index=slots.index(marking['asset']);pv,pf,pu=lane_markings.patch_grid(marking);projected=[]
-        for x,y,z in pv:
-            projected.append(surface(x,y,z,marking.get('on_terrain',False)))
+        index=slots.index(marking['asset']);concrete_pad=marking['asset']=='tactile_pad' and bool(pad_triangles)
+        exact_patch=concrete_pad or marking['role'][0]=='crosswalk'
+        if exact_patch:
+            pv,pf,pu=crosswalk_layout.decal(marking,pad_triangles if concrete_pad else road_triangles,surface);projected=pv
+        else:
+            pv,pf,pu=lane_markings.patch_grid(marking);projected=[surface(x,y,z,marking.get('on_terrain',False)) for x,y,z in pv]
         for face in pf:
             if any(projected[i] is None for i in face):continue
-            center=Vector(tuple(sum(pv[i][j] for i in face)/4 for j in range(3)))
+            center=Vector(tuple(sum(pv[i][j] for i in face)/len(face) for j in range(3)))
             tree=terrain_tree if marking.get('on_terrain') and terrain_tree is not None else bvh
-            if tree.ray_cast(Vector((center.x,center.y,top)),Vector((0,0,-1)),top-bottom)[0] is None:continue
-            base=len(verts);verts.extend(projected[i] for i in face);uvs.extend(pu[i] for i in face);faces.append(tuple(range(base,base+4)));materials.append(index)
+            if not exact_patch and tree.ray_cast(Vector((center.x,center.y,top)),Vector((0,0,-1)),top-bottom)[0] is None:continue
+            base=len(verts);verts.extend(projected[i] for i in face);uvs.extend(pu[i] for i in face);faces.append(tuple(range(base,base+len(face))));materials.append(index)
     data=bpy.data.meshes.new('RoadLab Lane Markings');data.from_pydata(verts,[],faces);data.update();uv=data.uv_layers.new(name='UVMap')
     uv.data.foreach_set('uv',[c for loop in data.loops for c in uvs[loop.vertex_index]])
     for asset in slots:data.materials.append(paint_material(asset))

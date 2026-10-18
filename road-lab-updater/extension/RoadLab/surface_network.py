@@ -82,7 +82,7 @@ def junction(center,neighbors,edges,spacing,radii,budgets,offsets=None,minimum_g
         if exterior and len(arms)==2:
             other_label=('N' if -bisector.y>=0 else 'S')+('E' if -bisector.x>=0 else 'W')
             # Exterior rounding must not consume the opposite pavement edge.
-            maximum=min(maximum,min(a['w'],b['w'])+radii[other_label]-.02)
+            maximum=min(maximum,min(a['w'],b['w'])+radii[other_label])
         if maximum<requested and not exterior:raise NeedsFootprintMerge('Corner cannot fit between the existing patch gates')
         if maximum<.02:raise NeedsFootprintMerge('Exterior corner cannot fit safely between patch gates')
         applied=min(requested,maximum);cc=origin+(unit_center-origin)*(direction*applied);pa=cc-a['n']*(direction*applied);pb=cc+b['n']*(direction*applied)

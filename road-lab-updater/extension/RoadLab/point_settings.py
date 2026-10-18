@@ -59,8 +59,35 @@ def selected(context,road):
 
 def junction_overrides(road):
     result={}
-    for item in records(road):
+    items=records(road)
+    for item in items:
         if item.get('corners'):result.setdefault(tuple(item['co']),{}).update(item['corners'])
+    if not any('bend_radius' in item for item in items):return result
+    import math
+    from .road_core import values
+    from mathutils import Vector
+    lookup={item['id']:item for item in items};neighbors=defaultdict(set)
+    for ids,cyclic in json.loads(road.get('roadlab_point_topology','[]')):
+        for i in range(len(ids) if cyclic else len(ids)-1):
+            a,b=ids[i],ids[(i+1)%len(ids)]
+            if a in lookup and b in lookup:
+                neighbors[tuple(lookup[a]['co'])].add(tuple(lookup[b]['co']))
+                neighbors[tuple(lookup[b]['co'])].add(tuple(lookup[a]['co']))
+    default=values(road)['road width'];curve_points=points(road)
+    for index,item in enumerate(items):
+        if 'bend_radius' not in item:continue
+        co=tuple(item['co']);arms=neighbors[co]
+        if len(arms)!=2:continue
+        arms=sorted((Vector((p[0]-co[0],p[1]-co[1])).normalized() for p in arms),key=lambda v:math.atan2(v.y,v.x))
+        half=item.get('width',default*curve_points[index].radius)/2;radius=max(half+.02,item['bend_radius']);corners={}
+        for a,b in (arms,arms[::-1]):
+            theta=math.atan2(a.x*b.y-a.y*b.x,a.dot(b))%(2*math.pi)
+            if abs(theta-math.pi)<1e-5:continue
+            bisector=a+b
+            if theta>math.pi:bisector=-bisector
+            label=('N' if bisector.y>=0 else 'S')+('E' if bisector.x>=0 else 'W')
+            corners[label]=radius-half if theta<math.pi else radius+half
+        result.setdefault(co,{}).update(corners)
     return result
 
 def widths(road,indices,default):

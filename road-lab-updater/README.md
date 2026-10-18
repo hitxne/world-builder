@@ -1,6 +1,6 @@
 # RoadLab Blender extension and update repository
 
-The full RoadLab 0.18.31 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
+The full RoadLab 0.18.32 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
 
 ## Install once
 
@@ -390,3 +390,22 @@ stroke; it does not rebuild terrain topology per brush sample. Bridge spans rema
 excluded. Terrain brush edits remain masked under the concrete, and the original
 terrain plane is unchanged. Wide sidewalk and setback footprints participate in
 local terrain refinement as well as the asphalt footprint.
+
+
+## Curved crossings and selected bend radius (0.18.32)
+
+Crosswalk endpoints now meet the finished pavement perimeter. Stripe meshes
+are clipped and projected against the actual road triangles, preserving the
+crossing on sloping and skewed approaches. Tactile pads follow the sidewalk's
+inner curve and conform to concrete triangles across their whole surface.
+Curb openings include a lowered landing and smooth ramp transitions; each
+crosswalk endpoint still has its own position control. White edge lines now
+use a normal offset rather than an unbounded transverse offset near corners.
+
+In Edit Mode select a bend point, then open **Selected points → Road geometry**.
+The **Bend radius (m)** slider sets its centerline radius and links the inner
+and outer radii to preserve road width. It applies only to selected bends,
+keeps the editable curve vertices in place, follows the bend when it moves,
+and reports when adjacent points limit the requested radius. Road width sets
+the minimum radius. Independent corner controls remain available under
+**Corners**; editing one unlinks the shared bend radius at that point.

@@ -17,7 +17,7 @@ def height(x,y):
     assert hit is not None
     return hit.z
 assert height(4.15,y)<.06 and height(4.15,-25)>.16
-assert height(4.6,y)<.1 and height(6.3,y)>.16
+assert height(4.6,y)<.1 and height(7.2,y)>.16
 configs=e.state(road);configs[2]['crosswalk_a']=4;road['roadlab_lanes']=json.dumps(configs);e.rebuild(road,scene,True)
 assert height(-4.15,y)>.1 and height(-4.15,y-4)<.06 and height(4.15,y)<.06
 # Pads sit on the actual lowered layer, rather than being buried at terrain height.
@@ -50,5 +50,5 @@ for layer in ramps.layers(road):
     for mod in layer.object.modifiers:
         if mod.type=='NODES':set_input(mod,'Profile height scale',2.)
 e.rebuild(road,scene,True)
-assert height(4.15,y)<.08 and height(4.15,-25)>.3 and height(6.3,y)>.3
+assert height(4.15,y)<.08 and height(4.15,-25)>.3 and height(7.2,y)>.3
 print('CROSSWALK_RAMPS_PASS',flush=True)
