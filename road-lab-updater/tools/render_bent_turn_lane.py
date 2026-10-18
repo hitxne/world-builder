@@ -22,10 +22,11 @@ add_extrusion(scene,road,'curb');add_extrusion(scene,road,'sidewalk')
 mesh=bpy.data.meshes.new('Ground');mesh.from_pydata([(-200,-200,0),(200,-200,0),(200,200,0),(-200,200,0)],[],[(0,1,2,3)]);mesh.update()
 ground=bpy.data.objects.new('Ground',mesh);scene.collection.objects.link(ground);ground.data.materials.append(RoadLab.material('grass'))
 light=bpy.data.lights.new('Sun','SUN');light.energy=3;sun=bpy.data.objects.new('Sun',light);scene.collection.objects.link(sun);sun.rotation_euler=(.2,-.3,-.2);scene.world.color=(.3,.3,.3)
-cam=bpy.data.cameras.new('Overview');cam.type='ORTHO';cam.ortho_scale=142
-camera=bpy.data.objects.new('Overview',cam);scene.collection.objects.link(camera);camera.location=(-43,0,180);scene.camera=camera
+corner='--corner' in sys.argv
+cam=bpy.data.cameras.new('Overview');cam.type='ORTHO';cam.ortho_scale=22 if corner else 142
+camera=bpy.data.objects.new('Overview',cam);scene.collection.objects.link(camera);camera.location=(-110,0,180) if corner else (-43,0,180);scene.camera=camera
 scene.render.engine='CYCLES';scene.cycles.samples=20;scene.cycles.use_denoising=True
-scene.render.resolution_x=1200;scene.render.resolution_y=560;scene.render.resolution_percentage=100
-scene.render.image_settings.file_format='PNG';scene.render.filepath=str(root/'docs'/'bent-turn-lane.png')
+scene.render.resolution_x=900 if corner else 1200;scene.render.resolution_y=900 if corner else 560;scene.render.resolution_percentage=100
+scene.render.image_settings.file_format='PNG';scene.render.filepath=str(root/'docs'/('taper-sidewalk-corner.png' if corner else 'bent-turn-lane.png'))
 bpy.ops.render.render(write_still=True)
 print('POINT_LANE_RENDER',scene.render.filepath,flush=True)

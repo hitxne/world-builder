@@ -1,6 +1,6 @@
 # RoadLab Blender extension and update repository
 
-The full RoadLab 0.18.27 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
+The full RoadLab 0.18.28 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
 
 ## Install once
 
@@ -364,3 +364,7 @@ Turn-only pockets no longer leak widening into the opposite street through the s
 Curved pocket dividers keep the pre-widening lane boundary through intermediate road handles and join the neighboring divider endpoints. Bend connectors no longer apply lane widening twice. Regression coverage includes a gentle bend inside a long turn-lane taper.
 
 The bent-road regression also compares the westbound curb, outer white line and yellow divider before and after adding an eastbound lane. All remain in their original alignment. Near-identical local union seam vertices are welded within 0.1 mm so the connected road retains a single perimeter instead of generating internal curb/sidewalk caps.
+
+## Preserve bends beside lane tapers (0.18.28)
+
+Derived lane-taper samples leave space for the existing bend radius. Adding a lane near an earlier corner no longer forces a stepped footprint fallback that the curb and sidewalk then follow. This preserves the editable source points and existing corner settings. The regression checks both rounded pavement edges and sidewalk coverage around the exterior arc.

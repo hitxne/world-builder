@@ -6,7 +6,7 @@ import bpy
 from mathutils import Vector
 from .native_extension import socket,set_input
 EPS=1e-6
-SCHEMA=11
+SCHEMA=12
 _busy=False
 _defer_markings=False
 _deferred_markings=set()
@@ -146,7 +146,7 @@ def _rebuild(road,force=False):
         nodes,_,_=graph(paths,settings['road width'])
         junction_shifts=lane_pockets.junction_shifts(paths,ids_by_path,pockets,[p for p,n in nodes.items() if len(n)>=3],settings['road width'],max(settings['corner '+k] for k in ('NW','NE','SW','SE')))
         derived_overrides={(co[0]+junction_shifts.get(co,(0,0))[0],co[1]+junction_shifts.get(co,(0,0))[1],co[2]):v for co,v in derived_overrides.items()}
-        paths,tilts,pocket_details=lane_pockets.expand(paths,ids_by_path,pockets,settings['road width'],tilts,[p for p,n in nodes.items() if len(n)>=3],max(settings['corner '+k] for k in ('NW','NE','SW','SE')))
+        paths,tilts,pocket_details=lane_pockets.expand(paths,ids_by_path,pockets,settings['road width'],tilts,[p for p,n in nodes.items() if len(n)>=3],max(settings['corner '+k] for k in ('NW','NE','SW','SE')),settings['resolution'])
         source_positions={key(co):key(p) for detail in pocket_details for co,p in detail['source_positions'].items()}
         derived_overrides={source_positions.get(co,co):v for co,v in point_settings.junction_overrides(road).items()}
     def ports(nodes,edges):

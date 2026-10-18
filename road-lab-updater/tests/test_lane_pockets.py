@@ -1,5 +1,5 @@
 """Portable tests for local taper widths, source invariance, cyclic and reversed paths."""
-import importlib.util, pathlib,unittest,copy
+import importlib.util, pathlib,unittest,copy,math
 path=pathlib.Path(__file__).resolve().parents[1]/'extension'/'RoadLab'/'lane_pockets.py'
 spec=importlib.util.spec_from_file_location('pockets',path);m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
 class Pockets(unittest.TestCase):
@@ -41,6 +41,18 @@ class Pockets(unittest.TestCase):
   self.assertEqual(m.offsets(60,specs),(0.,3.5))
   shifted=m.junction_shifts([(self.coords,[1.]*5)],[self.ids],[a,b],[self.coords[2]])
   self.assertEqual(shifted[self.coords[2]],(0.,-1.75))
+ def test_taper_samples_leave_corner_room(self):
+  coords=[(-110.,90.,0.),(-110.,0.,0.),(-65.,-1.,0.),(0.,0.,0.),(80.,0.,0.)];ids=list('abcde')
+  p=dict(self.p,anchors=['d'],axis=['b','c'],junction=True,junction_anchor='d',junction_direction=-1,length=64.,taper=30.)
+  for spacing in (.5,1.,2.):
+   paths,_,details=m.expand([(coords,[1.]*5)],[ids],[p],8.,spacing=spacing)
+   positions=details[0]['source_positions']
+   self.assertEqual(set(positions),set(coords))
+   # The baseline width and radius require about 19 m of clear arm length.
+   # No generated point may consume that space beside the 90-degree bend.
+   for co in paths[0][0]:
+    if co in positions.values():continue
+    self.assertGreater(math.dist(co[:2],coords[1][:2]),18.)
  def test_cyclic_geometry_closes(self):
   coords=[(0,0,0),(30,0,0),(30,30,0),(0,30,0),(0,0,0)]
   p=dict(self.p,anchors=['a']);paths,_,_=m.expand([(coords,[1.]*5)],[list('abcd')],[p],8.)

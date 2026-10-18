@@ -70,3 +70,27 @@ for x in (-90.,-80.,-70.,-65.,-60.,-50.,-40.,-30.,-20.):
  for family in ('outer','center-yellow'):
   assert abs(paint_y(before_marks,x,family)-paint_y(marks,x,family))<.002,('Opposing paint moved',family,x,paint_y(before_marks,x,family),paint_y(marks,x,family))
 print('GENTLE_TURN_DIVIDER_PASS',flush=True)
+
+# Derived taper samples must not steal the earlier 90-degree bend's gate
+# budget. Its exterior arc and the sidewalk wrapped around it must survive.
+corner=[c for c in report['radius_limits'] if math.dist(c['junction'][:2],(-110,0))<.01]
+assert {c.get('kind') for c in corner}=={'interior','exterior'},('Taper replaced the rounded bend with a stepped union',corner)
+assert all(abs(c['applied']-4)<1e-6 for c in corner),corner
+from RoadLab.native_extrusion import add_extrusion
+add_extrusion(scene,rd,'curb');walk,_=add_extrusion(scene,rd,'sidewalk')
+bpy.context.view_layer.update()
+evaluated=walk.evaluated_get(bpy.context.evaluated_depsgraph_get());mesh=evaluated.to_mesh()
+try:
+ tree=BVHTree.FromPolygons([p.co for p in mesh.vertices],[tuple(p.vertices) for p in mesh.polygons])
+ exterior=next(c for c in corner if c['kind']=='exterior');cx,cy=exterior['arc_center'];radius=exterior['applied']
+ border={tuple(p) for edge in after for p in edge}
+ arc=[p for p in border if abs(math.hypot(p[0]-cx,p[1]-cy)-radius)<.0002]
+ assert len(arc)>=4,('Exterior corner arc missing',arc)
+ for p in arc:
+  dx,dy=(p[0]-cx)/radius,(p[1]-cy)/radius
+  for offset in (.5,1.5):
+   # Slab joints are intentional 3 mm gaps; probe either side of a joint.
+   hits=[tree.ray_cast(Vector((p[0]+dx*offset-dy*j,p[1]+dy*offset+dx*j,20)),Vector((0,0,-1))) for j in (-.01,0,.01)]
+   assert any(hit is not None and normal.z>.99 for hit,normal,_,_ in hits),('Sidewalk discontinuity around exterior bend',p,offset,hits)
+finally:evaluated.to_mesh_clear()
+print('TAPER_BEND_SIDEWALK_PASS',flush=True)

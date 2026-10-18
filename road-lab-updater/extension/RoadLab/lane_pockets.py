@@ -80,7 +80,7 @@ def offsets(station,specs):
     left=sum(v for (_,side),v in groups.items() if side>0);right=sum(v for (_,side),v in groups.items() if side<0)
     return left,right
 
-def expand(paths,ids_by_path,pockets,default,tilts=None,junctions=(),corner_radius=4.):
+def expand(paths,ids_by_path,pockets,default,tilts=None,junctions=(),corner_radius=4.,spacing=1.):
     result=[];angles=[];details=[]
     shared=junction_shifts(paths,ids_by_path,pockets,junctions,default,corner_radius)
     for path_index,((coords,radii),ids) in enumerate(zip(paths,ids_by_path)):
@@ -100,8 +100,24 @@ def expand(paths,ids_by_path,pockets,default,tilts=None,junctions=(),corner_radi
         # Never insert a tiny segment beside an authored point. The junction
         # mesher needs useful gate lengths even for very shallow taper bends.
         minimum=max(.25,min(1.5,min((b-a for a,b in zip(ss,ss[1:]) if b>a),default=6.)*.25))
+        # A real bend needs its fillet tangency distance on both arms. Taper
+        # samples are derived controls, so keep them outside that gate budget
+        # rather than forcing the authored bend into footprint-union fallback.
+        protected=[];cyclic=math.dist(coords[0],coords[-1])<1e-6
+        for i,p in enumerate(coords[:-1] if cyclic else coords):
+            if not cyclic and not 0<i<len(coords)-1:continue
+            if any(math.dist(p,q)<1e-5 for q in junctions):continue
+            previous=coords[i-1 if i else len(coords)-2];following=coords[i+1]
+            a=(p[0]-previous[0],p[1]-previous[1]);b=(following[0]-p[0],following[1]-p[1]);den=math.hypot(*a)*math.hypot(*b)
+            if den<1e-8:continue
+            cosine=max(-.999999,min(1.,(a[0]*b[0]+a[1]*b[1])/den))
+            if cosine>.9999:continue
+            left,right=offsets(ss[i],specs);width=radii[i]*default+left+right
+            tangent=math.sqrt((1-cosine)/(1+cosine))
+            protected.append((ss[i],((width/2+corner_radius)*tangent+spacing*.2)/.44+.05))
         retained=sorted(set(ss))
         for station in sorted(cuts-set(ss)):
+            if any(min(abs(station-s),ss[-1]-abs(station-s))<reach if cyclic else abs(station-s)<reach for s,reach in protected):continue
             at=bisect.bisect_left(retained,station)
             if at and station-retained[at-1]<minimum or at<len(retained) and retained[at]-station<minimum:continue
             retained.insert(at,station)
