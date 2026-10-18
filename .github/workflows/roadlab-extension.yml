@@ -92,6 +92,8 @@ jobs:
         run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_lane_add_preview_blender.py
       - name: Test example World preservation
         run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_example_world_blender.py
+      - name: Test sidewalk continuity during edge sculpting
+        run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_sidewalk_sculpt_blender.py
       - name: Test curved lane pocket markings
         run: /tmp/roadlab-blender/blender -b --factory-startup --python-exit-code 1 --python road-lab-updater/tests/test_curved_lane_pocket_blender.py
       - name: Test through lanes and receiving merges

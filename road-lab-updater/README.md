@@ -1,6 +1,6 @@
 # RoadLab Blender extension and update repository
 
-The full RoadLab 0.18.28 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
+The full RoadLab 0.18.29 addon is integrated here, including lane markings and quad terrain. Requires Blender **5.1 or later**.
 
 ## Install once
 
@@ -368,3 +368,7 @@ The bent-road regression also compares the westbound curb, outer white line and 
 ## Preserve bends beside lane tapers (0.18.28)
 
 Derived lane-taper samples leave space for the existing bend radius. Adding a lane near an earlier corner no longer forces a stepped footprint fallback that the curb and sidewalk then follow. This preserves the editable source points and existing corner settings. The regression checks both rounded pavement edges and sidewalk coverage around the exterior arc.
+
+## Continuous sidewalk sculpting (0.18.29)
+
+Road height brushes include the one-cell sampling halo required at pavement edges, so raising beside a curb no longer leaves the boundary pinned down. Live previews bind original mesh vertices directly and agree with the saved result. Sidewalk slab identities and joint spacing use planar distance, keeping their footprint stable while the road, curb and sidewalk rise together. Cyclic border simplification preserves the original height-sampling station, preventing shifted sidewalk hills. Render cleanup uses a vertical road cutter. Completed strokes request local terrain detail only where grading changed. The saved extrusion graph upgrades in place without losing layer settings. Raise, lower, flatten, smooth, cancel and commit are checked at integer and fractional road widths on both sides. Existing sculpted fields remain intact. Corrected sidewalk sampling also applies when existing roads regenerate; brush sampling improvements apply to new strokes.

@@ -8,12 +8,12 @@ from .native_extension import socket,set_input,road_modifier
 def extrusion_group():
     name='WB_EXTENSION_BORDER_EXTRUSION';g=bpy.data.node_groups.get(name)
     # Saved .blend files retain their node graphs independently of addon updates.
-    # Schema 18 still contains the folding dense-point offset frames.
-    if g and g.get('wb_schema',0)>=20 and any(s.name=='Layer prefix' for s in g.interface.items_tree):return g
+    # Schema 20 still places slab joints by sculpted 3D arc length.
+    if g and g.get('wb_schema',0)>=21 and any(s.name=='Layer prefix' for s in g.interface.items_tree):return g
     if g and g.library:g=g.copy();g.name=name+'_v08'
     if g:g.nodes.clear()
     else:g=bpy.data.node_groups.new(name,'GeometryNodeTree')
-    g['wb_schema']=20
+    g['wb_schema']=21
     socket(g,'Geometry','INPUT','NodeSocketGeometry')
     stage_socket=socket(g,'Evaluation stage','INPUT','NodeSocketInt',0)
     if hasattr(stage_socket,'hide_in_modifier'):stage_socket.hide_in_modifier=True
@@ -37,6 +37,9 @@ def extrusion_group():
     reference_z=N.new('GeometryNodeStoreNamedAttribute');reference_z.data_type='FLOAT';reference_z.domain='POINT';reference_z.inputs['Name'].default_value='roadlab_source_border_z';L.new(choose_path.outputs['Output'],reference_z.inputs['Geometry']);L.new(reference_xyz.outputs['Z'],reference_z.inputs['Value'])
     reference_xy=N.new('ShaderNodeVectorMath');reference_xy.operation='MULTIPLY';reference_xy.inputs[1].default_value=(1,1,0);L.new(reference_position.outputs['Position'],reference_xy.inputs[0])
     planar_reference=N.new('GeometryNodeSetPosition');L.new(reference_z.outputs['Geometry'],planar_reference.inputs['Geometry']);L.new(reference_xy.outputs['Vector'],planar_reference.inputs['Position'])
+    source_parameter=N.new('GeometryNodeSplineParameter');source_length=N.new('GeometryNodeSplineLength')
+    source_station=N.new('GeometryNodeStoreNamedAttribute');source_station.data_type='FLOAT';source_station.domain='POINT';source_station.inputs['Name'].default_value='roadlab_source_border_station';L.new(planar_reference.outputs['Geometry'],source_station.inputs['Geometry']);L.new(source_parameter.outputs['Length'],source_station.inputs['Value'])
+    source_extent=N.new('GeometryNodeStoreNamedAttribute');source_extent.data_type='FLOAT';source_extent.domain='POINT';source_extent.inputs['Name'].default_value='roadlab_source_border_length';L.new(source_station.outputs['Geometry'],source_extent.inputs['Geometry']);L.new(source_length.outputs['Length'],source_extent.inputs['Value'])
     # Remove redundant straight-line knots before offsetting. A tiny connector
     # immediately before a fillet can otherwise be shorter than its miter trim,
     # reversing even the original (not just subdivided) offset vertices.
@@ -48,7 +51,7 @@ def extrusion_group():
         unit=N.new('ShaderNodeVectorMath');unit.operation='NORMALIZE';L.new(delta.outputs['Vector'],unit.inputs[0]);clean_directions.append(unit.outputs['Vector'])
     straight_dot=N.new('ShaderNodeVectorMath');straight_dot.operation='DOT_PRODUCT';L.new(clean_directions[0],straight_dot.inputs[0]);L.new(clean_directions[1],straight_dot.inputs[1])
     collinear=N.new('ShaderNodeMath');collinear.operation='GREATER_THAN';collinear.inputs[1].default_value=.9999999;L.new(straight_dot.outputs['Value'],collinear.inputs[0])
-    clean_path=N.new('GeometryNodeDeleteGeometry');clean_path.domain='POINT';clean_path.label='Remove collinear border knots before offsetting';L.new(planar_reference.outputs['Geometry'],clean_path.inputs['Geometry']);L.new(collinear.outputs[0],clean_path.inputs['Selection'])
+    clean_path=N.new('GeometryNodeDeleteGeometry');clean_path.domain='POINT';clean_path.label='Remove collinear border knots before offsetting';L.new(source_extent.outputs['Geometry'],clean_path.inputs['Geometry']);L.new(collinear.outputs[0],clean_path.inputs['Selection'])
     # Keep stable straight-section frames as well as true corner knots. Their
     # spacing is at least the layer's offset reach, so a corner miter cannot
     # overtake the next frame; its skew also stays local to the corner.
@@ -103,7 +106,16 @@ def extrusion_group():
     # when the original contains many height samples on a straight section.
     source_z=N.new('GeometryNodeInputNamedAttribute');source_z.data_type='FLOAT';source_z.inputs['Name'].default_value='roadlab_source_border_z'
     parameter=N.new('GeometryNodeSplineParameter');curve_index=N.new('GeometryNodeCurveOfPoint');L.new(path_index.outputs['Index'],curve_index.inputs['Point Index'])
-    sampled_z=N.new('GeometryNodeSampleCurve');sampled_z.data_type='FLOAT';sampled_z.mode='LENGTH';sampled_z.use_all_curves=False;L.new(planar_reference.outputs['Geometry'],sampled_z.inputs['Curves']);L.new(source_z.outputs['Attribute'],sampled_z.inputs['Value']);L.new(parameter.outputs['Length'],sampled_z.inputs['Length']);L.new(curve_index.outputs['Curve Index'],sampled_z.inputs['Curve Index'])
+    # Removing the first collinear point rotates a cyclic path's origin.
+    # Restore the original station before sampling heights, or the sidewalk
+    # hill shifts along the street even though its XY footprint is unchanged.
+    station_attr=N.new('GeometryNodeInputNamedAttribute');station_attr.data_type='FLOAT';station_attr.inputs['Name'].default_value='roadlab_source_border_station'
+    first_station=N.new('GeometryNodeSampleCurve');first_station.data_type='FLOAT';first_station.mode='FACTOR';first_station.use_all_curves=False;first_station.inputs['Factor'].default_value=0;L.new(clean_path.outputs['Geometry'],first_station.inputs['Curves']);L.new(station_attr.outputs['Attribute'],first_station.inputs['Value']);L.new(curve_index.outputs['Curve Index'],first_station.inputs['Curve Index'])
+    station_sum=N.new('ShaderNodeMath');station_sum.operation='ADD';L.new(parameter.outputs['Length'],station_sum.inputs[0]);L.new(first_station.outputs['Value'],station_sum.inputs[1])
+    extent_attr=N.new('GeometryNodeInputNamedAttribute');extent_attr.data_type='FLOAT';extent_attr.inputs['Name'].default_value='roadlab_source_border_length'
+    wrap_station=N.new('ShaderNodeMath');wrap_station.operation='FLOORED_MODULO';L.new(station_sum.outputs[0],wrap_station.inputs[0]);L.new(extent_attr.outputs['Attribute'],wrap_station.inputs[1])
+    cyclic=N.new('GeometryNodeInputSplineCyclic');station_choice=N.new('GeometryNodeSwitch');station_choice.input_type='FLOAT';L.new(cyclic.outputs[0],station_choice.inputs['Switch']);L.new(station_sum.outputs[0],station_choice.inputs['False']);L.new(wrap_station.outputs[0],station_choice.inputs['True'])
+    sampled_z=N.new('GeometryNodeSampleCurve');sampled_z.data_type='FLOAT';sampled_z.mode='LENGTH';sampled_z.use_all_curves=False;L.new(planar_reference.outputs['Geometry'],sampled_z.inputs['Curves']);L.new(source_z.outputs['Attribute'],sampled_z.inputs['Value']);L.new(station_choice.outputs['Output'],sampled_z.inputs['Length']);L.new(curve_index.outputs['Curve Index'],sampled_z.inputs['Curve Index'])
     restored_elevation=N.new('GeometryNodeStoreNamedAttribute');restored_elevation.data_type='FLOAT';restored_elevation.domain='POINT';restored_elevation.inputs['Name'].default_value='wb_edge_elevation';L.new(subdivided.outputs['Curve'],restored_elevation.inputs['Geometry']);L.new(sampled_z.outputs['Value'],restored_elevation.inputs['Value'])
     restored_height=N.new('ShaderNodeCombineXYZ');restored_attr=N.new('GeometryNodeInputNamedAttribute');restored_attr.data_type='FLOAT';restored_attr.inputs['Name'].default_value='wb_edge_elevation';L.new(restored_attr.outputs['Attribute'],restored_height.inputs['Z'])
     restored_curve=N.new('GeometryNodeSetPosition');L.new(restored_elevation.outputs['Geometry'],restored_curve.inputs['Geometry']);L.new(restored_height.outputs['Vector'],restored_curve.inputs['Offset'])
@@ -285,7 +297,10 @@ def extrusion_group():
     road_down=N.new('ShaderNodeMath');road_down.operation='LESS_THAN';L.new(normal_z.outputs['Z'],road_down.inputs[0])
     road_flip=N.new('GeometryNodeFlipFaces');L.new(paved.outputs['Selection'],road_flip.inputs['Mesh']);L.new(road_down.outputs[0],road_flip.inputs['Selection'])
     road_floor=N.new('GeometryNodeFlipFaces');L.new(road_flip.outputs['Mesh'],road_floor.inputs['Mesh'])
+    # The clipping solid must rise vertically. A normal offset also expands a
+    # banked/sculpted pavement sideways and cuts holes in its own sidewalk.
     cutter=N.new('GeometryNodeExtrudeMesh');cutter.mode='FACES';cutter.inputs['Individual'].default_value=False;cutter.inputs['Offset'].default_value=(0,0,10);cutter.inputs['Offset Scale'].default_value=1;L.new(road_flip.outputs['Mesh'],cutter.inputs['Mesh'])
+    vertical_cutter=N.new('ShaderNodeCombineXYZ');vertical_cutter.inputs['Z'].default_value=10;L.new(vertical_cutter.outputs['Vector'],cutter.inputs['Offset'])
     closed_cutter=N.new('GeometryNodeJoinGeometry');L.new(road_floor.outputs['Mesh'],closed_cutter.inputs['Geometry']);L.new(cutter.outputs['Mesh'],closed_cutter.inputs['Geometry'])
     weld_cutter=N.new('GeometryNodeMergeByDistance');weld_cutter.inputs['Distance'].default_value=.0001;L.new(closed_cutter.outputs['Geometry'],weld_cutter.inputs['Geometry'])
     clip=N.new('GeometryNodeMeshBoolean');clip.operation='DIFFERENCE';clip.solver='EXACT';clip.inputs['Self Intersection'].default_value=True;L.new(union.outputs['Mesh'],clip.inputs['Mesh 1']);L.new(weld_cutter.outputs['Geometry'],clip.inputs['Mesh 2'])

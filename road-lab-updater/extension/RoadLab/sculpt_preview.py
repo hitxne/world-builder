@@ -45,7 +45,15 @@ class HeightPreview:
     def reindex(self):
         self.index=KDTree(len(self.mesh.vertices));self.rest=[];self.vertex_weights=[]
         for v in self.mesh.vertices:
-            x,y,z=v.co;item=self.reference_at(x,y)
+            x,y,z=v.co
+            # Original vertices already have an exact reference binding. A
+            # vertical ray can miss perimeter vertices and incorrectly pin
+            # them while the adjacent sidewalk follows the live outline.
+            if v.index<len(self.reference) and math.dist((x,y),self.reference[v.index][:2])<1e-7:
+                w=self.weights[v.index]
+                if self.contact_mask is not None:w=min(w,self.contact_mask.weight(x,y))
+                item=(self.reference[v.index][2],w)
+            else:item=self.reference_at(x,y)
             if item is None:rest,w=z,0.
             else:
                 initial_z,w=item;rest=initial_z-w*field.sample(self.initial,x,y)

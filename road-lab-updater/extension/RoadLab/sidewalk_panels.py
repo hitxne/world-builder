@@ -1,15 +1,25 @@
 """Separate capped concrete panels along the actual pavement perimeter."""
 def prepare(group,geometry):
     N,L=group.nodes,group.links
+    # Slab identity belongs to the map footprint, not the growing 3D arc
+    # length of a sculpted hill. Keep height in its existing border attribute.
+    position=N.new('GeometryNodeInputPosition')
+    xy=N.new('ShaderNodeVectorMath');xy.operation='MULTIPLY';xy.inputs[1].default_value=(1,1,0);L.new(position.outputs['Position'],xy.inputs[0])
+    flat=N.new('GeometryNodeSetPosition');L.new(geometry,flat.inputs['Geometry']);L.new(xy.outputs['Vector'],flat.inputs['Position']);geometry=flat.outputs['Geometry']
     parameter=N.new('GeometryNodeSplineParameter')
     length=N.new('GeometryNodeSplineLength')
     index=N.new('GeometryNodeInputIndex')
     for name,domain,value in [('roadlab_panel_loop','CURVE',index.outputs['Index']),('roadlab_panel_factor','POINT',parameter.outputs['Factor']),('roadlab_panel_length','POINT',length.outputs['Length'])]:
         store=N.new('GeometryNodeStoreNamedAttribute');store.domain=domain;store.data_type='FLOAT';store.inputs['Name'].default_value=name;L.new(geometry,store.inputs['Geometry']);L.new(value,store.inputs['Value']);geometry=store.outputs['Geometry']
-    return geometry
+    original=N.new('GeometryNodeInputNamedAttribute');original.data_type='FLOAT_VECTOR';original.inputs['Name'].default_value='wb_edge_position'
+    restore=N.new('GeometryNodeSetPosition');L.new(geometry,restore.inputs['Geometry']);L.new(original.outputs['Attribute'],restore.inputs['Position'])
+    return restore.outputs['Geometry']
 
 def curves(group,wire,enabled,block_length,gap):
     N,L=group.nodes,group.links
+    position=N.new('GeometryNodeInputPosition')
+    xy=N.new('ShaderNodeVectorMath');xy.operation='MULTIPLY';xy.inputs[1].default_value=(1,1,0);L.new(position.outputs['Position'],xy.inputs[0])
+    flat=N.new('GeometryNodeSetPosition');L.new(wire,flat.inputs['Geometry']);L.new(xy.outputs['Vector'],flat.inputs['Position']);wire=flat.outputs['Geometry']
     def math(op,a,b=None):
         n=N.new('ShaderNodeMath');n.operation=op
         for i,v in enumerate((a,b)):
@@ -43,7 +53,9 @@ def curves(group,wire,enabled,block_length,gap):
     tangent=N.new('GeometryNodeInputTangent');alignment=N.new('ShaderNodeVectorMath');alignment.operation='DOT_PRODUCT';L.new(original.outputs['Attribute'],alignment.inputs[0]);L.new(tangent.outputs['Tangent'],alignment.inputs[1])
     mean=N.new('GeometryNodeFieldOnDomain');mean.data_type='FLOAT';mean.domain='CURVE';L.new(alignment.outputs['Value'],mean.inputs['Value'])
     reverse=N.new('GeometryNodeReverseCurve');L.new(select.outputs['Output'],reverse.inputs['Curve']);L.new(math('LESS_THAN',mean.outputs['Value'],0.),reverse.inputs['Selection'])
-    return reverse.outputs['Curve']
+    border=N.new('GeometryNodeInputNamedAttribute');border.data_type='FLOAT_VECTOR';border.inputs['Name'].default_value='wb_edge_position'
+    restore=N.new('GeometryNodeSetPosition');L.new(reverse.outputs['Curve'],restore.inputs['Geometry']);L.new(border.outputs['Attribute'],restore.inputs['Position'])
+    return restore.outputs['Geometry']
 
 def columns(group,geometry,controls,width_attribute,enabled,slab_width,gap):
     N,L=group.nodes,group.links

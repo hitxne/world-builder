@@ -19,11 +19,27 @@ def base_tree(road):
     if item['tree'] is None:item['tree']=BVHTree.FromPolygons(item['verts'],item['faces'])
     return item['tree']
 
+def base_height(road,x,y):
+    """Sample the road plus the one-cell halo needed by bilinear brushes.
+
+    Vertical BVH rays can miss exact perimeter edges. Missing outside grid
+    corners must not become zero displacement at the curb either. Project
+    only this small stencil halo onto the base footprint, without extending
+    slopes into the terrain or evaluating any generated sidewalk geometry.
+    """
+    tree=base_tree(road);hit=tree.ray_cast(Vector((x,y,100000)),Vector((0,0,-1)))[0]
+    if hit is not None:return hit.z
+    item=_BASE[road.as_pointer()]
+    if 'footprint' not in item:
+        item['footprint']=BVHTree.FromPolygons([(p[0],p[1],0.) for p in item['verts']],item['faces'])
+    point,_,index,_=item['footprint'].find_nearest(Vector((x,y,0)),math.sqrt(2)+1e-4)
+    if point is None:return None
+    face=item['faces'][index];a,b,c=(Vector(item['verts'][i]) for i in face[:3]);normal=(b-a).cross(c-a)
+    return a.z-(normal.x*(point.x-a.x)+normal.y*(point.y-a.y))/normal.z if abs(normal.z)>1e-8 else a.z
+
 def apply_stamp(context,road,center,mode,radius,strength,dt,target=None,preview=False,grade_preview=None):
-    tree=base_tree(road)
     def base(x,y):
-        hit=tree.ray_cast(Vector((x,y,100000)),Vector((0,0,-1)))
-        return hit[0].z if hit[0] is not None else None
+        return base_height(road,x,y)
     old=road.get('roadlab_sculpt_field','');before=field.decode(old)
     after=field.stamp(before,center,radius,strength,dt,mode,base,target)
     encoded=field.encode(after)
